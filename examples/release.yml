@@ -46,10 +46,12 @@ jobs:
         with:
           # Personal access token with repository write access.
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-          # Moonshot API key for synthesized "What's New" notes.
-          moonshot-api-key: ${{ secrets.MOONSHOT_API_KEY }}
-          # Optional model override.
-          moonshot-model: kimi-k2.5
+          # API key for the LLM provider (any OpenAI-compatible service).
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          # Optional: model override (default: google/gemini-2.5-flash via OpenRouter).
+          # llm-model: google/gemini-2.5-flash
+          # Optional: custom chat-completions endpoint.
+          # llm-api-url: https://openrouter.ai/api/v1/chat/completions
           # Optional Node.js version for semantic-release.
           node-version: "22"
           # Set to "false" to skip synthesis and only publish technical notes.

@@ -1,16 +1,27 @@
 name: Landfall
-description: Focused release pipeline using semantic-release with optional Moonshot/Kimi synthesis.
+description: Focused release pipeline using semantic-release with optional LLM-powered synthesis.
 
 inputs:
   github-token:
     description: Personal access token with repository write access.
     required: true
-  moonshot-api-key:
-    description: API key for Moonshot/Kimi synthesis.
+  llm-api-key:
+    description: API key for the LLM provider used for release-note synthesis.
     required: true
+  llm-model:
+    description: Model ID passed to the LLM provider.
+    default: google/gemini-2.5-flash
+    required: false
+  llm-api-url:
+    description: Chat-completions endpoint URL. Any OpenAI-compatible provider works.
+    default: https://openrouter.ai/api/v1/chat/completions
+    required: false
+  # --- Deprecated aliases (backwards compatibility) ---
+  moonshot-api-key:
+    description: "[DEPRECATED — use llm-api-key] API key for Moonshot/Kimi synthesis."
+    required: false
   moonshot-model:
-    description: Moonshot model ID used for synthesis.
-    default: kimi-k2.5
+    description: "[DEPRECATED — use llm-model] Moonshot model ID used for synthesis."
     required: false
   node-version:
     description: Node.js version for semantic-release.
@@ -82,6 +93,26 @@ runs:
           echo "release_tag=" >> "${GITHUB_OUTPUT}"
         fi
 
+    - name: Resolve LLM inputs
+      id: llm
+      shell: bash
+      run: |
+        set -euo pipefail
+        # New inputs take precedence; fall back to deprecated moonshot-* aliases.
+        api_key="${{ inputs.llm-api-key }}"
+        [ -z "${api_key}" ] && api_key="${{ inputs.moonshot-api-key }}"
+
+        model="${{ inputs.llm-model }}"
+        if [ "${model}" = "google/gemini-2.5-flash" ] && [ -n "${{ inputs.moonshot-model }}" ]; then
+          model="${{ inputs.moonshot-model }}"
+        fi
+
+        api_url="${{ inputs.llm-api-url }}"
+
+        echo "api_key=${api_key}" >> "${GITHUB_OUTPUT}"
+        echo "model=${model}" >> "${GITHUB_OUTPUT}"
+        echo "api_url=${api_url}" >> "${GITHUB_OUTPUT}"
+
     - name: Synthesize user-facing notes
       id: synthesize
       if: inputs.synthesis == 'true' && steps.semantic_release.outputs.released == 'true'
@@ -91,8 +122,9 @@ runs:
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
         product_name="${GITHUB_REPOSITORY#*/}"
         if ! python "${GITHUB_ACTION_PATH}/scripts/synthesize.py" \
-          --api-key "${{ inputs.moonshot-api-key }}" \
-          --model "${{ inputs.moonshot-model }}" \
+          --api-key "${{ steps.llm.outputs.api_key }}" \
+          --model "${{ steps.llm.outputs.model }}" \
+          --api-url "${{ steps.llm.outputs.api_url }}" \
           --product-name "${product_name}" \
           --version "${{ steps.semantic_release.outputs.release_tag }}" \
           --changelog-file "${GITHUB_WORKSPACE}/CHANGELOG.md" \
