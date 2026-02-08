@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/misty-step/landfall/compare/v1.1.2...v1.1.3) (2026-02-08)
+
+
+### Bug Fixes
+
+* remove dead backward-compat code and warn on insecure API URLs ([#20](https://github.com/misty-step/landfall/issues/20)) ([0df6c21](https://github.com/misty-step/landfall/commit/0df6c21d601c60e71c25a86184b4ac67499535d4)), closes [#3](https://github.com/misty-step/landfall/issues/3) [#4](https://github.com/misty-step/landfall/issues/4)
+
 ## [1.1.2](https://github.com/misty-step/landfall/compare/v1.1.1...v1.1.2) (2026-02-08)
 
 
