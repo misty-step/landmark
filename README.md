@@ -1,7 +1,7 @@
 # Landfall
 
 Landfall is a focused release pipeline GitHub Action for repositories that use conventional commits.
-It runs `semantic-release` to publish a version and changelog, then optionally synthesizes user-facing notes with any OpenAI-compatible LLM and prepends them to the GitHub Release body.
+It runs `semantic-release` to publish a version and changelog, then optionally synthesizes user-facing notes with any OpenAI-compatible LLM provider and prepends them to the GitHub Release body.
 
 ## What It Does
 
@@ -55,30 +55,27 @@ jobs:
         uses: misty-step/landfall@v1
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional: customize model and fallbacks
+          # llm-model: anthropic/claude-sonnet-4
+          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
 ```
 
 ## Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `github-token` | Yes | — | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
-| `llm-api-key` | Yes | — | API key for the LLM provider used for release-note synthesis. |
-| `llm-model` | No | `google/gemini-2.5-flash` | Model ID passed to the LLM provider. |
-| `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | Chat-completions endpoint URL. Any OpenAI-compatible provider works (OpenRouter, OpenAI, Azure, etc.). |
+| `github-token` | Yes | - | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
+| `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
+| `llm-model` | No | `anthropic/claude-sonnet-4` | Primary model ID for note synthesis. |
+| `llm-fallback-models` | No | `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
+| `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
+| `moonshot-api-key` | No | - | Deprecated alias for `llm-api-key` (legacy workflows). |
+| `moonshot-model` | No | `kimi-k2.5` | Deprecated alias for `llm-model` (legacy workflows). |
 | `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
 
-### Deprecated Inputs
-
-The following inputs still work but will be removed in a future major version:
-
-| Input | Replacement |
-| --- | --- |
-| `moonshot-api-key` | `llm-api-key` |
-| `moonshot-model` | `llm-model` |
-
-If both the new and deprecated inputs are provided, the new inputs take precedence.
+\* Provide `llm-api-key` (preferred) or `moonshot-api-key` (deprecated alias).
 
 ## Outputs
 

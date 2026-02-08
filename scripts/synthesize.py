@@ -12,11 +12,12 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
 
-DEFAULT_API_URL = "https://api.moonshot.ai/v1/chat/completions"
+DEFAULT_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 SECTION_HEADING_RE = re.compile(r"^##\s+.+$", re.MULTILINE)
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 REQUIRED_TEMPLATE_TOKENS = (
@@ -39,14 +40,23 @@ def log_event(level: int, event: str, **fields: Any) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Synthesize user-facing release notes with Moonshot/Kimi."
+        description="Synthesize user-facing release notes with an OpenAI-compatible LLM provider."
     )
-    parser.add_argument("--api-key", required=True, help="Moonshot API key.")
+    parser.add_argument("--api-key", required=True, help="API key for the LLM provider.")
     parser.add_argument(
-        "--model", default="kimi-k2.5", help="Moonshot model ID (default: kimi-k2.5)."
+        "--model",
+        default="anthropic/claude-sonnet-4",
+        help="Primary model ID (default: anthropic/claude-sonnet-4).",
     )
     parser.add_argument(
-        "--api-url", default=DEFAULT_API_URL, help="Moonshot chat completions endpoint."
+        "--fallback-models",
+        default="",
+        help="Comma-separated fallback model IDs tried after the primary model.",
+    )
+    parser.add_argument(
+        "--api-url",
+        default=DEFAULT_API_URL,
+        help="OpenAI-compatible chat completions endpoint URL.",
     )
     parser.add_argument(
         "--prompt-template",
@@ -114,6 +124,13 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("retry-backoff cannot be negative")
     if not args.api_url.startswith(("http://", "https://")):
         raise ValueError("api-url must start with http:// or https://")
+    parsed_url = urlparse(args.api_url)
+    if (
+        parsed_url.scheme == "http"
+        and parsed_url.hostname
+        and parsed_url.hostname not in ("localhost", "127.0.0.1")
+    ):
+        log_event(logging.WARNING, "insecure_api_url", url=args.api_url)
     if args.version is not None and not args.version.strip():
         raise ValueError("version cannot be blank when provided")
 
@@ -239,6 +256,8 @@ def synthesize_notes(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/misty-step/landfall",
+        "X-Title": "Landfall Release Pipeline",
     }
     payload = {
         "model": model,
@@ -274,11 +293,13 @@ def synthesize_notes(
     try:
         content = body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError("Moonshot response did not include choices[0].message.content") from exc
+        raise RuntimeError(
+            "LLM provider response did not include choices[0].message.content"
+        ) from exc
 
     notes = content.strip()
     if not notes:
-        raise RuntimeError("Moonshot returned empty synthesized notes")
+        raise RuntimeError("LLM provider returned empty synthesized notes")
     return notes
 
 
@@ -336,36 +357,45 @@ def main() -> int:
     version = args.version.strip() if args.version else "latest"
     prompt = render_prompt(template_text, product_name, version, technical_text)
 
-    try:
-        synthesized = synthesize_notes(
-            api_url=args.api_url,
-            api_key=args.api_key,
-            model=args.model,
-            prompt=prompt,
-            timeout=args.timeout,
-            retries=args.retries,
-            retry_backoff=args.retry_backoff,
+    models_to_try = [args.model]
+    if args.fallback_models:
+        models_to_try.extend(
+            candidate.strip()
+            for candidate in args.fallback_models.split(",")
+            if candidate.strip()
         )
-    except requests.HTTPError as exc:
-        status = exc.response.status_code if exc.response is not None else "unknown"
-        text = exc.response.text if exc.response is not None else str(exc)
-        log_event(
-            logging.ERROR,
-            "moonshot_http_error",
-            status_code=status,
-            response_body=text,
-        )
-        return 1
-    except requests.RequestException as exc:
-        log_event(logging.ERROR, "moonshot_request_failed", error=str(exc))
-        return 1
-    except RuntimeError as exc:
-        log_event(logging.ERROR, "synthesis_failed", error=str(exc))
-        return 1
 
-    log_event(logging.INFO, "synthesis_succeeded")
-    print(synthesized)
-    return 0
+    last_error: Exception | None = None
+    for model in models_to_try:
+        try:
+            synthesized = synthesize_notes(
+                api_url=args.api_url,
+                api_key=args.api_key,
+                model=model,
+                prompt=prompt,
+                timeout=args.timeout,
+                retries=args.retries,
+                retry_backoff=args.retry_backoff,
+            )
+            log_event(logging.INFO, "synthesis_succeeded", model=model)
+            print(synthesized)
+            return 0
+        except (requests.HTTPError, requests.RequestException, RuntimeError) as exc:
+            last_error = exc
+            error_fields: dict[str, Any] = {"error": str(exc)}
+            if isinstance(exc, requests.HTTPError) and exc.response is not None:
+                error_fields["status_code"] = exc.response.status_code
+                error_fields["response_body"] = exc.response.text
+            log_event(logging.WARNING, "model_failed", model=model, **error_fields)
+            continue
+
+    log_event(
+        logging.ERROR,
+        "all_models_failed",
+        models_tried=models_to_try,
+        last_error=str(last_error) if last_error is not None else "",
+    )
+    return 1
 
 
 if __name__ == "__main__":

@@ -12,13 +12,13 @@ A reusable GitHub Action that handles the complete release pipeline:
 ## Architecture
 Composite GitHub Action with these steps:
 - `semantic-release` handles steps 1-4 (proven, battle-tested)
-- Custom Python script handles step 5-6 (LLM synthesis via Moonshot/Kimi API)
+- Custom Python script handles step 5-6 (LLM synthesis via OpenAI-compatible API)
 
 ## Key Design Decisions
 - **Unix philosophy**: This does ONE thing — releases. Not code review, not monitoring.
 - **Wraps semantic-release**: Don't reinvent the wheel. Extend it.
 - **LLM synthesis is the value-add**: Technical changelogs exist. User-facing notes don't.
-- **Moonshot/Kimi K2.5**: Cheap, fast, good enough for synthesis tasks.
+- **OpenRouter by default**: Supports provider choice and model fallback chains.
 - **Reusable Action**: Any repo can opt in with a simple workflow file.
 
 ## File Structure
@@ -58,11 +58,14 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-          moonshot-api-key: ${{ secrets.MOONSHOT_API_KEY }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional:
+          # llm-model: anthropic/claude-sonnet-4
+          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
 ```
 
 ## Requirements
 - Node.js 22+
 - Python 3.12+
 - `GH_RELEASE_TOKEN` secret (PAT with repo write + admin bypass)
-- `MOONSHOT_API_KEY` secret (for LLM synthesis)
+- `OPENROUTER_API_KEY` secret (or another compatible provider API key)

@@ -46,12 +46,13 @@ jobs:
         with:
           # Personal access token with repository write access.
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-          # API key for the LLM provider (any OpenAI-compatible service).
-          llm-api-key: ${{ secrets.LLM_API_KEY }}
-          # Optional: model override (default: google/gemini-2.5-flash via OpenRouter).
-          # llm-model: google/gemini-2.5-flash
-          # Optional: custom chat-completions endpoint.
-          # llm-api-url: https://openrouter.ai/api/v1/chat/completions
+          # OpenRouter API key for synthesized "What's New" notes.
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional: customize model and fallbacks.
+          # llm-model: anthropic/claude-sonnet-4
+          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+          # Optional: custom chat-completions endpoint (OpenAI-compatible).
+          # llm-api-url: https://api.openai.com/v1/chat/completions
           # Optional Node.js version for semantic-release.
           node-version: "22"
           # Set to "false" to skip synthesis and only publish technical notes.

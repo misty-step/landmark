@@ -7,8 +7,10 @@ Read CLAUDE.md for full context. Build a working prototype of the Landfall GitHu
 ### 1. action.yml (Composite GitHub Action)
 Inputs:
 - `github-token` (required): PAT with repo write access
-- `moonshot-api-key` (required): For LLM synthesis
-- `moonshot-model` (default: kimi-k2.5): Model to use
+- `llm-api-key`: API key for LLM synthesis (OpenRouter, OpenAI, or compatible)
+- `llm-model` (default: anthropic/claude-sonnet-4): Primary model ID
+- `llm-fallback-models` (default: google/gemini-2.5-flash,openai/gpt-4o-mini): Comma-separated fallbacks
+- `llm-api-url` (default: OpenRouter): Chat completions endpoint
 - `node-version` (default: 22): Node.js version
 - `synthesis` (default: true): Whether to run LLM synthesis
 
@@ -22,8 +24,9 @@ Steps:
 
 ### 2. scripts/synthesize.py
 - Takes the technical changelog (from semantic-release output or CHANGELOG.md diff)
-- Calls Moonshot/Kimi API to synthesize user-facing release notes
+- Calls any OpenAI-compatible API to synthesize user-facing release notes
 - Uses the prompt template from templates/synthesis-prompt.md
+- Tries primary model first, then fallback models in order
 - Outputs the synthesized notes to stdout
 
 ### 3. scripts/update-release.py
@@ -38,7 +41,7 @@ Steps:
 - Skips internal/CI changes
 
 ### 5. configs/.releaserc.json
-- Default semantic-release config that works for most Misty Step repos
+- Default semantic-release config that works for most repos
 - Plugins: commit-analyzer, release-notes-generator, changelog, npm (no publish), git, github
 
 ### 6. package.json
@@ -52,11 +55,11 @@ Steps:
 - Example output (before/after: technical vs user-facing notes)
 
 ## Technical Notes
-- Moonshot API is OpenAI-compatible: POST https://api.moonshot.ai/v1/chat/completions
-- Model: kimi-k2.5
+- Uses OpenRouter by default: POST https://openrouter.ai/api/v1/chat/completions
+- Default model: anthropic/claude-sonnet-4 with fallbacks to gemini-2.5-flash and gpt-4o-mini
 - The synthesis doesn't need to be agentic — a single chat completion is fine
 - Use `requests` for HTTP calls in Python (pip install requests)
-- For the GitHub API calls, use the `gh` CLI or `requests` with the token
+- For the GitHub API calls, use `requests` with the token
 
 ## Git Workflow
 - Commit frequently with conventional commit messages
