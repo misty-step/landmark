@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/misty-step/landfall/compare/v1.1.1...v1.1.2) (2026-02-08)
+
+
+### Bug Fixes
+
+* provider-agnostic LLM inputs for release synthesis ([#19](https://github.com/misty-step/landfall/issues/19)) ([451db2a](https://github.com/misty-step/landfall/commit/451db2a01256030bedd0039396af86e6f6a5ac03)), closes [#4](https://github.com/misty-step/landfall/issues/4)
+
 ## [1.1.1](https://github.com/misty-step/landfall/compare/v1.1.0...v1.1.1) (2026-02-08)
 
 
