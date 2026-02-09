@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/misty-step/landfall/compare/v1.3.0...v1.3.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* keep changelog semantic-release only ([#27](https://github.com/misty-step/landfall/issues/27)) ([5f9a235](https://github.com/misty-step/landfall/commit/5f9a2352c379b82687fa997d214a50cdfcd2ee94))
+
 # [1.3.0](https://github.com/misty-step/landfall/compare/v1.2.0...v1.3.0) (2026-02-09)
 
 
