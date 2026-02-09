@@ -63,5 +63,5 @@ Steps:
 
 ## Git Workflow
 - Commit frequently with conventional commit messages
-- When done, push to origin main
+- When done, push to origin master
 - Write TASK_COMPLETE when finished
