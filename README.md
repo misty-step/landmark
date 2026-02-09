@@ -70,12 +70,11 @@ jobs:
 | `llm-model` | No | `anthropic/claude-sonnet-4` | Primary model ID for note synthesis. |
 | `llm-fallback-models` | No | `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
-| `moonshot-api-key` | No | - | Deprecated alias for `llm-api-key` (legacy workflows). |
-| `moonshot-model` | No | `kimi-k2.5` | Deprecated alias for `llm-model` (legacy workflows). |
 | `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
+| `synthesis-strict` | No | `false` | If `true`, fail the action when synthesis/update fails (instead of warning and continuing). |
 
-\* Provide `llm-api-key` (preferred) or `moonshot-api-key` (deprecated alias).
+\* `llm-api-key` is required when `synthesis: true`.
 
 ## Outputs
 
@@ -106,16 +105,32 @@ jobs:
     llm-api-url: https://api.openai.com/v1/chat/completions
 ```
 
-### Moonshot / Kimi (legacy)
+### Custom OpenAI-Compatible Provider
 
 ```yaml
 - uses: misty-step/landfall@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-    llm-api-key: ${{ secrets.MOONSHOT_API_KEY }}
-    llm-model: kimi-k2.5
-    llm-api-url: https://api.moonshot.cn/v1/chat/completions
+    llm-api-key: ${{ secrets.PROVIDER_API_KEY }}
+    llm-model: provider/model-id
+    llm-api-url: https://provider.example.com/v1/chat/completions
 ```
+
+## Dogfooding Landfall
+
+If Landfall releases itself, use local action code in `.github/workflows/release.yml`:
+
+```yaml
+- name: Run Landfall
+  id: landfall
+  uses: ./
+  with:
+    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+    synthesis-strict: "true"
+```
+
+Then move `v1` to the new `release-tag` output in the same workflow. This avoids stale major-tag drift.
 
 ## Default semantic-release Config
 

@@ -20,12 +20,6 @@ inputs:
     description: Chat completions endpoint URL (OpenAI-compatible).
     default: "https://openrouter.ai/api/v1/chat/completions"
     required: false
-  moonshot-api-key:
-    description: "[Deprecated] Alias for llm-api-key for legacy workflows."
-    required: false
-  moonshot-model:
-    description: "[Deprecated] No longer used. Kept for workflow compatibility."
-    required: false
   node-version:
     description: Node.js version for semantic-release.
     default: "22"
@@ -33,6 +27,10 @@ inputs:
   synthesis:
     description: Whether to synthesize user-facing release notes.
     default: "true"
+    required: false
+  synthesis-strict:
+    description: Whether synthesis and release-body update failures should fail the action.
+    default: "false"
     required: false
 
 outputs:
@@ -104,7 +102,16 @@ runs:
         set -euo pipefail
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
         product_name="${GITHUB_REPOSITORY#*/}"
-        api_key="${{ inputs.llm-api-key || inputs.moonshot-api-key }}"
+        strict="${{ inputs.synthesis-strict }}"
+        api_key="${{ inputs.llm-api-key }}"
+        if [ -z "${api_key}" ]; then
+          if [ "${strict}" = "true" ]; then
+            echo "::error::Landfall synthesis required but llm-api-key is empty."
+            exit 1
+          fi
+          echo "::warning::Landfall synthesis skipped; llm-api-key is empty."
+          exit 0
+        fi
         if ! python "${GITHUB_ACTION_PATH}/scripts/synthesize.py" \
           --api-key "${api_key}" \
           --model "${{ inputs.llm-model }}" \
@@ -115,11 +122,19 @@ runs:
           --changelog-file "${GITHUB_WORKSPACE}/CHANGELOG.md" \
           --prompt-template "${GITHUB_ACTION_PATH}/templates/synthesis-prompt.md" \
           > "${notes_file}"; then
+          if [ "${strict}" = "true" ]; then
+            echo "::error::Landfall synthesis failed and synthesis-strict is enabled."
+            exit 1
+          fi
           echo "::warning::Landfall synthesis failed; publishing release without a What's New section."
           exit 0
         fi
 
         if [ ! -s "${notes_file}" ]; then
+          if [ "${strict}" = "true" ]; then
+            echo "::error::Landfall synthesis returned empty notes and synthesis-strict is enabled."
+            exit 1
+          fi
           echo "::warning::Landfall synthesis returned empty notes; skipping release update."
           exit 0
         fi
@@ -131,10 +146,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        strict="${{ inputs.synthesis-strict }}"
         if ! python "${GITHUB_ACTION_PATH}/scripts/update-release.py" \
           --github-token "${{ inputs.github-token }}" \
           --repository "${GITHUB_REPOSITORY}" \
           --tag "${{ steps.semantic_release.outputs.release_tag }}" \
           --notes-file "${{ steps.synthesize.outputs.notes_file }}"; then
+          if [ "${strict}" = "true" ]; then
+            echo "::error::Landfall could not update the release body and synthesis-strict is enabled."
+            exit 1
+          fi
           echo "::warning::Landfall could not update the release body; release remains published."
         fi

@@ -49,3 +49,6 @@ The format is based on Keep a Changelog and uses Semantic Versioning.
 - Added structured logging and CLI input validation for Python scripts.
 - Improved synthesis prompt guidance for concise, user-friendly release notes.
 - Made synthesis and release-note update failures non-blocking in the composite action.
+- Switched Landfall self-release workflow to local `uses: ./` with OpenRouter input and strict synthesis checks.
+- Added automatic major tag sync (`v1` -> latest release tag) in the self-release workflow.
+- Removed deprecated `moonshot-*` action inputs in favor of `llm-*` provider-agnostic inputs.

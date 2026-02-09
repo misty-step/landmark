@@ -20,7 +20,31 @@ jobs:
           persist-credentials: false
 
       - name: Run Landfall
-        uses: misty-step/landfall@v1
+        id: landfall
+        uses: ./
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          synthesis-strict: "true"
+
+      - name: Move v1 major tag
+        if: steps.landfall.outputs.released == 'true' && steps.landfall.outputs['release-tag'] != ''
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          RELEASE_TAG: ${{ steps.landfall.outputs['release-tag'] }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          release_sha="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          if [ -z "${release_sha}" ]; then
+            echo "::error::Could not resolve release tag '${RELEASE_TAG}'."
+            exit 1
+          fi
+
+          git tag -f v1 "${release_sha}"
+          git push origin refs/tags/v1 --force
