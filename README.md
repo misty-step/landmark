@@ -10,6 +10,7 @@ It runs `semantic-release` to publish a version and changelog, then optionally s
 3. Runs `semantic-release` (version bump, changelog update, release creation)
 4. Optionally synthesizes user-facing notes from technical changelog content
 5. Updates the GitHub Release body to prepend a `## What's New` section
+6. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
 
 ## Quick Start
 
@@ -74,7 +75,9 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
-| `synthesis-strict` | No | `false` | If `true`, fail the action when synthesis/update fails (instead of warning and continuing). |
+| `synthesis-required` | No | `false` | If `true`, fail the action when synthesis/update fails (after failure reporting). |
+| `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |
+| `synthesis-failure-issue` | No | `true` | If `true`, create a GitHub issue in the consuming repository when synthesis/update fails. |
 
 \* `llm-api-key` is required when `synthesis: true`.
 
@@ -84,6 +87,7 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | --- | --- |
 | `released` | `true` if a new release/tag was created, otherwise `false`. |
 | `release-tag` | Tag created by `semantic-release` (empty if no release). |
+| `synthesis-succeeded` | `true` only when synthesis and release-body update both succeed for the released tag. |
 
 ## Provider Examples
 
@@ -129,7 +133,7 @@ If Landfall releases itself, use local action code in `.github/workflows/release
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-    synthesis-strict: "true"
+    synthesis-required: "true"
 ```
 
 Then move `v1` to the new `release-tag` output in the same workflow. This avoids stale major-tag drift.

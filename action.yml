@@ -28,9 +28,17 @@ inputs:
     description: Whether to synthesize user-facing release notes.
     default: "true"
     required: false
-  synthesis-strict:
+  synthesis-required:
     description: Whether synthesis and release-body update failures should fail the action.
     default: "false"
+    required: false
+  synthesis-strict:
+    description: Deprecated alias for synthesis-required.
+    default: "false"
+    required: false
+  synthesis-failure-issue:
+    description: Whether to create a GitHub issue in the consuming repository when synthesis fails.
+    default: "true"
     required: false
 
 outputs:
@@ -40,6 +48,9 @@ outputs:
   release-tag:
     description: Release tag created by semantic-release.
     value: ${{ steps.semantic_release.outputs.release_tag }}
+  synthesis-succeeded:
+    description: Whether synthesis and release body update completed successfully.
+    value: ${{ steps.synthesis_result.outputs.succeeded }}
 
 runs:
   using: composite
@@ -100,18 +111,35 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+
+        sanitize_text() {
+          printf '%s' "$1" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g'
+        }
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
         product_name="${GITHUB_REPOSITORY#*/}"
-        strict="${{ inputs.synthesis-strict }}"
         api_key="${{ inputs.llm-api-key }}"
+
+        set_output "succeeded" "false"
+        set_output "notes_file" ""
+        set_output "failure_stage" ""
+        set_output "failure_message" ""
+
         if [ -z "${api_key}" ]; then
-          if [ "${strict}" = "true" ]; then
-            echo "::error::Landfall synthesis required but llm-api-key is empty."
-            exit 1
-          fi
-          echo "::warning::Landfall synthesis skipped; llm-api-key is empty."
+          message="Landfall synthesis skipped; llm-api-key is empty."
+          echo "::warning::${message}"
+          set_output "failure_stage" "configuration"
+          set_output "failure_message" "$(sanitize_text "${message}")"
           exit 0
         fi
+
+        synth_log="${RUNNER_TEMP}/landfall-synthesize.log"
         if ! python "${GITHUB_ACTION_PATH}/scripts/synthesize.py" \
           --api-key "${api_key}" \
           --model "${{ inputs.llm-model }}" \
@@ -121,40 +149,176 @@ runs:
           --version "${{ steps.semantic_release.outputs.release_tag }}" \
           --changelog-file "${GITHUB_WORKSPACE}/CHANGELOG.md" \
           --prompt-template "${GITHUB_ACTION_PATH}/templates/synthesis-prompt.md" \
-          > "${notes_file}"; then
-          if [ "${strict}" = "true" ]; then
-            echo "::error::Landfall synthesis failed and synthesis-strict is enabled."
-            exit 1
+          > "${notes_file}" \
+          2> "${synth_log}"; then
+          details="$(tail -n 5 "${synth_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
+          message="Landfall synthesis failed; publishing release without a What's New section."
+          if [ -n "${details}" ]; then
+            message="${message} Details: ${details}"
           fi
-          echo "::warning::Landfall synthesis failed; publishing release without a What's New section."
+          message="$(sanitize_text "${message}")"
+          echo "::warning::${message}"
+          set_output "failure_stage" "synthesis"
+          set_output "failure_message" "${message}"
           exit 0
         fi
 
         if [ ! -s "${notes_file}" ]; then
-          if [ "${strict}" = "true" ]; then
-            echo "::error::Landfall synthesis returned empty notes and synthesis-strict is enabled."
-            exit 1
-          fi
-          echo "::warning::Landfall synthesis returned empty notes; skipping release update."
+          message="Landfall synthesis returned empty notes; skipping release update."
+          echo "::warning::${message}"
+          set_output "failure_stage" "synthesis_empty"
+          set_output "failure_message" "$(sanitize_text "${message}")"
           exit 0
         fi
 
-        echo "notes_file=${notes_file}" >> "${GITHUB_OUTPUT}"
+        set_output "succeeded" "true"
+        set_output "notes_file" "${notes_file}"
 
     - name: Update release body
-      if: inputs.synthesis == 'true' && steps.semantic_release.outputs.released == 'true' && steps.synthesize.outputs.notes_file != ''
+      id: update_release
+      if: inputs.synthesis == 'true' && steps.semantic_release.outputs.released == 'true'
       shell: bash
+      env:
+        SYNTH_STEP_SUCCEEDED: ${{ steps.synthesize.outputs.succeeded }}
+        SYNTH_FAILURE_STAGE: ${{ steps.synthesize.outputs.failure_stage }}
+        SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
       run: |
         set -euo pipefail
-        strict="${{ inputs.synthesis-strict }}"
+
+        sanitize_text() {
+          printf '%s' "$1" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g'
+        }
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
+        set_output "succeeded" "false"
+        set_output "failure_stage" ""
+        set_output "failure_message" ""
+
+        if [ "${SYNTH_STEP_SUCCEEDED}" != "true" ]; then
+          stage="${SYNTH_FAILURE_STAGE}"
+          message="${SYNTH_FAILURE_MESSAGE}"
+          if [ -z "${stage}" ]; then
+            stage="synthesis"
+          fi
+          if [ -z "${message}" ]; then
+            message="Release body update skipped because synthesis did not succeed."
+          fi
+          set_output "failure_stage" "$(sanitize_text "${stage}")"
+          set_output "failure_message" "$(sanitize_text "${message}")"
+          exit 0
+        fi
+
+        update_log="${RUNNER_TEMP}/landfall-update-release.log"
         if ! python "${GITHUB_ACTION_PATH}/scripts/update-release.py" \
           --github-token "${{ inputs.github-token }}" \
           --repository "${GITHUB_REPOSITORY}" \
           --tag "${{ steps.semantic_release.outputs.release_tag }}" \
-          --notes-file "${{ steps.synthesize.outputs.notes_file }}"; then
-          if [ "${strict}" = "true" ]; then
-            echo "::error::Landfall could not update the release body and synthesis-strict is enabled."
-            exit 1
+          --notes-file "${{ steps.synthesize.outputs.notes_file }}" \
+          > /dev/null \
+          2> "${update_log}"; then
+          details="$(tail -n 5 "${update_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
+          message="Landfall could not update the release body; release remains published."
+          if [ -n "${details}" ]; then
+            message="${message} Details: ${details}"
           fi
-          echo "::warning::Landfall could not update the release body; release remains published."
+          message="$(sanitize_text "${message}")"
+          echo "::warning::${message}"
+          set_output "failure_stage" "release_update"
+          set_output "failure_message" "${message}"
+          exit 0
         fi
+
+        set_output "succeeded" "true"
+
+    - name: Summarize synthesis status
+      id: synthesis_result
+      shell: bash
+      env:
+        SYNTHESIS_ENABLED: ${{ inputs.synthesis }}
+        RELEASED: ${{ steps.semantic_release.outputs.released }}
+        SYNTH_STEP_SUCCEEDED: ${{ steps.synthesize.outputs.succeeded }}
+        UPDATE_STEP_SUCCEEDED: ${{ steps.update_release.outputs.succeeded }}
+        SYNTH_FAILURE_STAGE: ${{ steps.synthesize.outputs.failure_stage }}
+        SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
+        UPDATE_FAILURE_STAGE: ${{ steps.update_release.outputs.failure_stage }}
+        UPDATE_FAILURE_MESSAGE: ${{ steps.update_release.outputs.failure_message }}
+      run: |
+        set -euo pipefail
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
+        succeeded="false"
+        failure_stage=""
+        failure_message=""
+
+        if [ "${SYNTHESIS_ENABLED}" = "true" ] && [ "${RELEASED}" = "true" ]; then
+          if [ "${SYNTH_STEP_SUCCEEDED}" = "true" ] && [ "${UPDATE_STEP_SUCCEEDED}" = "true" ]; then
+            succeeded="true"
+          else
+            failure_stage="${SYNTH_FAILURE_STAGE}"
+            failure_message="${SYNTH_FAILURE_MESSAGE}"
+            if [ -z "${failure_stage}" ] && [ -n "${UPDATE_FAILURE_STAGE}" ]; then
+              failure_stage="${UPDATE_FAILURE_STAGE}"
+              failure_message="${UPDATE_FAILURE_MESSAGE}"
+            fi
+            if [ -z "${failure_stage}" ]; then
+              failure_stage="unknown"
+            fi
+            if [ -z "${failure_message}" ]; then
+              failure_message="Landfall synthesis did not complete successfully."
+            fi
+          fi
+        fi
+
+        set_output "succeeded" "${succeeded}"
+        set_output "failure_stage" "${failure_stage}"
+        set_output "failure_message" "${failure_message}"
+
+    - name: Report synthesis failure
+      if: inputs.synthesis == 'true' && steps.semantic_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true'
+      shell: bash
+      env:
+        FAILURE_STAGE: ${{ steps.synthesis_result.outputs.failure_stage }}
+        FAILURE_MESSAGE: ${{ steps.synthesis_result.outputs.failure_message }}
+      run: |
+        set -euo pipefail
+        run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        if ! python "${GITHUB_ACTION_PATH}/scripts/report-synthesis-failure.py" \
+          --github-token "${{ inputs.github-token }}" \
+          --repository "${GITHUB_REPOSITORY}" \
+          --release-tag "${{ steps.semantic_release.outputs.release_tag }}" \
+          --workflow-run-url "${run_url}" \
+          --workflow-name "${GITHUB_WORKFLOW}" \
+          --failure-stage "${FAILURE_STAGE}" \
+          --failure-message "${FAILURE_MESSAGE}"; then
+          echo "::warning::Landfall could not create a synthesis failure issue."
+        fi
+
+    - name: Enforce synthesis required
+      if: inputs.synthesis == 'true' && steps.semantic_release.outputs.released == 'true'
+      shell: bash
+      env:
+        SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
+        SYNTHESIS_STRICT: ${{ inputs.synthesis-strict }}
+        SYNTHESIS_SUCCEEDED: ${{ steps.synthesis_result.outputs.succeeded }}
+        FAILURE_STAGE: ${{ steps.synthesis_result.outputs.failure_stage }}
+        FAILURE_MESSAGE: ${{ steps.synthesis_result.outputs.failure_message }}
+      run: |
+        set -euo pipefail
+        if [ "${SYNTHESIS_REQUIRED}" != "true" ] && [ "${SYNTHESIS_STRICT}" != "true" ]; then
+          exit 0
+        fi
+        if [ "${SYNTHESIS_SUCCEEDED}" = "true" ]; then
+          exit 0
+        fi
+        echo "::error::Landfall synthesis required but failed at stage '${FAILURE_STAGE}'. ${FAILURE_MESSAGE}"
+        exit 1

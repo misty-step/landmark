@@ -28,3 +28,11 @@ def synthesize():
 @pytest.fixture
 def update_release():
     return load_script_module("landfall_update_release", "scripts/update-release.py")
+
+
+@pytest.fixture
+def report_synthesis_failure():
+    return load_script_module(
+        "landfall_report_synthesis_failure",
+        "scripts/report-synthesis-failure.py",
+    )
