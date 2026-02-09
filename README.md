@@ -61,6 +61,8 @@ jobs:
           # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
 ```
 
+Landfall is language-agnostic. Your repo does not need `package.json` or Node.js — the action handles its own runtime setup. Any project using conventional commits works.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -139,7 +141,6 @@ Landfall ships `configs/.releaserc.json` with:
 - `@semantic-release/commit-analyzer`
 - `@semantic-release/release-notes-generator`
 - `@semantic-release/changelog`
-- `@semantic-release/npm` (`npmPublish: false`)
 - `@semantic-release/git`
 - `@semantic-release/github`
 
