@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/misty-step/landfall/compare/v1.4.0...v1.5.0) (2026-02-10)
+
+
+### Features
+
+* backfill CLI for retroactive release note synthesis ([#39](https://github.com/misty-step/landfall/issues/39)) ([8b57870](https://github.com/misty-step/landfall/commit/8b57870dfdf3fe85147be24758aa59e224601e11)), closes [#13](https://github.com/misty-step/landfall/issues/13) [#13](https://github.com/misty-step/landfall/issues/13)
+
 # [1.4.0](https://github.com/misty-step/landfall/compare/v1.3.4...v1.4.0) (2026-02-10)
 
 
