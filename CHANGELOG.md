@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/misty-step/landfall/compare/v1.3.4...v1.4.0) (2026-02-10)
+
+
+### Features
+
+* add plaintext/html artifact outputs ([#12](https://github.com/misty-step/landfall/issues/12)) ([#38](https://github.com/misty-step/landfall/issues/38)) ([dcfb14f](https://github.com/misty-step/landfall/commit/dcfb14f21924a7a5686c2d27338379dd29c45bb3))
+
 ## [1.3.4](https://github.com/misty-step/landfall/compare/v1.3.3...v1.3.4) (2026-02-10)
 
 
