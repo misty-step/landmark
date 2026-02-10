@@ -44,6 +44,14 @@ inputs:
     description: Write synthesized notes to this file path. Use {version} placeholder for the release tag (e.g., 'docs/releases/{version}.md').
     default: ""
     required: false
+  notes-output-text-file:
+    description: Write synthesized notes as plaintext to this file path. Use {version} placeholder (e.g., 'docs/releases/{version}.txt').
+    default: ""
+    required: false
+  notes-output-html-file:
+    description: Write synthesized notes as an HTML fragment to this file path. Use {version} placeholder (e.g., 'docs/releases/{version}.html').
+    default: ""
+    required: false
   notes-output-json:
     description: Append a structured release entry to this JSON array file. Creates the file if it does not exist.
     default: ""
@@ -278,6 +286,8 @@ runs:
             --notes-file "${{ steps.synthesize.outputs.notes_file }}" \
             --version "${{ steps.semantic_release.outputs.release_tag }}" \
             --output-file "${{ inputs.notes-output-file }}" \
+            --output-text-file "${{ inputs.notes-output-text-file }}" \
+            --output-html-file "${{ inputs.notes-output-html-file }}" \
             --output-json "${{ inputs.notes-output-json }}")" || true
           if [ -n "${notes_output}" ]; then
             notes="${notes_output}"

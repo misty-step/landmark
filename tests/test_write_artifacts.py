@@ -143,7 +143,15 @@ def test_append_json_entry_creates_new_file(write_artifacts, tmp_path: Path):
     # Assert
     assert written == path
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload == [{"version": "1.2.3", "date": "2026-02-10", "notes": "notes"}]
+    assert payload == [
+        {
+            "version": "1.2.3",
+            "date": "2026-02-10",
+            "notes": "notes",
+            "notes_plaintext": "notes",
+            "notes_html": "<p>notes</p>",
+        }
+    ]
     assert path.read_text(encoding="utf-8").endswith("\n")
 
 
@@ -163,5 +171,40 @@ def test_append_json_entry_appends_to_existing_array(write_artifacts, tmp_path: 
     # Assert
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert len(payload) == 2
-    assert payload[1] == {"version": "1.2.0", "date": "2026-02-10", "notes": "new notes"}
+    assert payload[1] == {
+        "version": "1.2.0",
+        "date": "2026-02-10",
+        "notes": "new notes",
+        "notes_plaintext": "new notes",
+        "notes_html": "<p>new notes</p>",
+    }
 
+
+def test_markdown_to_plaintext_removes_markdown_syntax(write_artifacts):
+    markdown = "## New Features\n\n- Added **bold** and `code` and [docs](https://example.com)\n"
+
+    plaintext = write_artifacts.markdown_to_plaintext(markdown)
+
+    assert plaintext == "New Features\n\n- Added bold and code and docs (https://example.com)"
+
+
+def test_markdown_to_html_fragment_renders_headings_lists_links_and_code(write_artifacts):
+    markdown = "## Improvements\n\n- Added **bold** and `code` and [docs](https://example.com)\n"
+
+    html_fragment = write_artifacts.markdown_to_html_fragment(markdown)
+
+    assert "<h2>Improvements</h2>" in html_fragment
+    assert "<ul>" in html_fragment
+    assert "<li>" in html_fragment
+    assert "<strong>bold</strong>" in html_fragment
+    assert "<code>code</code>" in html_fragment
+    assert '<a href="https://example.com">docs</a>' in html_fragment
+
+
+def test_markdown_to_html_fragment_does_not_link_unsafe_schemes(write_artifacts):
+    markdown = "## Improvements\n\n- See [this](javascript:alert(1))\n"
+
+    html_fragment = write_artifacts.markdown_to_html_fragment(markdown)
+
+    assert "javascript:alert(1)" in html_fragment
+    assert '<a href="javascript:alert(1)"' not in html_fragment

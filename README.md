@@ -79,6 +79,8 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |
 | `synthesis-failure-issue` | No | `true` | If `true`, create a GitHub issue in the consuming repository when synthesis/update fails. |
 | `notes-output-file` | No | `""` | Write synthesized notes to this file path. Use `{version}` placeholder for the release tag (e.g., `docs/releases/{version}.md`). |
+| `notes-output-text-file` | No | `""` | Write synthesized notes as plaintext to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.txt`). |
+| `notes-output-html-file` | No | `""` | Write synthesized notes as an HTML fragment to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.html`). |
 | `notes-output-json` | No | `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
 
 \* `llm-api-key` is required when `synthesis: true`.
@@ -137,6 +139,8 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     notes-output-file: docs/releases/{version}.md
+    notes-output-text-file: docs/releases/{version}.txt
+    notes-output-html-file: docs/releases/{version}.html
     notes-output-json: releases.json
 ```
 
@@ -147,7 +151,9 @@ This writes per-version markdown files and maintains a JSON feed for changelog p
   {
     "version": "1.2.0",
     "date": "2026-02-08",
-    "notes": "## New Features\n- ..."
+    "notes": "## New Features\n- ...",
+    "notes_plaintext": "New Features\n\n- ...",
+    "notes_html": "<h2>New Features</h2>\n<ul>\n<li>...</li>\n</ul>"
   }
 ]
 ```
