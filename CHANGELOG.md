@@ -1,3 +1,10 @@
+## [1.3.3](https://github.com/misty-step/landfall/compare/v1.3.2...v1.3.3) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci:** add dedicated workflow to sync v1 tag ([#32](https://github.com/misty-step/landfall/issues/32)) ([04c91c5](https://github.com/misty-step/landfall/commit/04c91c55c9740f05ceefa7f063e469b2bcf1211d)), closes [#16](https://github.com/misty-step/landfall/issues/16)
+
 ## [1.3.2](https://github.com/misty-step/landfall/compare/v1.3.1...v1.3.2) (2026-02-10)
 
 
