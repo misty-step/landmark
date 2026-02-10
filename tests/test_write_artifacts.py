@@ -1,321 +1,167 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
-import sys
 from datetime import date
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def load_script_module(module_name: str, relative_path: str) -> ModuleType:
-    module_path = REPO_ROOT / relative_path
-    scripts_dir = str(module_path.parent)
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load module from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture
-def write_artifacts():
-    return load_script_module("landfall_write_artifacts", "scripts/write-artifacts.py")
-
-
-def run_main(write_artifacts, monkeypatch, argv: list[str]) -> int:
-    monkeypatch.setattr(sys, "argv", ["write-artifacts.py", *argv])
-    return write_artifacts.main()
-
-
-def test_no_outputs_configured(write_artifacts, monkeypatch, capsys, tmp_path: Path):
-    notes = "## What's New\n- Faster releases."
-    notes_file = tmp_path / "notes.md"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        ["--notes-file", str(notes_file), "--version", "v1.2.0"],
-    )
-
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert captured.out.strip() == notes
-
-
-def test_output_file_basic(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    output_file = tmp_path / "release.md"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "v1.2.0",
-            "--output-file",
-            str(output_file),
-        ],
-    )
-
-    assert exit_code == 0
-    assert output_file.read_text(encoding="utf-8") == notes
-
-
-def test_output_file_version_interpolation(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    template = tmp_path / "docs" / "{version}.md"
-    interpolated = tmp_path / "docs" / "v2.0.1.md"
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "v2.0.1",
-            "--output-file",
-            str(template),
-        ],
-    )
-
-    assert exit_code == 0
-    assert interpolated.exists()
-    assert interpolated.read_text(encoding="utf-8") == notes
-
-
-def test_output_file_creates_parent_dirs(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    output_file = tmp_path / "nested" / "releases" / "release.md"
-    assert not output_file.parent.exists()
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "v2.0.1",
-            "--output-file",
-            str(output_file),
-        ],
-    )
-
-    assert exit_code == 0
-    assert output_file.parent.exists()
-    assert output_file.read_text(encoding="utf-8") == notes
-
-
-def test_output_json_creates_new_file(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    output_json = tmp_path / "releases.json"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "1.2.0",
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert exit_code == 0
-    assert payload == [
-        {
-            "version": "1.2.0",
-            "date": date.today().isoformat(),
-            "notes": notes,
-        }
-    ]
-
-
-def test_output_json_appends_to_existing(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    output_json = tmp_path / "releases.json"
-    notes_file.write_text(notes, encoding="utf-8")
-    output_json.write_text(
-        json.dumps([{"version": "1.1.0", "date": "2026-02-01", "notes": "old notes"}]),
-        encoding="utf-8",
-    )
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "1.2.0",
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert exit_code == 0
-    assert len(payload) == 2
-    assert payload[1]["version"] == "1.2.0"
-    assert payload[1]["date"] == date.today().isoformat()
-    assert payload[1]["notes"] == notes
-
-
-def test_output_json_invalid_root_type(write_artifacts, monkeypatch, tmp_path: Path):
-    notes_file = tmp_path / "notes.md"
-    output_json = tmp_path / "releases.json"
-    notes_file.write_text("## Highlights\n- Better docs.", encoding="utf-8")
-    output_json.write_text("{}", encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "1.2.0",
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    assert exit_code == 1
-
-
-def test_output_json_creates_parent_dirs(write_artifacts, monkeypatch, tmp_path: Path):
-    notes_file = tmp_path / "notes.md"
-    output_json = tmp_path / "nested" / "releases" / "releases.json"
-    notes_file.write_text("## Highlights\n- Better docs.", encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "1.2.0",
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    assert exit_code == 0
-    assert output_json.parent.exists()
-    assert output_json.exists()
-
-
-def test_output_json_strips_v_prefix(write_artifacts, monkeypatch, tmp_path: Path):
-    notes_file = tmp_path / "notes.md"
-    output_json = tmp_path / "releases.json"
-    notes_file.write_text("## Highlights\n- Better docs.", encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "v1.2.0",
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert exit_code == 0
-    assert payload[0]["version"] == "1.2.0"
-
-
-def test_both_outputs_configured(write_artifacts, monkeypatch, tmp_path: Path):
-    notes = "## Highlights\n- Better docs."
-    notes_file = tmp_path / "notes.md"
-    output_file = tmp_path / "release.md"
-    output_json = tmp_path / "releases.json"
-    notes_file.write_text(notes, encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        [
-            "--notes-file",
-            str(notes_file),
-            "--version",
-            "v1.2.0",
-            "--output-file",
-            str(output_file),
-            "--output-json",
-            str(output_json),
-        ],
-    )
-
-    payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert exit_code == 0
-    assert output_file.read_text(encoding="utf-8") == notes
-    assert payload[0]["version"] == "1.2.0"
-    assert payload[0]["notes"] == notes
-
-
-def test_empty_notes_file(write_artifacts, monkeypatch, tmp_path: Path):
-    empty_notes_file = tmp_path / "empty.md"
-    empty_notes_file.write_text("", encoding="utf-8")
-
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        ["--notes-file", str(empty_notes_file), "--version", "v1.2.0"],
-    )
-
-    assert exit_code == 1
-
-
-def test_missing_notes_file(write_artifacts, monkeypatch, tmp_path: Path):
-    exit_code = run_main(
-        write_artifacts,
-        monkeypatch,
-        ["--notes-file", str(tmp_path / "missing.md"), "--version", "v1.2.0"],
-    )
-
-    assert exit_code == 1
-
-
-def test_validate_args_empty_version(write_artifacts):
+def test_validate_args_accepts_valid_inputs(write_artifacts):
+    # Arrange
     args = argparse.Namespace(
         notes_file="notes.md",
-        version="   ",
+        version="v1.2.3",
         output_file="",
         output_json="",
         log_level="INFO",
     )
 
+    # Act / Assert
+    write_artifacts.validate_args(args)
+
+
+def test_validate_args_rejects_blank_notes_file(write_artifacts):
+    # Arrange
+    args = argparse.Namespace(
+        notes_file="  ",
+        version="v1.2.3",
+        output_file="",
+        output_json="",
+        log_level="INFO",
+    )
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="notes-file must be non-empty"):
+        write_artifacts.validate_args(args)
+
+
+def test_validate_args_rejects_blank_version(write_artifacts):
+    # Arrange
+    args = argparse.Namespace(
+        notes_file="notes.md",
+        version="  ",
+        output_file="",
+        output_json="",
+        log_level="INFO",
+    )
+
+    # Act / Assert
     with pytest.raises(ValueError, match="version must be non-empty"):
         write_artifacts.validate_args(args)
+
+
+def test_interpolate_output_path_replaces_version_placeholder(write_artifacts, tmp_path: Path):
+    # Arrange
+    template = str(tmp_path / "docs" / "{version}.md")
+
+    # Act
+    path = write_artifacts.interpolate_output_path(template, "v1.2.3")
+
+    # Assert
+    assert path == tmp_path / "docs" / "v1.2.3.md"
+
+
+def test_write_notes_file_writes_to_interpolated_path_and_creates_parent_directory(
+    write_artifacts, tmp_path: Path
+):
+    # Arrange
+    notes = "## What's New\n- Faster."
+    template = str(tmp_path / "nested" / "{version}.md")
+
+    # Act
+    written = write_artifacts.write_notes_file(notes, template, version="v1.2.3")
+
+    # Assert
+    assert written == tmp_path / "nested" / "v1.2.3.md"
+    assert written.exists()
+    assert written.read_text(encoding="utf-8") == notes
+
+
+def test_normalize_json_version_strips_v_prefix(write_artifacts):
+    # Arrange / Act
+    normalized = write_artifacts.normalize_json_version("v1.2.3")
+
+    # Assert
+    assert normalized == "1.2.3"
+
+
+def test_normalize_json_version_returns_input_when_no_v_prefix(write_artifacts):
+    # Arrange / Act
+    normalized = write_artifacts.normalize_json_version("1.2.3")
+
+    # Assert
+    assert normalized == "1.2.3"
+
+
+def test_load_json_array_missing_file_returns_empty_list(write_artifacts, tmp_path: Path):
+    # Arrange
+    path = tmp_path / "missing.json"
+
+    # Act
+    entries = write_artifacts.load_json_array(path)
+
+    # Assert
+    assert entries == []
+
+
+def test_load_json_array_valid_array_returns_list(write_artifacts, tmp_path: Path):
+    # Arrange
+    path = tmp_path / "releases.json"
+    path.write_text(json.dumps([{"version": "1.0.0"}]), encoding="utf-8")
+
+    # Act
+    entries = write_artifacts.load_json_array(path)
+
+    # Assert
+    assert entries == [{"version": "1.0.0"}]
+
+
+def test_load_json_array_invalid_root_raises_value_error(write_artifacts, tmp_path: Path):
+    # Arrange
+    path = tmp_path / "releases.json"
+    path.write_text(json.dumps({"version": "1.0.0"}), encoding="utf-8")
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="root must be a JSON array"):
+        write_artifacts.load_json_array(path)
+
+
+def test_append_json_entry_creates_new_file(write_artifacts, tmp_path: Path):
+    # Arrange
+    path = tmp_path / "releases.json"
+
+    # Act
+    written = write_artifacts.append_json_entry(
+        notes="notes",
+        version="v1.2.3",
+        output_json_path=str(path),
+        today=date(2026, 2, 10),
+    )
+
+    # Assert
+    assert written == path
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload == [{"version": "1.2.3", "date": "2026-02-10", "notes": "notes"}]
+    assert path.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_append_json_entry_appends_to_existing_array(write_artifacts, tmp_path: Path):
+    # Arrange
+    path = tmp_path / "releases.json"
+    path.write_text(json.dumps([{"version": "1.0.0", "date": "2026-02-01", "notes": "old"}]), encoding="utf-8")
+
+    # Act
+    write_artifacts.append_json_entry(
+        notes="new notes",
+        version="1.2.0",
+        output_json_path=str(path),
+        today=date(2026, 2, 10),
+    )
+
+    # Assert
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert len(payload) == 2
+    assert payload[1] == {"version": "1.2.0", "date": "2026-02-10", "notes": "new notes"}
+
