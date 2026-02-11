@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/misty-step/landfall/compare/v1.6.1...v1.7.0) (2026-02-11)
+
+
+### Features
+
+* support consuming repo .releaserc override ([#65](https://github.com/misty-step/landfall/issues/65)) ([a173a38](https://github.com/misty-step/landfall/commit/a173a38142e102624e76290bfabeb651391de2a1)), closes [#14](https://github.com/misty-step/landfall/issues/14)
+
 ## [1.6.1](https://github.com/misty-step/landfall/compare/v1.6.0...v1.6.1) (2026-02-11)
 
 
