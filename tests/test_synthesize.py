@@ -64,6 +64,35 @@ def test_render_prompt_replaces_template_tokens():
     assert rendered == "Name=Landfall Version=1.2.3\n\n### Fixes\n- stability"
 
 
+def test_render_prompt_replaces_bullet_target():
+    # Arrange
+    template = "Aim for {{BULLET_TARGET}} bullets.\n\n{{PRODUCT_NAME}} {{VERSION}}\n\n{{TECHNICAL_CHANGELOG}}"
+
+    # Act
+    rendered = synthesize.render_prompt(
+        template_text=template,
+        product_name="Test",
+        version="1.2.0",
+        technical="### Features\n- a\n- b\n- c",
+    )
+
+    # Assert
+    assert "3-7" in rendered
+    assert "{{BULLET_TARGET}}" not in rendered
+
+
+def test_estimate_bullet_target_major_release():
+    assert synthesize.estimate_bullet_target("2.0.0", "- a\n- b\n- c") == "5-10"
+
+
+def test_estimate_bullet_target_patch_release():
+    assert synthesize.estimate_bullet_target("1.0.1", "- a") == "1-3"
+
+
+def test_estimate_bullet_target_minor_release():
+    assert synthesize.estimate_bullet_target("1.2.0", "- a\n- b") == "3-7"
+
+
 def test_validate_args_accepts_valid_inputs():
     # Arrange
     args = argparse.Namespace(
