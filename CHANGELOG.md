@@ -1,3 +1,12 @@
+# [1.8.0](https://github.com/misty-step/landfall/compare/v1.7.0...v1.8.0) (2026-02-11)
+
+
+### Features
+
+* add proactive API key health check ([#69](https://github.com/misty-step/landfall/issues/69)) ([7d943cb](https://github.com/misty-step/landfall/commit/7d943cbc7170da281ba4e304ab6afcd8b3e06c9b)), closes [#49](https://github.com/misty-step/landfall/issues/49)
+* add synthesis-only mode to decouple from semantic-release ([#70](https://github.com/misty-step/landfall/issues/70)) ([3fa37e1](https://github.com/misty-step/landfall/commit/3fa37e109409bb8684760c8cb81dbdd21dff8fc2)), closes [#50](https://github.com/misty-step/landfall/issues/50)
+* rewrite synthesis system message and prompt template ([#71](https://github.com/misty-step/landfall/issues/71)) ([04822aa](https://github.com/misty-step/landfall/commit/04822aa8b299264b1a4d620843e68f5aeda83c27)), closes [#53](https://github.com/misty-step/landfall/issues/53)
+
 # [1.7.0](https://github.com/misty-step/landfall/compare/v1.6.1...v1.7.0) (2026-02-11)
 
 
