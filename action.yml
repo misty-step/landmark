@@ -93,7 +93,7 @@ runs:
       working-directory: ${{ github.action_path }}
       run: |
         set -euo pipefail
-        npm install --no-fund --no-audit
+        npm ci --no-fund --no-audit
         python -m pip install --upgrade pip
         python -m pip install requests
 

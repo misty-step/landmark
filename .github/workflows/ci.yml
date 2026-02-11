@@ -7,6 +7,21 @@ on:
       - master
 
 jobs:
+  lockfile-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify lockfile is in sync
+        shell: bash
+        run: npm ci --no-fund --no-audit
+
   python-checks:
     runs-on: ubuntu-latest
     steps:
