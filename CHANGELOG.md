@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/misty-step/landfall/compare/v1.9.0...v1.10.0) (2026-02-11)
+
+
+### Features
+
+* auto-close stale synthesis failure issues on success ([#73](https://github.com/misty-step/landfall/issues/73)) ([b276399](https://github.com/misty-step/landfall/commit/b2763993c9b959f9dc85fb7a8b502a150f404223)), closes [#45](https://github.com/misty-step/landfall/issues/45)
+
 # [1.9.0](https://github.com/misty-step/landfall/compare/v1.8.0...v1.9.0) (2026-02-11)
 
 
