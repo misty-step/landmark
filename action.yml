@@ -454,7 +454,7 @@ runs:
         set_output "failure_message" "${failure_message}"
 
     - name: Report synthesis failure
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true'
+      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true' && steps.synthesis_result.outputs.failure_stage != 'configuration'
       shell: bash
       env:
         FAILURE_STAGE: ${{ steps.synthesis_result.outputs.failure_stage }}
