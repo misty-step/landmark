@@ -201,6 +201,14 @@ If Landfall releases itself, use local action code in `.github/workflows/release
 
 Then move `v1` to the new `release-tag` output in the same workflow. This avoids stale major-tag drift.
 
+### Metadata Version Sync (Landfall Repo)
+
+This repository keeps `package.json` and `pyproject.toml` versions aligned to release tags:
+
+- `.releaserc.json` runs `scripts/update-version-metadata.py` in semantic-release `prepare`.
+- The release commit includes `CHANGELOG.md`, `package.json`, and `pyproject.toml`.
+- CI runs `python scripts/check-version-sync.py` to fail fast when metadata drifts from the latest semver tag.
+
 ## Custom semantic-release Config
 
 Landfall ships a default config at `configs/.releaserc.json`. If your repo has its own semantic-release config file (`.releaserc`, `.releaserc.json`, `.releaserc.yml`, `.releaserc.yaml`, `release.config.js`, `release.config.cjs`, or `release.config.mjs`), Landfall uses it instead of the bundled defaults.

@@ -48,6 +48,7 @@ python -m check_jsonschema --schemafile https://json.schemastore.org/github-acti
 ## CI
 
 All of the above run automatically on PRs and pushes to `master`. See `.github/workflows/ci.yml`.
+CI also runs `python scripts/check-version-sync.py`, which ensures `package.json` and `pyproject.toml` match the latest semver git tag.
 
 ## Commits
 
@@ -66,16 +67,20 @@ Releases are fully automated. Merging to `master` triggers:
 2. LLM synthesis generates user-facing "What's New" notes and prepends them to the release body
 
 No manual version bumping or tagging required.
+Metadata versions are updated automatically during release prepare via `scripts/update-version-metadata.py`.
 
 ## Architecture
 
 ```
 landfall/
 ├── action.yml                # Composite GitHub Action entry point
+├── .releaserc.json           # Repo-local semantic-release config (metadata sync + release commit assets)
 ├── configs/
 │   └── .releaserc.json       # semantic-release config
 ├── scripts/
 │   ├── shared.py             # Common utilities
+│   ├── check-version-sync.py # CI drift detection against latest semver tag
+│   ├── update-version-metadata.py # Release-time metadata version synchronizer
 │   ├── synthesize.py         # LLM synthesis of user-facing notes
 │   ├── update-release.py     # Prepends notes to GitHub Release body
 │   ├── write-artifacts.py    # Writes notes to file/JSON outputs

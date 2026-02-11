@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -43,6 +45,16 @@ jobs:
       - name: Lint Python
         shell: bash
         run: python -m ruff check scripts/ tests/
+
+      - name: Verify metadata versions match latest release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_ref="HEAD"
+          if git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+            tag_ref="HEAD^2"
+          fi
+          python scripts/check-version-sync.py --reference "${tag_ref}"
 
       - name: Run tests
         shell: bash

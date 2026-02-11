@@ -117,6 +117,16 @@ def write_artifacts():
 
 
 @pytest.fixture(scope="session")
+def update_version_metadata():
+    return load_script_module("landfall_update_version_metadata", "scripts/update-version-metadata.py")
+
+
+@pytest.fixture(scope="session")
+def check_version_sync():
+    return load_script_module("landfall_check_version_sync", "scripts/check-version-sync.py")
+
+
+@pytest.fixture(scope="session")
 def report_synthesis_failure():
     return load_script_module(
         "landfall_report_synthesis_failure",
