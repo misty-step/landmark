@@ -92,6 +92,14 @@ inputs:
     description: Update floating major version tags (e.g., v1) after release. Recommended for GitHub Actions repos.
     default: "false"
     required: false
+  webhook-url:
+    description: Webhook endpoint URL. On synthesis success, POST a JSON payload with version, notes (markdown/HTML/plaintext), and release URL.
+    default: ""
+    required: false
+  webhook-secret:
+    description: HMAC-SHA256 secret for signing webhook payloads (X-Signature-256 header). Optional.
+    default: ""
+    required: false
 
 outputs:
   released:
@@ -109,6 +117,9 @@ outputs:
   synthesis-quality:
     description: "Quality of synthesized output: valid (passed validation), degraded (validation failed, using unvalidated output), or failed (synthesis itself failed)."
     value: ${{ steps.synthesis_result.outputs.quality }}
+  webhook-sent:
+    description: Whether the webhook notification was sent successfully.
+    value: ${{ steps.notify_webhook.outputs.sent || 'false' }}
 
 runs:
   using: composite
@@ -519,6 +530,45 @@ runs:
           echo "${notes}"
           echo "LANDFALL_NOTES_EOF"
         } >> "${GITHUB_OUTPUT}"
+
+    - name: Send webhook notification
+      id: notify_webhook
+      if: inputs.webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
+      run: |
+        set -euo pipefail
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
+        set_output "sent" "false"
+
+        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
+        release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${release_tag}"
+        notes_file="${{ steps.synthesize.outputs.notes_file }}"
+
+        if [ ! -s "${notes_file}" ]; then
+          echo "::warning::Webhook skipped: notes file is empty or missing."
+          exit 0
+        fi
+
+        if python "${GITHUB_ACTION_PATH}/scripts/notify.py" \
+          --webhook-url "${WEBHOOK_URL}" \
+          --webhook-secret "${WEBHOOK_SECRET}" \
+          --version "${release_tag}" \
+          --repository "${GITHUB_REPOSITORY}" \
+          --release-url "${release_url}" \
+          --notes-file "${notes_file}"; then
+          set_output "sent" "true"
+        else
+          echo "::warning::Webhook notification failed; release continues."
+        fi
 
     - name: Summarize synthesis status
       id: synthesis_result
