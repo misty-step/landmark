@@ -256,19 +256,47 @@ def resolve_technical_changelog(
     raise ValueError(f"selected changelog-source '{source_key}' is unavailable")
 
 
+BREAKING_CHANGE_RE = re.compile(r"^#{1,4}\s+BREAKING\s+CHANGES?", re.MULTILINE | re.IGNORECASE)
+
+SIGNIFICANCE_BULLET_MAP = {
+    "major": "5-10",
+    "feature": "3-7",
+    "patch": "1-3",
+}
+
+
+def classify_release(version: str, technical: str) -> tuple[str, str]:
+    """Classify release significance and suggest bullet count range.
+
+    Returns (significance, bullet_target) where significance is one of
+    'major', 'feature', or 'patch'.
+    """
+    normalized = normalize_version(version)
+    # Strip prerelease/build metadata (e.g. "1.2.0-rc.1" → "1.2.0")
+    normalized = re.split(r"[-+]", normalized, maxsplit=1)[0]
+    parts = normalized.split(".")
+    # Pad to 3 parts for partial versions (e.g. "2" → ["2","0","0"])
+    while len(parts) < 3:
+        parts.append("0")
+
+    has_breaking = bool(BREAKING_CHANGE_RE.search(technical))
+
+    if has_breaking:
+        significance = "major"
+    elif parts[2] == "0" and parts[1] == "0" and parts[0] != "0":
+        significance = "major"
+    elif parts[2] != "0":
+        significance = "patch"
+    else:
+        significance = "feature"
+
+    return significance, SIGNIFICANCE_BULLET_MAP[significance]
+
+
 def estimate_bullet_target(version: str, technical: str) -> str:
     """Suggest a bullet count range based on version bump and changelog size."""
-    normalized = normalize_version(version)
-    parts = normalized.split(".")
-    line_count = len([line for line in technical.splitlines() if line.strip().startswith("-")])
-
-    # Major version or many changes → more bullets
-    if len(parts) >= 1 and parts[0] != "0" and (normalized.endswith(".0.0") or line_count > 10):
-        return "5-10"
-    # Patch-only → fewer bullets
-    if len(parts) >= 3 and parts[1] == "0":
-        return "1-3"
-    return "3-7"
+    _, bullet_target = classify_release(version, technical)
+    return bullet_target
 
 
 def render_prompt(template_text: str, product_name: str, version: str, technical: str) -> str:
