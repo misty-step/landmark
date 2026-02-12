@@ -86,6 +86,8 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `notes-output-json` | No | `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
 | `prompt-template-path` | No | `""` | Path to a custom synthesis prompt template relative to repo root. Overrides `audience` and convention-based detection. |
 | `audience` | No | `general` | Built-in prompt variant used when no custom prompt template is found. One of: `general`, `developer`, `end-user`, `enterprise`. |
+| `product-description` | No | `""` | One-line product description injected into the synthesis prompt as `{{PRODUCT_CONTEXT}}`. |
+| `voice-guide` | No | `""` | Tone/style guidance injected into the synthesis prompt as `{{VOICE_GUIDE}}`. |
 | `changelog-source` | No | `auto` | Technical source for synthesis. `auto` tries `CHANGELOG.md`, then release body, then merged PR extraction. Or force: `changelog`, `release-body`, `prs`. |
 
 \* `llm-api-key` is required when `synthesis: true`.
@@ -300,6 +302,8 @@ Optional variables (supported, not required):
 | --- | --- |
 | `{{BULLET_TARGET}}` | Suggested bullet range (for example, `3-7`) |
 | `{{BREAKING_CHANGES_SECTION}}` | Breaking-change candidates extracted from the technical changelog (empty when none) |
+| `{{PRODUCT_CONTEXT}}` | Optional `## Product context` section (from `product-description`) |
+| `{{VOICE_GUIDE}}` | Optional `## Voice guide` section (from `voice-guide`) |
 
 See [`templates/synthesis-prompt.md`](templates/synthesis-prompt.md) or [`templates/prompts/general.md`](templates/prompts/general.md) as a starting point for your own template.
 

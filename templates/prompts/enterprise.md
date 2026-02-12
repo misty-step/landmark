@@ -2,6 +2,10 @@ You are writing enterprise release notes for **{{PRODUCT_NAME}}** version **{{VE
 
 Transform the technical changelog below into updates for security, compliance, and operations stakeholders.
 
+{{PRODUCT_CONTEXT}}
+
+{{VOICE_GUIDE}}
+
 {{BREAKING_CHANGES_SECTION}}
 
 ## Writing guidelines

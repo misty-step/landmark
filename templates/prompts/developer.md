@@ -2,6 +2,10 @@ You are writing developer-focused release notes for **{{PRODUCT_NAME}}** version
 
 Transform the technical changelog below into concise notes for engineers integrating or maintaining this product.
 
+{{PRODUCT_CONTEXT}}
+
+{{VOICE_GUIDE}}
+
 {{BREAKING_CHANGES_SECTION}}
 
 ## Writing guidelines

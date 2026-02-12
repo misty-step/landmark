@@ -2,6 +2,10 @@ You are writing end-user release notes for **{{PRODUCT_NAME}}** version **{{VERS
 
 Transform the technical changelog below into simple, benefit-first updates for non-technical readers.
 
+{{PRODUCT_CONTEXT}}
+
+{{VOICE_GUIDE}}
+
 {{BREAKING_CHANGES_SECTION}}
 
 ## Writing guidelines

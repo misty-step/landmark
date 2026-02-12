@@ -72,6 +72,14 @@ inputs:
     description: Built-in synthesis prompt variant used when no custom prompt template is found. One of general, developer, end-user, enterprise.
     default: "general"
     required: false
+  product-description:
+    description: One-line product description injected into the synthesis prompt as {{PRODUCT_CONTEXT}}.
+    default: ""
+    required: false
+  voice-guide:
+    description: Tone/style guidance injected into the synthesis prompt as {{VOICE_GUIDE}}.
+    default: ""
+    required: false
   changelog-source:
     description: Technical source for synthesis. One of auto (CHANGELOG.md > release body > PRs), changelog, release-body, prs.
     default: "auto"
@@ -230,6 +238,8 @@ runs:
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}
         AUDIENCE: ${{ inputs.audience }}
         CHANGELOG_SOURCE: ${{ inputs.changelog-source }}
+        PRODUCT_DESCRIPTION: ${{ inputs.product-description }}
+        VOICE_GUIDE: ${{ inputs.voice-guide }}
       run: |
         set -euo pipefail
 
@@ -246,6 +256,8 @@ runs:
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
         product_name="${GITHUB_REPOSITORY#*/}"
         api_key="${{ inputs.llm-api-key }}"
+        product_description="${PRODUCT_DESCRIPTION}"
+        voice_guide="${VOICE_GUIDE}"
 
         set_output "succeeded" "false"
         set_output "notes_file" ""
@@ -376,6 +388,8 @@ runs:
           --api-url "${{ inputs.llm-api-url }}" \
           --fallback-models "${{ inputs.llm-fallback-models }}" \
           --product-name "${product_name}" \
+          --product-description "${product_description}" \
+          --voice-guide "${voice_guide}" \
           --audience "${AUDIENCE}" \
           --changelog-source "${changelog_source}" \
           --version "${{ steps.resolve_release.outputs.release_tag }}" \

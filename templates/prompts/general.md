@@ -2,6 +2,10 @@ You are writing release notes for **{{PRODUCT_NAME}}** version **{{VERSION}}**.
 
 Transform the technical changelog below into user-facing release notes.
 
+{{PRODUCT_CONTEXT}}
+
+{{VOICE_GUIDE}}
+
 {{BREAKING_CHANGES_SECTION}}
 
 ## Writing guidelines
