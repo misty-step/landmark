@@ -49,6 +49,81 @@ def test_extract_release_section_returns_full_text_when_no_headings():
     assert section == changelog.strip()
 
 
+def test_resolve_technical_changelog_auto_prefers_changelog_file(tmp_path):
+    # Arrange
+    changelog_file = tmp_path / "CHANGELOG.md"
+    changelog_file.write_text("## 1.2.0\n\n- from changelog\n", encoding="utf-8")
+    release_body_file = tmp_path / "release-body.md"
+    release_body_file.write_text("## release body\n\n- from release body\n", encoding="utf-8")
+    prs_file = tmp_path / "prs.md"
+    prs_file.write_text("## Pull Requests\n\n- from prs\n", encoding="utf-8")
+
+    # Act
+    technical, source = synthesize.resolve_technical_changelog(
+        changelog_source="auto",
+        version="1.2.0",
+        changelog_file=changelog_file,
+        release_body_file=release_body_file,
+        pr_changelog_file=prs_file,
+    )
+
+    # Assert
+    assert source == "changelog"
+    assert "- from changelog" in technical
+
+
+def test_resolve_technical_changelog_auto_falls_back_to_release_body(tmp_path):
+    # Arrange
+    release_body_file = tmp_path / "release-body.md"
+    release_body_file.write_text("## release body\n\n- from release body\n", encoding="utf-8")
+    prs_file = tmp_path / "prs.md"
+    prs_file.write_text("## Pull Requests\n\n- from prs\n", encoding="utf-8")
+
+    # Act
+    technical, source = synthesize.resolve_technical_changelog(
+        changelog_source="auto",
+        version="1.2.0",
+        changelog_file=tmp_path / "CHANGELOG.md",
+        release_body_file=release_body_file,
+        pr_changelog_file=prs_file,
+    )
+
+    # Assert
+    assert source == "release-body"
+    assert "- from release body" in technical
+
+
+def test_resolve_technical_changelog_auto_falls_back_to_prs(tmp_path):
+    # Arrange
+    prs_file = tmp_path / "prs.md"
+    prs_file.write_text("## Pull Requests\n\n- from prs\n", encoding="utf-8")
+
+    # Act
+    technical, source = synthesize.resolve_technical_changelog(
+        changelog_source="auto",
+        version="1.2.0",
+        changelog_file=tmp_path / "CHANGELOG.md",
+        release_body_file=tmp_path / "release-body.md",
+        pr_changelog_file=prs_file,
+    )
+
+    # Assert
+    assert source == "prs"
+    assert "- from prs" in technical
+
+
+def test_resolve_technical_changelog_rejects_missing_explicit_source(tmp_path):
+    # Act / Assert
+    with pytest.raises(ValueError, match="selected changelog-source 'release-body' is unavailable"):
+        synthesize.resolve_technical_changelog(
+            changelog_source="release-body",
+            version="1.2.0",
+            changelog_file=tmp_path / "CHANGELOG.md",
+            release_body_file=tmp_path / "release-body.md",
+            pr_changelog_file=tmp_path / "prs.md",
+        )
+
+
 def test_render_prompt_replaces_template_tokens():
     # Arrange
     template = "Name={{PRODUCT_NAME}} Version={{VERSION}}\n\n{{TECHNICAL_CHANGELOG}}"

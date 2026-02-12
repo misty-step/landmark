@@ -29,6 +29,7 @@ BUILT_IN_PROMPT_TEMPLATES = {
     "end-user": "end-user.md",
     "enterprise": "enterprise.md",
 }
+CHANGELOG_SOURCES = ("auto", "changelog", "release-body", "prs")
 LOGGER = logging.getLogger("landfall.synthesize")
 
 
@@ -76,6 +77,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--technical-changelog-file",
         help="Optional path to raw technical changelog text.",
+    )
+    parser.add_argument(
+        "--changelog-source",
+        default="auto",
+        help="Technical changelog source: auto, changelog, release-body, or prs.",
+    )
+    parser.add_argument(
+        "--release-body-file",
+        default="",
+        help="Optional path to a file containing release-body markdown.",
+    )
+    parser.add_argument(
+        "--pr-changelog-file",
+        default="",
+        help="Optional path to a file containing PR-derived changelog markdown.",
     )
     parser.add_argument(
         "--product-name",
@@ -145,10 +161,22 @@ def validate_args(args: argparse.Namespace) -> None:
     if audience is not None and not str(audience).strip():
         raise ValueError("audience must be non-empty")
     normalize_audience(str(audience))
+    changelog_source = getattr(args, "changelog_source", "auto")
+    if changelog_source is not None and not str(changelog_source).strip():
+        raise ValueError("changelog-source must be non-empty")
+    normalize_changelog_source(str(changelog_source))
 
 
 def normalize_version(version: str) -> str:
     return version.strip().lstrip("v")
+
+
+def normalize_changelog_source(changelog_source: str) -> str:
+    source_key = changelog_source.strip().lower()
+    if source_key not in CHANGELOG_SOURCES:
+        valid_sources = ", ".join(CHANGELOG_SOURCES)
+        raise ValueError(f"changelog-source must be one of: {valid_sources}")
+    return source_key
 
 
 def extract_release_section(changelog_text: str, version: str | None) -> str:
@@ -179,6 +207,53 @@ def extract_release_section(changelog_text: str, version: str | None) -> str:
     else:
         end = len(changelog_text)
     return changelog_text[start:end].strip()
+
+
+def resolve_technical_changelog(
+    *,
+    changelog_source: str,
+    version: str | None,
+    changelog_file: Path,
+    release_body_file: Path | None,
+    pr_changelog_file: Path | None,
+) -> tuple[str, str]:
+    source_key = normalize_changelog_source(changelog_source)
+    candidates: list[tuple[str, Path | None]]
+
+    if source_key == "auto":
+        candidates = [
+            ("changelog", changelog_file),
+            ("release-body", release_body_file),
+            ("prs", pr_changelog_file),
+        ]
+    elif source_key == "changelog":
+        candidates = [("changelog", changelog_file)]
+    elif source_key == "release-body":
+        candidates = [("release-body", release_body_file)]
+    else:
+        candidates = [("prs", pr_changelog_file)]
+
+    for name, path in candidates:
+        if path is None:
+            continue
+        try:
+            if name == "changelog":
+                changelog_text = read_text(path)
+                if not changelog_text:
+                    continue
+                technical = extract_release_section(changelog_text, version)
+            else:
+                technical = read_text(path)
+        except OSError:
+            continue
+
+        technical = technical.strip()
+        if technical:
+            return technical, name
+
+    if source_key == "auto":
+        raise ValueError("no technical changelog source available for changelog-source 'auto'")
+    raise ValueError(f"selected changelog-source '{source_key}' is unavailable")
 
 
 def estimate_bullet_target(version: str, technical: str) -> str:
@@ -343,14 +418,23 @@ def main() -> int:
         log_event(LOGGER, logging.ERROR, "invalid_prompt_template", error=str(exc))
         return 1
 
+    changelog_path = Path(args.changelog_file)
+    release_body_path = Path(args.release_body_file) if args.release_body_file else None
+    pr_changelog_path = Path(args.pr_changelog_file) if args.pr_changelog_file else None
+
     try:
         if args.technical_changelog_file:
-            changelog_path = Path(args.technical_changelog_file)
-            technical_text = read_text(changelog_path)
+            technical_path = Path(args.technical_changelog_file)
+            technical_text = read_text(technical_path)
+            source_used = "technical-changelog-file"
         else:
-            changelog_path = Path(args.changelog_file)
-            changelog_text = read_text(changelog_path)
-            technical_text = extract_release_section(changelog_text, args.version)
+            technical_text, source_used = resolve_technical_changelog(
+                changelog_source=args.changelog_source,
+                version=args.version,
+                changelog_file=changelog_path,
+                release_body_file=release_body_path,
+                pr_changelog_file=pr_changelog_path,
+            )
     except OSError as exc:
         log_event(
             LOGGER,
@@ -360,10 +444,15 @@ def main() -> int:
             error=str(exc),
         )
         return 1
+    except ValueError as exc:
+        log_event(LOGGER, logging.ERROR, "changelog_source_unavailable", error=str(exc))
+        return 1
 
     if not technical_text:
         log_event(LOGGER, logging.ERROR, "empty_changelog")
         return 1
+
+    log_event(LOGGER, logging.INFO, "changelog_source_selected", source=source_used)
 
     product_name = infer_product_name(args.product_name)
     version = args.version.strip() if args.version else "latest"

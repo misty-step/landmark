@@ -86,6 +86,7 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `notes-output-json` | No | `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
 | `prompt-template-path` | No | `""` | Path to a custom synthesis prompt template relative to repo root. Overrides `audience` and convention-based detection. |
 | `audience` | No | `general` | Built-in prompt variant used when no custom prompt template is found. One of: `general`, `developer`, `end-user`, `enterprise`. |
+| `changelog-source` | No | `auto` | Technical source for synthesis. `auto` tries `CHANGELOG.md`, then release body, then merged PR extraction. Or force: `changelog`, `release-body`, `prs`. |
 
 \* `llm-api-key` is required when `synthesis: true`.
 

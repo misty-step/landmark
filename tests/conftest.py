@@ -140,3 +140,8 @@ def close_resolved_failures():
         "landfall_close_resolved_failures",
         "scripts/close-resolved-failures.py",
     )
+
+
+@pytest.fixture(scope="session")
+def extract_prs():
+    return load_script_module("landfall_extract_prs", "scripts/extract-prs.py")
