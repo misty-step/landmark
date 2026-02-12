@@ -157,6 +157,70 @@ def test_render_prompt_replaces_bullet_target():
     assert "{{BULLET_TARGET}}" not in rendered
 
 
+def test_extract_breaking_changes_from_heading_section():
+    technical = (
+        "### BREAKING CHANGES\n"
+        "- remove /v1/auth endpoint\n"
+        "- rename foo to bar\n"
+        "### Features\n"
+        "- add oauth\n"
+    )
+
+    assert synthesize.extract_breaking_changes(technical) == [
+        "remove /v1/auth endpoint",
+        "rename foo to bar",
+    ]
+
+
+def test_extract_breaking_changes_from_breaking_change_footer():
+    technical = "feat: add oauth\n\nBREAKING CHANGE: config key renamed from A to B\n"
+    assert synthesize.extract_breaking_changes(technical) == ["config key renamed from A to B"]
+
+
+def test_extract_breaking_changes_from_breaking_prefix():
+    technical = "- BREAKING: drop python3.10 support\n"
+    assert synthesize.extract_breaking_changes(technical) == ["drop python3.10 support"]
+
+
+def test_extract_breaking_changes_from_conventional_commit_bang():
+    technical = "- feat(api)!: remove /v1/auth endpoint\n"
+    assert synthesize.extract_breaking_changes(technical) == ["remove /v1/auth endpoint"]
+
+
+def test_extract_breaking_changes_dedupes_across_signals():
+    technical = (
+        "### Breaking Changes\n"
+        "- remove /v1/auth endpoint\n"
+        "\n"
+        "BREAKING CHANGE: remove /v1/auth endpoint\n"
+    )
+    assert synthesize.extract_breaking_changes(technical) == ["remove /v1/auth endpoint"]
+
+
+def test_render_breaking_changes_section_omits_when_empty():
+    assert synthesize.render_breaking_changes_section("### Features\n- add oauth\n") == ""
+
+
+def test_render_breaking_changes_section_renders_list_when_present():
+    technical = "### BREAKING CHANGES\n- remove /v1/auth endpoint\n"
+    rendered = synthesize.render_breaking_changes_section(technical)
+    assert "Breaking changes detected" in rendered
+    assert "- remove /v1/auth endpoint" in rendered
+
+
+def test_render_prompt_replaces_breaking_changes_section_token():
+    template = "{{PRODUCT_NAME}} {{VERSION}}\n\n{{BREAKING_CHANGES_SECTION}}\n\n{{TECHNICAL_CHANGELOG}}"
+    rendered = synthesize.render_prompt(
+        template_text=template,
+        product_name="Landfall",
+        version="1.2.0",
+        technical="### BREAKING CHANGES\n- remove /v1/auth endpoint\n",
+    )
+    assert "{{BREAKING_CHANGES_SECTION}}" not in rendered
+    assert "Breaking changes detected" in rendered
+    assert "- remove /v1/auth endpoint" in rendered
+
+
 @pytest.mark.parametrize(
     ("version", "technical", "expected_significance", "expected_bullets"),
     [
@@ -172,6 +236,8 @@ def test_render_prompt_replaces_bullet_target():
         # Breaking changes elevate to major regardless of semver
         ("1.3.0", "### BREAKING CHANGES\n- removed /v1/auth\n### Features\n- OAuth", "major", "5-10"),
         ("1.1.0", "### BREAKING CHANGE\n- removed legacy API", "major", "5-10"),
+        ("1.2.0", "- feat!: remove /v1/auth endpoint", "major", "5-10"),
+        ("1.2.0", "- BREAKING: remove /v1/auth endpoint", "major", "5-10"),
         # Prerelease suffixes stripped before classification
         ("1.2.0-rc.1", "- new feature", "feature", "3-7"),
         ("1.2.0+build.7", "- new feature", "feature", "3-7"),
@@ -189,6 +255,8 @@ def test_render_prompt_replaces_bullet_target():
         "patch-1.0.1",
         "breaking-elevates-minor",
         "breaking-singular-heading",
+        "breaking-feat-bang-line",
+        "breaking-prefix-line",
         "prerelease-rc-stripped",
         "build-metadata-stripped",
         "prerelease-major",

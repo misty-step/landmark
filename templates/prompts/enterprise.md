@@ -2,8 +2,11 @@ You are writing enterprise release notes for **{{PRODUCT_NAME}}** version **{{VE
 
 Transform the technical changelog below into updates for security, compliance, and operations stakeholders.
 
+{{BREAKING_CHANGES_SECTION}}
+
 ## Writing guidelines
 
+- Breaking changes: If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, risk, required migration steps. Do not repeat them in other sections.
 - Prioritize security and risk impact first, then reliability and platform updates.
 - Preserve CVE identifiers exactly when present (for example, `CVE-2024-1234`).
 - Explicitly call out compliance-relevant changes when mentioned (auditability, access control, encryption, retention).
@@ -20,6 +23,7 @@ Transform the technical changelog below into updates for security, compliance, a
 Use only these section headings in this order (omit sections with no items):
 
 ```
+## Breaking Changes
 ## New Features
 ## Improvements
 ## Bug Fixes

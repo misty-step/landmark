@@ -256,7 +256,98 @@ def resolve_technical_changelog(
     raise ValueError(f"selected changelog-source '{source_key}' is unavailable")
 
 
-BREAKING_CHANGE_RE = re.compile(r"^#{1,4}\s+BREAKING\s+CHANGES?", re.MULTILINE | re.IGNORECASE)
+BREAKING_CHANGE_RE = re.compile(
+    r"^#{1,6}\s+BREAKING\s+CHANGES?\b.*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+BREAKING_HEADING_TITLE_RE = re.compile(r"^BREAKING\s+CHANGES?\b", re.IGNORECASE)
+BREAKING_CHANGE_FOOTER_LINE_RE = re.compile(r"^\s*BREAKING CHANGE:\s*(.+\S.*)$", re.IGNORECASE)
+BREAKING_PREFIX_LINE_RE = re.compile(r"^\s*(?:[-*+]\s+)?BREAKING:\s*(.+\S.*)$", re.IGNORECASE)
+CONVENTIONAL_BANG_LINE_RE = re.compile(
+    r"^\s*(?:[-*+]\s+)?(?:feat|fix)(?:\([^)]+\))?!:\s*(.+\S.*)$",
+    re.IGNORECASE,
+)
+MARKDOWN_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+MARKDOWN_BULLET_LINE_RE = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+(.+?)\s*$")
+
+
+def _normalize_breaking_change_key(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _add_breaking_change(out: list[str], seen: set[str], candidate: str) -> None:
+    value = re.sub(r"\s+", " ", candidate).strip()
+    if not value:
+        return
+    key = _normalize_breaking_change_key(value)
+    if not key or key in seen:
+        return
+    seen.add(key)
+    out.append(value)
+
+
+def _extract_breaking_change_from_line(line: str) -> str | None:
+    match = BREAKING_CHANGE_FOOTER_LINE_RE.match(line)
+    if match:
+        return match.group(1)
+
+    match = BREAKING_PREFIX_LINE_RE.match(line)
+    if match:
+        return match.group(1)
+
+    match = CONVENTIONAL_BANG_LINE_RE.match(line)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def extract_breaking_changes(technical: str) -> list[str]:
+    """Extract raw breaking-change candidates from technical changelog text."""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    lines = technical.splitlines()
+    index = 0
+
+    while index < len(lines):
+        line = lines[index].rstrip()
+        heading = MARKDOWN_HEADING_LINE_RE.match(line)
+        if heading and BREAKING_HEADING_TITLE_RE.match(heading.group(2).strip()):
+            level = len(heading.group(1))
+            index += 1
+            while index < len(lines):
+                next_line = lines[index].rstrip()
+                next_heading = MARKDOWN_HEADING_LINE_RE.match(next_line)
+                if next_heading and len(next_heading.group(1)) <= level:
+                    break
+                bullet = MARKDOWN_BULLET_LINE_RE.match(next_line)
+                if bullet:
+                    extracted = _extract_breaking_change_from_line(bullet.group(1)) or bullet.group(1)
+                    _add_breaking_change(candidates, seen, extracted)
+                index += 1
+            continue
+
+        candidate = _extract_breaking_change_from_line(line)
+        if candidate:
+            _add_breaking_change(candidates, seen, candidate)
+
+        index += 1
+
+    return candidates
+
+
+def has_breaking_changes(technical: str) -> bool:
+    return bool(extract_breaking_changes(technical) or BREAKING_CHANGE_RE.search(technical))
+
+
+def render_breaking_changes_section(technical: str) -> str:
+    breaking_changes = extract_breaking_changes(technical)
+    if not breaking_changes:
+        return ""
+
+    lines = ["Breaking changes detected (raw; rewrite, don't copy):"]
+    lines.extend(f"- {item}" for item in breaking_changes)
+    return "\n".join(lines) + "\n"
 
 SIGNIFICANCE_BULLET_MAP = {
     "major": "5-10",
@@ -279,7 +370,7 @@ def classify_release(version: str, technical: str) -> tuple[str, str]:
     while len(parts) < 3:
         parts.append("0")
 
-    has_breaking = bool(BREAKING_CHANGE_RE.search(technical))
+    has_breaking = has_breaking_changes(technical)
 
     if has_breaking:
         significance = "major"
@@ -301,10 +392,12 @@ def estimate_bullet_target(version: str, technical: str) -> str:
 
 def render_prompt(template_text: str, product_name: str, version: str, technical: str) -> str:
     bullet_target = estimate_bullet_target(version, technical)
+    breaking_section = render_breaking_changes_section(technical)
     return (
         template_text.replace("{{PRODUCT_NAME}}", product_name)
         .replace("{{VERSION}}", version)
         .replace("{{BULLET_TARGET}}", bullet_target)
+        .replace("{{BREAKING_CHANGES_SECTION}}", breaking_section)
         .replace("{{TECHNICAL_CHANGELOG}}", technical)
     )
 

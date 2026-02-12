@@ -294,6 +294,13 @@ Custom templates must include these variables:
 | `{{VERSION}}` | Release version/tag |
 | `{{TECHNICAL_CHANGELOG}}` | Extracted changelog content |
 
+Optional variables (supported, not required):
+
+| Variable | Value |
+| --- | --- |
+| `{{BULLET_TARGET}}` | Suggested bullet range (for example, `3-7`) |
+| `{{BREAKING_CHANGES_SECTION}}` | Breaking-change candidates extracted from the technical changelog (empty when none) |
+
 See [`templates/synthesis-prompt.md`](templates/synthesis-prompt.md) or [`templates/prompts/general.md`](templates/prompts/general.md) as a starting point for your own template.
 
 ## Example: Technical vs User-Facing

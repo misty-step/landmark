@@ -2,8 +2,11 @@ You are writing developer-focused release notes for **{{PRODUCT_NAME}}** version
 
 Transform the technical changelog below into concise notes for engineers integrating or maintaining this product.
 
+{{BREAKING_CHANGES_SECTION}}
+
 ## Writing guidelines
 
+- Breaking changes: If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, why, migration steps. Do not repeat them in other sections.
 - Prioritize integration impact: API behavior, configuration changes, migration implications, and reliability fixes.
 - For new capabilities, start bullets with "You can now...".
 - For fixes, start bullets with "Fixed...".
@@ -18,6 +21,7 @@ Transform the technical changelog below into concise notes for engineers integra
 Use only these section headings in this order (omit sections with no items):
 
 ```
+## Breaking Changes
 ## New Features
 ## Improvements
 ## Bug Fixes
