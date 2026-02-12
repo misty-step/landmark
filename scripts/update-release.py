@@ -96,7 +96,8 @@ def fetch_release(
     retries: int,
     retry_backoff: float,
     session: requests.Session | None = None,
-) -> dict:
+) -> dict | None:
+    """Fetch a GitHub Release by tag. Returns None if no release exists (404)."""
     url = f"{api_base_url}/repos/{repository}/releases/tags/{tag}"
     created_session = session is None
     http = session or requests.Session()
@@ -112,6 +113,10 @@ def fetch_release(
             retry_backoff=retry_backoff,
         )
         return response.json()
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None
+        raise
     finally:
         if created_session:
             http.close()
@@ -211,6 +216,18 @@ def main() -> int:
             repository=args.repository,
         )
         return 1
+
+    if release is None:
+        log_event(
+            LOGGER,
+            logging.WARNING,
+            "release_not_found",
+            tag=args.tag,
+            repository=args.repository,
+            hint="Floating tags (v1, v2) do not have GitHub Releases; only semver tags do.",
+        )
+        print(f"No GitHub Release found for tag '{args.tag}'; skipping release body update.")
+        return 0
 
     release_id = release.get("id")
     if not isinstance(release_id, int):

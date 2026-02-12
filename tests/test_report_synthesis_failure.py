@@ -143,6 +143,97 @@ def test_create_issue_posts_expected_payload(report_synthesis_failure, post_sess
     assert session.calls[0]["timeout"] == 5
 
 
+def test_find_existing_failure_issue_returns_match(report_synthesis_failure):
+    """find_existing_failure_issue returns issue dict when title matches."""
+    # Arrange
+    title = "[Landfall] Synthesis failed for v2"
+    existing_issue = {"number": 138, "title": title, "html_url": "https://x/138"}
+    session = _GetCaptureSession(
+        outcome=create_issue_test_response(
+            status_code=200, json_data=[existing_issue, {"number": 1, "title": "unrelated"}]
+        )
+    )
+    headers = {"Authorization": "Bearer token"}
+
+    # Act
+    result = report_synthesis_failure.find_existing_failure_issue(
+        api_base_url="https://api.github.test",
+        repository="octo/example",
+        title=title,
+        headers=headers,
+        timeout=5,
+        session=session,
+    )
+
+    # Assert
+    assert result is not None
+    assert result["number"] == 138
+
+
+def test_find_existing_failure_issue_returns_none_when_no_match(report_synthesis_failure):
+    """find_existing_failure_issue returns None when no issue matches."""
+    # Arrange
+    session = _GetCaptureSession(
+        outcome=create_issue_test_response(
+            status_code=200, json_data=[{"number": 1, "title": "unrelated issue"}]
+        )
+    )
+    headers = {"Authorization": "Bearer token"}
+
+    # Act
+    result = report_synthesis_failure.find_existing_failure_issue(
+        api_base_url="https://api.github.test",
+        repository="octo/example",
+        title="[Landfall] Synthesis failed for v2",
+        headers=headers,
+        timeout=5,
+        session=session,
+    )
+
+    # Assert
+    assert result is None
+
+
+def test_find_existing_failure_issue_returns_none_on_empty_list(report_synthesis_failure):
+    """find_existing_failure_issue returns None when no issues exist."""
+    # Arrange
+    session = _GetCaptureSession(
+        outcome=create_issue_test_response(status_code=200, json_data=[])
+    )
+    headers = {"Authorization": "Bearer token"}
+
+    # Act
+    result = report_synthesis_failure.find_existing_failure_issue(
+        api_base_url="https://api.github.test",
+        repository="octo/example",
+        title="[Landfall] Synthesis failed for v2",
+        headers=headers,
+        timeout=5,
+        session=session,
+    )
+
+    # Assert
+    assert result is None
+
+
+class _GetCaptureSession:
+    """Minimal session mock that captures GET calls."""
+
+    def __init__(self, outcome: object):
+        self._outcome = outcome
+        self.calls: list[dict] = []
+        self.closed = False
+
+    def get(self, *, url: str, headers: dict, params: dict, timeout: int) -> object:
+        self.calls.append({"url": url, "headers": headers, "params": params, "timeout": timeout})
+        if isinstance(self._outcome, Exception):
+            raise self._outcome
+        return self._outcome
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def create_issue_test_response(*, status_code: int, json_data: object):
     class _Response:
         def __init__(self, status_code: int, json_data: object):

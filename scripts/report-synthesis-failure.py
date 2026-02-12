@@ -115,6 +115,34 @@ def compose_issue_body(
     )
 
 
+def find_existing_failure_issue(
+    api_base_url: str,
+    repository: str,
+    title: str,
+    headers: dict[str, str],
+    timeout: int,
+    session: requests.Session | None = None,
+) -> dict[str, Any] | None:
+    """Return an existing open issue with the exact title, or None."""
+    url = f"{api_base_url}/repos/{repository}/issues"
+    params = {"state": "open", "per_page": 100}
+
+    created_session = session is None
+    http = session or requests.Session()
+    try:
+        response = http.get(url=url, headers=headers, params=params, timeout=timeout)
+        response.raise_for_status()
+        issues = response.json()
+    finally:
+        if created_session:
+            http.close()
+
+    for issue in issues:
+        if isinstance(issue, dict) and issue.get("title") == title:
+            return issue
+    return None
+
+
 def create_issue(
     api_base_url: str,
     repository: str,
@@ -149,6 +177,33 @@ def main() -> int:
         return 1
 
     title = compose_issue_title(args.release_tag)
+    headers = github_headers(args.github_token)
+
+    # Deduplicate: skip creation if an open issue with the same title already exists.
+    try:
+        existing = find_existing_failure_issue(
+            api_base_url=args.api_base_url,
+            repository=args.repository,
+            title=title,
+            headers=headers,
+            timeout=args.timeout,
+        )
+    except requests.RequestException:
+        existing = None  # If search fails, proceed with creation
+
+    if existing:
+        existing_url = existing.get("html_url", "")
+        log_event(
+            logging.INFO,
+            "duplicate_failure_issue_skipped",
+            repository=args.repository,
+            release_tag=args.release_tag,
+            existing_issue_number=existing.get("number"),
+            existing_issue_url=existing_url,
+        )
+        print(existing_url)
+        return 0
+
     body = compose_issue_body(
         repository=args.repository,
         release_tag=args.release_tag,
@@ -162,7 +217,7 @@ def main() -> int:
         issue = create_issue(
             api_base_url=args.api_base_url,
             repository=args.repository,
-            headers=github_headers(args.github_token),
+            headers=headers,
             title=title,
             body=body,
             timeout=args.timeout,

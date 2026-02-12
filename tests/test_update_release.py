@@ -224,3 +224,81 @@ def test_validate_args_rejects_invalid_api_base_url_scheme(update_release):
     with pytest.raises(ValueError, match="api-base-url must start with http:// or https://"):
         update_release.validate_args(args)
 
+
+def test_fetch_release_returns_none_on_404(update_release, request_session_factory):
+    """fetch_release should return None when the release tag has no GitHub Release."""
+    from conftest import FakeResponse
+
+    # Arrange
+    session = request_session_factory(
+        outcomes=[FakeResponse(status_code=404, json_data={"message": "Not Found"}, text="Not Found")]
+    )
+    headers = update_release.github_headers("token")
+
+    # Act
+    result = update_release.fetch_release(
+        api_base_url="https://api.github.test",
+        repository="octo/example",
+        tag="v2",
+        headers=headers,
+        timeout=5,
+        retries=0,
+        retry_backoff=0.0,
+        session=session,
+    )
+
+    # Assert
+    assert result is None
+
+
+def test_fetch_release_raises_on_non_404_error(update_release, request_session_factory):
+    """fetch_release should still raise on non-404 HTTP errors."""
+    import requests
+    from conftest import FakeResponse
+
+    # Arrange
+    session = request_session_factory(
+        outcomes=[FakeResponse(status_code=500, text="Internal Server Error")]
+    )
+    headers = update_release.github_headers("token")
+
+    # Act / Assert
+    with pytest.raises(requests.HTTPError):
+        update_release.fetch_release(
+            api_base_url="https://api.github.test",
+            repository="octo/example",
+            tag="v1.2.3",
+            headers=headers,
+            timeout=5,
+            retries=0,
+            retry_backoff=0.0,
+            session=session,
+        )
+
+
+def test_fetch_release_returns_release_on_success(update_release, request_session_factory):
+    """fetch_release should return release dict on 200."""
+    from conftest import FakeResponse
+
+    # Arrange
+    release_data = {"id": 42, "tag_name": "v1.2.3", "body": "changelog"}
+    session = request_session_factory(
+        outcomes=[FakeResponse(status_code=200, json_data=release_data)]
+    )
+    headers = update_release.github_headers("token")
+
+    # Act
+    result = update_release.fetch_release(
+        api_base_url="https://api.github.test",
+        repository="octo/example",
+        tag="v1.2.3",
+        headers=headers,
+        timeout=5,
+        retries=0,
+        retry_backoff=0.0,
+        session=session,
+    )
+
+    # Assert
+    assert result == release_data
+
