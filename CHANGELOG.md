@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/misty-step/landfall/compare/v1.15.0...v1.16.0) (2026-02-12)
+
+
+### Features
+
+* post-synthesis output validation with retry ([#83](https://github.com/misty-step/landfall/issues/83)) ([51ea744](https://github.com/misty-step/landfall/commit/51ea744c8e4165146b6b2441b7a2d3538f1f09b6)), closes [#57](https://github.com/misty-step/landfall/issues/57) [#57](https://github.com/misty-step/landfall/issues/57)
+
 # [1.15.0](https://github.com/misty-step/landfall/compare/v1.14.0...v1.15.0) (2026-02-12)
 
 
