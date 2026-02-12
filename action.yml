@@ -65,8 +65,12 @@ inputs:
     default: ""
     required: false
   prompt-template-path:
-    description: Path to a custom synthesis prompt template (relative to repo root). Overrides convention-based detection (.landfall/synthesis-prompt.md).
+    description: Path to a custom synthesis prompt template (relative to repo root). Overrides audience and convention-based detection (.landfall/synthesis-prompt.md).
     default: ""
+    required: false
+  audience:
+    description: Built-in synthesis prompt variant used when no custom prompt template is found. One of general, developer, end-user, enterprise.
+    default: "general"
     required: false
   healthcheck:
     description: Validate LLM API key with a minimal probe request before synthesis. Catches stale or revoked keys early.
@@ -220,6 +224,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}
+        AUDIENCE: ${{ inputs.audience }}
       run: |
         set -euo pipefail
 
@@ -267,8 +272,8 @@ runs:
           fi
         fi
 
-        # Resolve prompt template: explicit input > convention > bundled default
-        prompt_template="${GITHUB_ACTION_PATH}/templates/synthesis-prompt.md"
+        # Resolve prompt template: explicit input > convention > bundled audience variant
+        prompt_template=""
         if [ -n "${PROMPT_TEMPLATE_PATH}" ]; then
           custom_path="${GITHUB_WORKSPACE}/${PROMPT_TEMPLATE_PATH}"
           if [ ! -f "${custom_path}" ]; then
@@ -280,6 +285,8 @@ runs:
         elif [ -f "${GITHUB_WORKSPACE}/.landfall/synthesis-prompt.md" ]; then
           prompt_template="${GITHUB_WORKSPACE}/.landfall/synthesis-prompt.md"
           echo "::notice::Using repo prompt template: .landfall/synthesis-prompt.md"
+        else
+          echo "::notice::Using built-in prompt template audience: ${AUDIENCE}"
         fi
 
         synth_log="${RUNNER_TEMP}/landfall-synthesize.log"
@@ -289,6 +296,7 @@ runs:
           --api-url "${{ inputs.llm-api-url }}" \
           --fallback-models "${{ inputs.llm-fallback-models }}" \
           --product-name "${product_name}" \
+          --audience "${AUDIENCE}" \
           --version "${{ steps.resolve_release.outputs.release_tag }}" \
           ${changelog_arg} \
           --prompt-template "${prompt_template}" \

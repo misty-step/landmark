@@ -23,6 +23,12 @@ REQUIRED_TEMPLATE_TOKENS = (
     "{{VERSION}}",
     "{{TECHNICAL_CHANGELOG}}",
 )
+BUILT_IN_PROMPT_TEMPLATES = {
+    "general": "general.md",
+    "developer": "developer.md",
+    "end-user": "end-user.md",
+    "enterprise": "enterprise.md",
+}
 LOGGER = logging.getLogger("landfall.synthesize")
 
 
@@ -48,8 +54,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt-template",
-        required=True,
-        help="Path to prompt template markdown file.",
+        default="",
+        help=(
+            "Path to prompt template markdown file. "
+            "When omitted, uses the built-in template for --audience."
+        ),
+    )
+    parser.add_argument(
+        "--audience",
+        default="general",
+        help=(
+            "Built-in prompt variant to use when --prompt-template is not provided. "
+            "One of: general, developer, end-user, enterprise."
+        ),
     )
     parser.add_argument(
         "--changelog-file",
@@ -121,6 +138,13 @@ def validate_args(args: argparse.Namespace) -> None:
         log_event(LOGGER, logging.WARNING, "insecure_api_url", url=args.api_url)
     if args.version is not None and not args.version.strip():
         raise ValueError("version cannot be blank when provided")
+    prompt_template = getattr(args, "prompt_template", None)
+    if prompt_template is not None and prompt_template != "" and not prompt_template.strip():
+        raise ValueError("prompt-template cannot be blank when provided")
+    audience = getattr(args, "audience", "general")
+    if audience is not None and not str(audience).strip():
+        raise ValueError("audience must be non-empty")
+    normalize_audience(str(audience))
 
 
 def normalize_version(version: str) -> str:
@@ -186,6 +210,28 @@ def validate_template_tokens(template_text: str) -> None:
     missing = [token for token in REQUIRED_TEMPLATE_TOKENS if token not in template_text]
     if missing:
         raise ValueError(f"prompt template missing required token(s): {', '.join(missing)}")
+
+
+def normalize_audience(audience: str) -> str:
+    audience_key = audience.strip().lower()
+    if audience_key not in BUILT_IN_PROMPT_TEMPLATES:
+        valid_audiences = ", ".join(BUILT_IN_PROMPT_TEMPLATES.keys())
+        raise ValueError(f"audience must be one of: {valid_audiences}")
+    return audience_key
+
+
+def resolve_prompt_template_path(prompt_template: str | None, audience: str) -> Path:
+    if prompt_template and prompt_template.strip():
+        return Path(prompt_template)
+
+    audience_key = normalize_audience(audience)
+
+    return (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "prompts"
+        / BUILT_IN_PROMPT_TEMPLATES[audience_key]
+    )
 
 
 def infer_product_name(explicit_name: str | None) -> str:
@@ -274,11 +320,10 @@ def main() -> int:
 
     try:
         validate_args(args)
+        template_path = resolve_prompt_template_path(args.prompt_template, args.audience)
     except ValueError as exc:
         log_event(LOGGER, logging.ERROR, "invalid_input", error=str(exc))
         return 1
-
-    template_path = Path(args.prompt_template)
 
     try:
         template_text = read_text(template_path)

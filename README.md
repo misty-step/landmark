@@ -84,7 +84,8 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `notes-output-text-file` | No | `""` | Write synthesized notes as plaintext to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.txt`). |
 | `notes-output-html-file` | No | `""` | Write synthesized notes as an HTML fragment to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.html`). |
 | `notes-output-json` | No | `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
-| `prompt-template-path` | No | `""` | Path to a custom synthesis prompt template relative to repo root. Overrides convention-based detection. |
+| `prompt-template-path` | No | `""` | Path to a custom synthesis prompt template relative to repo root. Overrides `audience` and convention-based detection. |
+| `audience` | No | `general` | Built-in prompt variant used when no custom prompt template is found. One of: `general`, `developer`, `end-user`, `enterprise`. |
 
 \* `llm-api-key` is required when `synthesis: true`.
 
@@ -261,7 +262,16 @@ Landfall resolves the synthesis prompt template in this order:
 
 1. **Explicit input** — `prompt-template-path: my-templates/release.md`
 2. **Convention** — `.landfall/synthesis-prompt.md` in your repo root
-3. **Bundled default** — Landfall's built-in template
+3. **Bundled audience variant** — Landfall's built-in template selected by `audience` (default `general`)
+
+Built-in audience variants:
+
+| Audience | Template |
+| --- | --- |
+| `general` | [`templates/prompts/general.md`](templates/prompts/general.md) |
+| `developer` | [`templates/prompts/developer.md`](templates/prompts/developer.md) |
+| `end-user` | [`templates/prompts/end-user.md`](templates/prompts/end-user.md) |
+| `enterprise` | [`templates/prompts/enterprise.md`](templates/prompts/enterprise.md) |
 
 Custom templates must include these variables:
 
@@ -271,7 +281,7 @@ Custom templates must include these variables:
 | `{{VERSION}}` | Release version/tag |
 | `{{TECHNICAL_CHANGELOG}}` | Extracted changelog content |
 
-See [`templates/synthesis-prompt.md`](templates/synthesis-prompt.md) as a starting point for your own template.
+See [`templates/synthesis-prompt.md`](templates/synthesis-prompt.md) or [`templates/prompts/general.md`](templates/prompts/general.md) as a starting point for your own template.
 
 ## Example: Technical vs User-Facing
 

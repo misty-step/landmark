@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 
 import pytest
 import requests
@@ -228,6 +229,42 @@ def test_validate_args_rejects_blank_version_when_provided():
         synthesize.validate_args(args)
 
 
+def test_validate_args_rejects_invalid_audience():
+    # Arrange
+    args = argparse.Namespace(
+        api_key="secret",
+        model="test-model",
+        timeout=10,
+        retries=0,
+        retry_backoff=0.0,
+        api_url="https://api.example.test/chat/completions",
+        version=None,
+        audience="ops",
+    )
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="audience must be one of:"):
+        synthesize.validate_args(args)
+
+
+def test_validate_args_rejects_blank_prompt_template_when_provided():
+    # Arrange
+    args = argparse.Namespace(
+        api_key="secret",
+        model="test-model",
+        timeout=10,
+        retries=0,
+        retry_backoff=0.0,
+        api_url="https://api.example.test/chat/completions",
+        version=None,
+        prompt_template="   ",
+    )
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="prompt-template cannot be blank when provided"):
+        synthesize.validate_args(args)
+
+
 def test_validate_args_logs_warning_for_insecure_non_local_http_url(monkeypatch):
     # Arrange
     events: list[dict[str, object]] = []
@@ -265,6 +302,44 @@ def test_validate_template_tokens_raises_when_missing_required_tokens():
     message = str(excinfo.value)
     assert "{{VERSION}}" in message
     assert "{{TECHNICAL_CHANGELOG}}" in message
+
+
+def test_resolve_prompt_template_path_prefers_explicit_path():
+    # Arrange
+    custom_path = "custom/prompts/team.md"
+
+    # Act
+    resolved = synthesize.resolve_prompt_template_path(custom_path, "enterprise")
+
+    # Assert
+    assert resolved == Path(custom_path)
+
+
+@pytest.mark.parametrize(
+    ("audience", "filename"),
+    (
+        ("general", "general.md"),
+        ("developer", "developer.md"),
+        ("end-user", "end-user.md"),
+        ("enterprise", "enterprise.md"),
+    ),
+)
+def test_resolve_prompt_template_path_uses_bundled_audience_templates(audience: str, filename: str):
+    # Arrange
+    expected = Path(synthesize.__file__).resolve().parents[1] / "templates" / "prompts" / filename
+
+    # Act
+    resolved = synthesize.resolve_prompt_template_path("", audience)
+
+    # Assert
+    assert resolved == expected
+    assert resolved.exists()
+
+
+def test_resolve_prompt_template_path_rejects_invalid_audience():
+    # Act / Assert
+    with pytest.raises(ValueError, match="audience must be one of:"):
+        synthesize.resolve_prompt_template_path("", "security-team")
 
 
 def test_normalize_version_strips_whitespace_and_v_prefix():
@@ -480,4 +555,3 @@ def synthesize_test_response(*, status_code: int, json_data: object):
                 raise error
 
     return _Response(status_code=status_code, json_data=json_data)
-
