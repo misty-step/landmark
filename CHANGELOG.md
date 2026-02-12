@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/misty-step/landfall/compare/v1.11.0...v1.12.0) (2026-02-12)
+
+
+### Features
+
+* add audience-specific synthesis prompt variants ([#76](https://github.com/misty-step/landfall/issues/76)) ([0b5ccc7](https://github.com/misty-step/landfall/commit/0b5ccc70dab76e6b384b838e042d7d83d1abf49f))
+
 # [1.11.0](https://github.com/misty-step/landfall/compare/v1.10.0...v1.11.0) (2026-02-12)
 
 
