@@ -1,6 +1,6 @@
 {
   "name": "landfall",
-  "version": "1.17.0",
+  "version": "1.17.1",
   "private": true,
   "description": "Focused release pipeline action powered by semantic-release.",
   "license": "MIT",

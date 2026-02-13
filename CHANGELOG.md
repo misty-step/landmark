@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/misty-step/landfall/compare/v1.17.0...v1.17.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* preflight check for orphaned tag history ([#86](https://github.com/misty-step/landfall/issues/86)) ([#89](https://github.com/misty-step/landfall/issues/89)) ([381572c](https://github.com/misty-step/landfall/commit/381572ccb8ceeb6d97d08be3bce7df344fb51fee))
+
 # [1.17.0](https://github.com/misty-step/landfall/compare/v1.16.1...v1.17.0) (2026-02-12)
 
 
