@@ -46,7 +46,7 @@ inputs:
     required: false
   synthesis-failure-issue:
     description: Whether to create a GitHub issue in the consuming repository when synthesis fails.
-    default: "true"
+    default: "false"
     required: false
   notes-output-file:
     description: Write synthesized notes to this file path. Use {version} placeholder for the release tag (e.g., 'docs/releases/{version}.md').
