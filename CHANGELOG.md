@@ -1,3 +1,10 @@
+## [1.17.2](https://github.com/misty-step/landfall/compare/v1.17.1...v1.17.2) (2026-02-13)
+
+
+### Bug Fixes
+
+* default synthesis-failure-issue to false ([a83f8b9](https://github.com/misty-step/landfall/commit/a83f8b9511ea6910491f1b201aeb28066a126b79))
+
 ## [1.17.1](https://github.com/misty-step/landfall/compare/v1.17.0...v1.17.1) (2026-02-13)
 
 
