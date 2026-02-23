@@ -66,3 +66,15 @@ jobs:
       - name: Validate action metadata
         shell: bash
         run: python -m check_jsonschema --schemafile https://json.schemastore.org/github-action.json action.yml
+
+  CI:
+    runs-on: ubuntu-latest
+    needs: [lockfile-check, python-checks]
+    if: always()
+    steps:
+      - name: All checks passed
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
+             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            exit 1
+          fi

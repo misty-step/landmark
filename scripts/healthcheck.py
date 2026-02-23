@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds.")
     parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help="Emit ::warning:: and exit 0 on failure instead of ::error:: and exit 1. "
+        "Use when synthesis is optional (synthesis-required: false).",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
@@ -73,6 +79,15 @@ def probe_api(api_url: str, api_key: str, model: str, timeout: int) -> None:
         session.close()
 
 
+def _fail(message: str, warn_only: bool) -> int:
+    """Emit a GitHub Actions annotation and return the appropriate exit code."""
+    if warn_only:
+        print(f"::warning::{message}", file=sys.stderr)
+        return 0
+    print(f"::error::{message}", file=sys.stderr)
+    return 1
+
+
 def main() -> int:
     args = parse_args()
     configure_logging(args.log_level)
@@ -86,10 +101,17 @@ def main() -> int:
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
         if status == 401:
-            message = (
-                "API key rejected (HTTP 401). "
-                "Verify your llm-api-key secret is valid for the configured provider."
-            )
+            if args.api_url.startswith("https://openrouter.ai/"):
+                message = (
+                    "LLM auth failed (HTTP 401). "
+                    "Default provider is OpenRouter — ensure llm-api-key is an OpenRouter key "
+                    "(format: sk-or-...). Get a key at https://openrouter.ai/keys"
+                )
+            else:
+                message = (
+                    f"LLM auth failed (HTTP 401) for {args.api_url}. "
+                    "Verify your llm-api-key secret is valid for the configured provider."
+                )
         elif status == 403:
             message = (
                 "API key lacks permissions (HTTP 403). "
@@ -98,13 +120,11 @@ def main() -> int:
         else:
             message = f"API request failed (HTTP {status}). Check provider status and key validity."
         log_event(LOGGER, logging.ERROR, "healthcheck_failed", status_code=status, message=message)
-        print(f"::error::{message}", file=sys.stderr)
-        return 1
+        return _fail(message, args.warn_only)
     except (requests.RequestException, RuntimeError) as exc:
         message = f"Health check failed: {exc}"
         log_event(LOGGER, logging.ERROR, "healthcheck_failed", error=str(exc))
-        print(f"::error::{message}", file=sys.stderr)
-        return 1
+        return _fail(message, args.warn_only)
 
     log_event(LOGGER, logging.INFO, "healthcheck_passed", model=args.model)
     return 0

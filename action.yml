@@ -37,7 +37,7 @@ inputs:
     default: "true"
     required: false
   synthesis-required:
-    description: Whether synthesis and release-body update failures should fail the action.
+    description: Whether synthesis failures should fail the action. When true, a failed LLM key validation (healthcheck) also blocks the run before the release is published.
     default: "false"
     required: false
   synthesis-strict:
@@ -166,14 +166,24 @@ runs:
         python -m pip install requests
 
     - name: Validate LLM API key
-      if: inputs.healthcheck == 'true' && inputs.llm-api-key != ''
+      if: (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
       shell: bash
+      env:
+        LLM_API_KEY: ${{ inputs.llm-api-key }}
+        LLM_MODEL: ${{ inputs.llm-model }}
+        LLM_API_URL: ${{ inputs.llm-api-url }}
+        SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
       run: |
         set -euo pipefail
+        WARN_ONLY_ARGS=()
+        if [ "${SYNTHESIS_REQUIRED}" != "true" ]; then
+          WARN_ONLY_ARGS=(--warn-only)
+        fi
         python "${GITHUB_ACTION_PATH}/scripts/healthcheck.py" \
-          --api-key "${{ inputs.llm-api-key }}" \
-          --model "${{ inputs.llm-model }}" \
-          --api-url "${{ inputs.llm-api-url }}"
+          --api-key "${LLM_API_KEY}" \
+          --model "${LLM_MODEL}" \
+          --api-url "${LLM_API_URL}" \
+          "${WARN_ONLY_ARGS[@]}"
 
     - name: Preflight tag history check
       if: inputs.mode != 'synthesis-only'
