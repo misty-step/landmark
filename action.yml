@@ -265,10 +265,11 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
 
-        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
+        release_tag="${RELEASE_TAG}"
         major_tag="$(python "${GITHUB_ACTION_PATH}/scripts/update-floating-tag.py" --release-tag "${release_tag}")"
         sha="$(git rev-list -n 1 "${release_tag}")"
 
@@ -282,6 +283,11 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        LLM_API_KEY: ${{ inputs.llm-api-key }}
+        LLM_MODEL: ${{ inputs.llm-model }}
+        LLM_API_URL: ${{ inputs.llm-api-url }}
+        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}
         AUDIENCE: ${{ inputs.audience }}
         CHANGELOG_SOURCE: ${{ inputs.changelog-source }}
@@ -302,7 +308,7 @@ runs:
 
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
         product_name="${GITHUB_REPOSITORY#*/}"
-        api_key="${{ inputs.llm-api-key }}"
+        api_key="${LLM_API_KEY}"
         product_description="${PRODUCT_DESCRIPTION}"
         voice_guide="${VOICE_GUIDE}"
 
@@ -331,7 +337,7 @@ runs:
             ;;
         esac
 
-        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
+        release_tag="${RELEASE_TAG}"
         changelog_file="${GITHUB_WORKSPACE}/CHANGELOG.md"
         release_body_file=""
         pr_changelog_file=""
@@ -432,15 +438,15 @@ runs:
         synth_log="${RUNNER_TEMP}/landfall-synthesize.log"
         if ! python "${GITHUB_ACTION_PATH}/scripts/synthesize.py" \
           --api-key "${api_key}" \
-          --model "${{ inputs.llm-model }}" \
-          --api-url "${{ inputs.llm-api-url }}" \
-          --fallback-models "${{ inputs.llm-fallback-models }}" \
+          --model "${LLM_MODEL}" \
+          --api-url "${LLM_API_URL}" \
+          --fallback-models "${LLM_FALLBACK_MODELS}" \
           --product-name "${product_name}" \
           --product-description "${product_description}" \
           --voice-guide "${voice_guide}" \
           --audience "${AUDIENCE}" \
           --changelog-source "${changelog_source}" \
-          --version "${{ steps.resolve_release.outputs.release_tag }}" \
+          --version "${release_tag}" \
           --changelog-file "${changelog_file}" \
           --release-body-file "${release_body_file}" \
           --pr-changelog-file "${pr_changelog_file}" \
@@ -481,9 +487,12 @@ runs:
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true'
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         SYNTH_STEP_SUCCEEDED: ${{ steps.synthesize.outputs.succeeded }}
         SYNTH_FAILURE_STAGE: ${{ steps.synthesize.outputs.failure_stage }}
         SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
+        NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
       run: |
         set -euo pipefail
 
@@ -517,10 +526,10 @@ runs:
 
         update_log="${RUNNER_TEMP}/landfall-update-release.log"
         if ! python "${GITHUB_ACTION_PATH}/scripts/update-release.py" \
-          --github-token "${{ inputs.github-token }}" \
+          --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
-          --tag "${{ steps.resolve_release.outputs.release_tag }}" \
-          --notes-file "${{ steps.synthesize.outputs.notes_file }}" \
+          --tag "${RELEASE_TAG}" \
+          --notes-file "${NOTES_FILE}" \
           > /dev/null \
           2> "${update_log}"; then
           details="$(tail -n 5 "${update_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
@@ -541,18 +550,25 @@ runs:
       id: write_artifacts
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
       shell: bash
+      env:
+        NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
+        OUTPUT_FILE: ${{ inputs.notes-output-file }}
+        OUTPUT_TEXT_FILE: ${{ inputs.notes-output-text-file }}
+        OUTPUT_HTML_FILE: ${{ inputs.notes-output-html-file }}
+        OUTPUT_JSON: ${{ inputs.notes-output-json }}
       run: |
         set -euo pipefail
 
         notes=""
-        if [ -f "${{ steps.synthesize.outputs.notes_file }}" ]; then
+        if [ -f "${NOTES_FILE}" ]; then
           notes_output="$(python "${GITHUB_ACTION_PATH}/scripts/write-artifacts.py" \
-            --notes-file "${{ steps.synthesize.outputs.notes_file }}" \
-            --version "${{ steps.resolve_release.outputs.release_tag }}" \
-            --output-file "${{ inputs.notes-output-file }}" \
-            --output-text-file "${{ inputs.notes-output-text-file }}" \
-            --output-html-file "${{ inputs.notes-output-html-file }}" \
-            --output-json "${{ inputs.notes-output-json }}")" || true
+            --notes-file "${NOTES_FILE}" \
+            --version "${RELEASE_TAG}" \
+            --output-file "${OUTPUT_FILE}" \
+            --output-text-file "${OUTPUT_TEXT_FILE}" \
+            --output-html-file "${OUTPUT_HTML_FILE}" \
+            --output-json "${OUTPUT_JSON}")" || true
           if [ -n "${notes_output}" ]; then
             notes="${notes_output}"
           fi
@@ -569,26 +585,30 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        RSS_FEED_FILE: ${{ inputs.rss-feed-file }}
+        RSS_MAX_ENTRIES: ${{ inputs.rss-max-entries }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
+        NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
       run: |
         set -euo pipefail
 
-        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
-        release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${release_tag}"
+        release_tag="${RELEASE_TAG}"
+        release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
 
         python "${GITHUB_ACTION_PATH}/scripts/update-feed.py" \
-          --feed-file "${{ inputs.rss-feed-file }}" \
-          --max-entries "${{ inputs.rss-max-entries }}" \
+          --feed-file "${RSS_FEED_FILE}" \
+          --max-entries "${RSS_MAX_ENTRIES}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${release_tag}" \
           --release-url "${release_url}" \
-          --notes-file "${{ steps.synthesize.outputs.notes_file }}" \
+          --notes-file "${NOTES_FILE}" \
           --workspace "${GITHUB_WORKSPACE}"
 
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-        git add "${{ inputs.rss-feed-file }}"
+        git add "${RSS_FEED_FILE}"
         if git diff --cached --quiet; then
           echo "::notice::RSS feed unchanged; skipping commit."
           exit 0
@@ -604,6 +624,8 @@ runs:
       env:
         WEBHOOK_URL: ${{ inputs.webhook-url }}
         WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
+        NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
       run: |
         set -euo pipefail
 
@@ -615,9 +637,9 @@ runs:
 
         set_output "sent" "false"
 
-        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
+        release_tag="${RELEASE_TAG}"
         release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${release_tag}"
-        notes_file="${{ steps.synthesize.outputs.notes_file }}"
+        notes_file="${NOTES_FILE}"
 
         if [ ! -s "${notes_file}" ]; then
           echo "::warning::Webhook skipped: notes file is empty or missing."
@@ -642,6 +664,8 @@ runs:
       shell: bash
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
+        NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
       run: |
         set -euo pipefail
 
@@ -653,9 +677,9 @@ runs:
 
         set_output "sent" "false"
 
-        release_tag="${{ steps.resolve_release.outputs.release_tag }}"
+        release_tag="${RELEASE_TAG}"
         release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${release_tag}"
-        notes_file="${{ steps.synthesize.outputs.notes_file }}"
+        notes_file="${NOTES_FILE}"
 
         if [ ! -s "${notes_file}" ]; then
           echo "::warning::Slack notification skipped: notes file is empty or missing."
@@ -729,12 +753,13 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
         if ! python "${GITHUB_ACTION_PATH}/scripts/close-resolved-failures.py" \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
-          --release-tag "${{ steps.resolve_release.outputs.release_tag }}"; then
+          --release-tag "${RELEASE_TAG}"; then
           echo "::warning::Landfall could not close resolved failure issues."
         fi
 
@@ -742,15 +767,17 @@ runs:
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true' && steps.synthesis_result.outputs.failure_stage != 'configuration'
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         FAILURE_STAGE: ${{ steps.synthesis_result.outputs.failure_stage }}
         FAILURE_MESSAGE: ${{ steps.synthesis_result.outputs.failure_message }}
+        RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
         run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
         if ! python "${GITHUB_ACTION_PATH}/scripts/report-synthesis-failure.py" \
-          --github-token "${{ inputs.github-token }}" \
+          --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
-          --release-tag "${{ steps.resolve_release.outputs.release_tag }}" \
+          --release-tag "${RELEASE_TAG}" \
           --workflow-run-url "${run_url}" \
           --workflow-name "${GITHUB_WORKFLOW}" \
           --failure-stage "${FAILURE_STAGE}" \
