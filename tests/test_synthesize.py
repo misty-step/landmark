@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1059,3 +1061,44 @@ class TestSynthesisRetryOnValidation:
 
         assert quality == "degraded"
         assert notes == bad_notes.strip()
+
+
+def test_main_creates_quality_file_parent(repo_root, tmp_path):
+    template = tmp_path / "prompt.md"
+    template.write_text(
+        "{{PRODUCT_NAME}} {{VERSION}}\n\n{{TECHNICAL_CHANGELOG}}",
+        encoding="utf-8",
+    )
+    technical = tmp_path / "technical.md"
+    technical.write_text("- Fixed local replay quality output.\n", encoding="utf-8")
+    quality_file = tmp_path / "nested" / "quality.txt"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts" / "synthesize.py"),
+            "--api-key",
+            "fake",
+            "--api-url",
+            "http://127.0.0.1:1/chat/completions",
+            "--model",
+            "fake/local",
+            "--prompt-template",
+            str(template),
+            "--technical-changelog-file",
+            str(technical),
+            "--quality-file",
+            str(quality_file),
+            "--timeout",
+            "1",
+            "--retries",
+            "0",
+        ],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert quality_file.read_text(encoding="utf-8") == "failed"

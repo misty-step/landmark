@@ -67,9 +67,30 @@ jobs:
         shell: bash
         run: python -m pytest -q tests/
 
-      - name: Replay release integrity policy
+      - name: Replay Landfall action behavior
         shell: bash
-        run: python scripts/replay-action.py --evidence-dir .landfall/replay
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            python scripts/replay-action.py \
+              --evidence-dir .landfall/replay \
+              --scenario action_static_contract \
+              --scenario consumer_full_mode_success \
+              --scenario consumer_synthesis_only_success \
+              --scenario consumer_degraded_required_fails \
+              --scenario consumer_release_update_failure \
+              --scenario consumer_floating_tag_behavior
+          else
+            python scripts/replay-action.py --evidence-dir .landfall/replay
+          fi
+
+      - name: Upload replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landfall-replay-evidence
+          path: .landfall/replay/
+          if-no-files-found: ignore
 
       - name: Validate action metadata
         shell: bash

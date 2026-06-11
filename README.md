@@ -313,6 +313,28 @@ The public action contract is checked from `action.yml`:
 - The same command scans examples, project docs, and release workflows for unknown or deprecated Landfall inputs.
 - CI runs the contract check before tests so stale consumer instructions fail fast.
 
+### Consumer Replay Harness (Landfall Repo)
+
+Landfall's replay harness creates disposable git fixture repositories and fake
+local GitHub/LLM endpoints, then exercises synthesis, release-body updates,
+artifact writing, failure policy, and floating-tag behavior without production
+secrets:
+
+```bash
+python scripts/replay-action.py --evidence-dir .landfall/replay
+```
+
+The command writes `.landfall/replay/replay-result.json` with action outputs,
+generated notes, release body before/after state, git tags, structured logs, and
+fake service requests. CI runs a bounded replay on pull requests, the full replay
+on `master`, and uploads the evidence packet for inspection.
+
+For a local one-command gate that creates its own Python tool environment, run:
+
+```bash
+bin/gate
+```
+
 ## Custom semantic-release Config
 
 Landfall ships a default config at `configs/.releaserc.json`. If your repo has its own semantic-release config file (`.releaserc`, `.releaserc.json`, `.releaserc.yml`, `.releaserc.yaml`, `release.config.js`, `release.config.cjs`, or `release.config.mjs`), Landfall uses it instead of the bundled defaults.

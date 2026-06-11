@@ -179,3 +179,8 @@ def release_policy():
 @pytest.fixture(scope="session")
 def fetch_release_body():
     return load_script_module("landfall_fetch_release_body", "scripts/fetch-release-body.py")
+
+
+@pytest.fixture(scope="session")
+def replay_action():
+    return load_script_module("landfall_replay_action", "scripts/replay-action.py")

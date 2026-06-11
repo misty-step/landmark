@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+VENV_DIR="${LANDFALL_GATE_VENV:-${TMPDIR:-/tmp}/landfall-gate-venv}"
+
+cd "${ROOT}"
+
+"${PYTHON_BIN}" -m venv "${VENV_DIR}"
+"${VENV_DIR}/bin/python" -m pip install --upgrade pip
+"${VENV_DIR}/bin/python" -m pip install "requests==2.34.2" pytest ruff check-jsonschema
+
+npm ci --no-fund --no-audit
+"${VENV_DIR}/bin/python" -m ruff check scripts/ tests/
+tag_ref="HEAD"
+if git remote get-url origin >/dev/null 2>&1; then
+  git fetch --tags --force origin master
+  tag_ref="origin/master"
+fi
+"${VENV_DIR}/bin/python" scripts/check-version-sync.py --reference "${tag_ref}"
+"${VENV_DIR}/bin/python" scripts/check-action-contract.py
+"${VENV_DIR}/bin/python" -m pytest -q tests/
+"${VENV_DIR}/bin/python" scripts/replay-action.py --evidence-dir .landfall/replay
+"${VENV_DIR}/bin/python" -m check_jsonschema --schemafile https://json.schemastore.org/github-action.json action.yml
+
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+else
+  echo "warning: actionlint not found; install actionlint for local workflow lint parity" >&2
+fi
+
+git diff --check

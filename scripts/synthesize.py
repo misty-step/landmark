@@ -908,7 +908,9 @@ def main() -> int:
 
     def _write_quality(quality: str) -> None:
         if args.quality_file:
-            Path(args.quality_file).write_text(quality, encoding="utf-8")
+            quality_path = Path(args.quality_file)
+            quality_path.parent.mkdir(parents=True, exist_ok=True)
+            quality_path.write_text(quality, encoding="utf-8")
 
     models_to_try = [args.model]
     if args.fallback_models:
