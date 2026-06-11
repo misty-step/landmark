@@ -1,17 +1,17 @@
 # Harden release integrity policy
 
-Priority: P0 · Status: pending · Estimate: XL
+Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
 Make Landfall's release pipeline fail, warn, publish, and tag according to an explicit integrity policy instead of scattered step-local conventions.
 
 ## Oracle
-- [ ] A policy test matrix covers `synthesis-required`, `synthesis-quality`, release-body update failure, artifact write failure, RSS commit failure, and floating-tag update gating.
-- [ ] Required pipelines fail on degraded or failed notes when policy says they must, and optional pipelines report partial publication without moving protected outputs.
-- [ ] Every external call in `action.yml` has bounded timeout, retry behavior, and reviewable error output.
-- [ ] Static `GITHUB_OUTPUT` heredoc delimiters cannot be truncated by generated notes content.
-- [ ] The legacy `sync-v1-tag` workflow is either removed or proven not to race Landfall's built-in floating-tag step.
-- [ ] CI proves the policy with unit tests plus an action-level replay.
+- [x] A policy test matrix covers `synthesis-required`, `synthesis-quality`, release-body update failure, artifact write failure, RSS commit failure, and floating-tag update gating.
+- [x] Required pipelines fail on degraded or failed notes when policy says they must, and optional pipelines report partial publication without moving protected outputs.
+- [x] Every external call in `action.yml` has bounded timeout, retry behavior, and reviewable error output.
+- [x] Static `GITHUB_OUTPUT` heredoc delimiters cannot be truncated by generated notes content.
+- [x] The legacy `sync-v1-tag` workflow is either removed or proven not to race Landfall's built-in floating-tag step.
+- [x] CI proves the policy with unit tests plus an action-level replay.
 
 ## Children
 1. Define the release integrity state machine: no release, released without synthesis, valid synthesis published, degraded synthesis, release body update failed, distribution failed.
@@ -32,3 +32,7 @@ Make Landfall's release pipeline fail, warn, publish, and tag according to an ex
 - Evidence: `.github/workflows/release.yml` already passes `floating-tags: "true"`, while `.github/workflows/sync-v1-tag.yml` still force-moves `v1` independently.
 - Evidence: `action.yml` repeats shell helpers such as `set_output` and keeps release policy state spread across multiple run blocks.
 - Why: security/operations review found multiple issues with the same root cause: release integrity is implicit and duplicated across shell steps.
+
+## Delivery
+- Implemented in `scripts/release-policy.py`, `scripts/fetch-release-body.py`, `scripts/replay-action.py`, `action.yml`, and focused policy tests.
+- Verification: `python -m pytest -q tests/`; `python scripts/replay-action.py --evidence-dir /tmp/landfall-replay-evidence`; `actionlint`; `check-jsonschema` for `action.yml`.

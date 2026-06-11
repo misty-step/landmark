@@ -163,7 +163,7 @@ runs:
       run: |
         set -euo pipefail
         python -m pip install --upgrade pip
-        python -m pip install requests
+        python -m pip install "requests==2.34.2"
 
     - name: Validate LLM API key
       if: (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
@@ -326,12 +326,18 @@ runs:
 
         fetch_release_body() {
           local target_file="$1"
-          curl -sSf \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" \
-            | python -c "import sys, json; print(json.load(sys.stdin).get('body', ''))" \
-            > "${target_file}" 2>/dev/null && [ -s "${target_file}" ]
+          local fetch_log="${RUNNER_TEMP}/landfall-fetch-release-body.log"
+          if ! python "${GITHUB_ACTION_PATH}/scripts/fetch-release-body.py" \
+            --github-token "${GITHUB_TOKEN}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --release-tag "${release_tag}" \
+            --output-file "${target_file}" \
+            > /dev/null \
+            2> "${fetch_log}"; then
+            cat "${fetch_log}" >&2
+            return 1
+          fi
+          [ -s "${target_file}" ]
         }
 
         build_pr_changelog() {
@@ -464,15 +470,37 @@ runs:
         set_output "notes_file" "${notes_file}"
         set_output "quality" "${quality}"
 
-    - name: Update release body
-      id: update_release
+    - name: Evaluate synthesis publication policy
+      id: synthesis_publish_policy
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true'
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
+        SYNTHESIS_STRICT: ${{ inputs.synthesis-strict }}
         SYNTH_STEP_SUCCEEDED: ${{ steps.synthesize.outputs.succeeded }}
+        SYNTH_QUALITY: ${{ steps.synthesize.outputs.quality }}
         SYNTH_FAILURE_STAGE: ${{ steps.synthesize.outputs.failure_stage }}
         SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
+      run: |
+        set -euo pipefail
+        python "${GITHUB_ACTION_PATH}/scripts/release-policy.py" publication \
+          --synthesis-required "${SYNTHESIS_REQUIRED}" \
+          --synthesis-strict "${SYNTHESIS_STRICT}" \
+          --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
+          --synth-quality "${SYNTH_QUALITY}" \
+          --synth-failure-stage "${SYNTH_FAILURE_STAGE}" \
+          --synth-failure-message "${SYNTH_FAILURE_MESSAGE}" \
+          --github-output "${GITHUB_OUTPUT}"
+
+    - name: Update release body
+      id: update_release
+      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.can_update_release == 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        SYNTH_STEP_SUCCEEDED: ${{ steps.synthesis_publish_policy.outputs.succeeded }}
+        SYNTH_FAILURE_STAGE: ${{ steps.synthesis_publish_policy.outputs.failure_stage }}
+        SYNTH_FAILURE_MESSAGE: ${{ steps.synthesis_publish_policy.outputs.failure_message }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
       run: |
@@ -530,7 +558,7 @@ runs:
 
     - name: Write release notes artifacts
       id: write_artifacts
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
+      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.succeeded == 'true' && steps.update_release.outputs.succeeded == 'true'
       shell: bash
       env:
         NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
@@ -542,28 +570,66 @@ runs:
       run: |
         set -euo pipefail
 
+        sanitize_text() {
+          printf '%s' "$1" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g'
+        }
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
         notes=""
+        set_output "succeeded" "false"
+        set_output "failure_stage" ""
+        set_output "failure_message" ""
+
         if [ -f "${NOTES_FILE}" ]; then
-          notes_output="$(python "${GITHUB_ACTION_PATH}/scripts/write-artifacts.py" \
+          artifacts_log="${RUNNER_TEMP}/landfall-write-artifacts.log"
+          if notes_output="$(python "${GITHUB_ACTION_PATH}/scripts/write-artifacts.py" \
             --notes-file "${NOTES_FILE}" \
             --version "${RELEASE_TAG}" \
             --output-file "${OUTPUT_FILE}" \
             --output-text-file "${OUTPUT_TEXT_FILE}" \
             --output-html-file "${OUTPUT_HTML_FILE}" \
-            --output-json "${OUTPUT_JSON}")" || true
-          if [ -n "${notes_output}" ]; then
-            notes="${notes_output}"
+            --output-json "${OUTPUT_JSON}" \
+            2> "${artifacts_log}")"; then
+            if [ -n "${notes_output}" ]; then
+              notes="${notes_output}"
+            fi
+            set_output "succeeded" "true"
+          else
+            details="$(tail -n 5 "${artifacts_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
+            message="Landfall could not write release notes artifacts."
+            if [ -n "${details}" ]; then
+              message="${message} Details: ${details}"
+            fi
+            message="$(sanitize_text "${message}")"
+            echo "::warning::${message}"
+            set_output "failure_stage" "artifact_write"
+            set_output "failure_message" "${message}"
           fi
+        else
+          message="Landfall could not write release notes artifacts; notes file is missing."
+          echo "::warning::${message}"
+          set_output "failure_stage" "artifact_write"
+          set_output "failure_message" "$(sanitize_text "${message}")"
         fi
 
+        delimiter="landfall-notes-eof-$(date +%s%N)-${RANDOM}"
+        while printf '%s\n' "${notes}" | grep -Fxq "${delimiter}"; do
+          delimiter="landfall-notes-eof-$(date +%s%N)-${RANDOM}"
+        done
         {
-          echo "notes<<LANDFALL_NOTES_EOF"
-          echo "${notes}"
-          echo "LANDFALL_NOTES_EOF"
+          echo "notes<<${delimiter}"
+          printf '%s\n' "${notes}"
+          echo "${delimiter}"
         } >> "${GITHUB_OUTPUT}"
 
     - name: Update RSS feed file
-      if: inputs.rss-feed-file != '' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
+      id: update_rss
+      if: inputs.rss-feed-file != '' && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -574,34 +640,79 @@ runs:
       run: |
         set -euo pipefail
 
+        sanitize_text() {
+          printf '%s' "$1" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g'
+        }
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
+        set_output "succeeded" "false"
+        set_output "failure_stage" ""
+        set_output "failure_message" ""
+
+        retry_command() {
+          local log_file="$1"
+          shift
+          local attempt=1
+          while [ "${attempt}" -le 3 ]; do
+            if timeout 120s "$@" >> "${log_file}" 2>&1; then
+              return 0
+            fi
+            attempt=$((attempt + 1))
+            sleep "$((attempt * 2))"
+          done
+          return 1
+        }
+
         release_tag="${RELEASE_TAG}"
         release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+        rss_log="${RUNNER_TEMP}/landfall-update-rss.log"
 
-        python "${GITHUB_ACTION_PATH}/scripts/update-feed.py" \
-          --feed-file "${RSS_FEED_FILE}" \
-          --max-entries "${RSS_MAX_ENTRIES}" \
-          --repository "${GITHUB_REPOSITORY}" \
-          --release-tag "${release_tag}" \
-          --release-url "${release_url}" \
-          --notes-file "${NOTES_FILE}" \
-          --workspace "${GITHUB_WORKSPACE}"
+        if {
+          python "${GITHUB_ACTION_PATH}/scripts/update-feed.py" \
+            --feed-file "${RSS_FEED_FILE}" \
+            --max-entries "${RSS_MAX_ENTRIES}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --release-tag "${release_tag}" \
+            --release-url "${release_url}" \
+            --notes-file "${NOTES_FILE}" \
+            --workspace "${GITHUB_WORKSPACE}" &&
+          git config user.name "github-actions[bot]" &&
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com" &&
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" &&
+          git add "${RSS_FEED_FILE}"
+        } > /dev/null 2> "${rss_log}"; then
+          if git diff --cached --quiet; then
+            echo "::notice::RSS feed unchanged; skipping commit."
+            set_output "succeeded" "true"
+            exit 0
+          fi
 
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-
-        git add "${RSS_FEED_FILE}"
-        if git diff --cached --quiet; then
-          echo "::notice::RSS feed unchanged; skipping commit."
-          exit 0
+          if git commit -m "chore(feed): update releases feed for ${release_tag} [skip ci]" \
+            >> "${rss_log}" 2>&1 && \
+            retry_command "${rss_log}" git push origin "HEAD:${GITHUB_REF_NAME}"; then
+            set_output "succeeded" "true"
+            exit 0
+          fi
         fi
 
-        git commit -m "chore(feed): update releases feed for ${release_tag} [skip ci]"
-        git push origin "HEAD:${GITHUB_REF_NAME}"
+        details="$(tail -n 5 "${rss_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
+        message="Landfall could not update the RSS release feed."
+        if [ -n "${details}" ]; then
+          message="${message} Details: ${details}"
+        fi
+        message="$(sanitize_text "${message}")"
+        echo "::warning::${message}"
+        set_output "failure_stage" "rss_update"
+        set_output "failure_message" "${message}"
 
     - name: Send webhook notification
       id: notify_webhook
-      if: inputs.webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
+      if: inputs.webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
       shell: bash
       env:
         WEBHOOK_URL: ${{ inputs.webhook-url }}
@@ -642,7 +753,7 @@ runs:
 
     - name: Send Slack notification
       id: notify_slack
-      if: inputs.slack-webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.synthesize.outputs.succeeded == 'true'
+      if: inputs.slack-webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
       shell: bash
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
@@ -684,55 +795,44 @@ runs:
       env:
         SYNTHESIS_ENABLED: ${{ inputs.synthesis }}
         RELEASED: ${{ steps.resolve_release.outputs.released }}
-        SYNTH_STEP_SUCCEEDED: ${{ steps.synthesize.outputs.succeeded }}
-        SYNTH_QUALITY: ${{ steps.synthesize.outputs.quality }}
+        SYNTH_STEP_SUCCEEDED: ${{ steps.synthesis_publish_policy.outputs.succeeded }}
+        SYNTH_QUALITY: ${{ steps.synthesis_publish_policy.outputs.quality }}
         UPDATE_STEP_SUCCEEDED: ${{ steps.update_release.outputs.succeeded }}
-        SYNTH_FAILURE_STAGE: ${{ steps.synthesize.outputs.failure_stage }}
-        SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
+        SYNTH_FAILURE_STAGE: ${{ steps.synthesis_publish_policy.outputs.failure_stage }}
+        SYNTH_FAILURE_MESSAGE: ${{ steps.synthesis_publish_policy.outputs.failure_message }}
         UPDATE_FAILURE_STAGE: ${{ steps.update_release.outputs.failure_stage }}
         UPDATE_FAILURE_MESSAGE: ${{ steps.update_release.outputs.failure_message }}
+        ARTIFACT_STEP_SUCCEEDED: ${{ steps.write_artifacts.outputs.succeeded }}
+        ARTIFACT_FAILURE_STAGE: ${{ steps.write_artifacts.outputs.failure_stage }}
+        ARTIFACT_FAILURE_MESSAGE: ${{ steps.write_artifacts.outputs.failure_message }}
+        RSS_ENABLED: ${{ inputs.rss-feed-file != '' }}
+        RSS_STEP_SUCCEEDED: ${{ steps.update_rss.outputs.succeeded }}
+        RSS_FAILURE_STAGE: ${{ steps.update_rss.outputs.failure_stage }}
+        RSS_FAILURE_MESSAGE: ${{ steps.update_rss.outputs.failure_message }}
       run: |
         set -euo pipefail
-
-        set_output() {
-          local key="$1"
-          local value="$2"
-          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
-        }
-
-        succeeded="false"
-        failure_stage=""
-        failure_message=""
-        quality="failed"
-
-        if [ "${SYNTHESIS_ENABLED}" = "true" ] && [ "${RELEASED}" = "true" ]; then
-          if [ "${SYNTH_STEP_SUCCEEDED}" = "true" ] && [ "${UPDATE_STEP_SUCCEEDED}" = "true" ]; then
-            succeeded="true"
-            quality="${SYNTH_QUALITY:-valid}"
-          else
-            failure_stage="${SYNTH_FAILURE_STAGE}"
-            failure_message="${SYNTH_FAILURE_MESSAGE}"
-            if [ -z "${failure_stage}" ] && [ -n "${UPDATE_FAILURE_STAGE}" ]; then
-              failure_stage="${UPDATE_FAILURE_STAGE}"
-              failure_message="${UPDATE_FAILURE_MESSAGE}"
-            fi
-            if [ -z "${failure_stage}" ]; then
-              failure_stage="unknown"
-            fi
-            if [ -z "${failure_message}" ]; then
-              failure_message="Landfall synthesis did not complete successfully."
-            fi
-          fi
-        fi
-
-        set_output "succeeded" "${succeeded}"
-        set_output "quality" "${quality}"
-        set_output "failure_stage" "${failure_stage}"
-        set_output "failure_message" "${failure_message}"
+        python "${GITHUB_ACTION_PATH}/scripts/release-policy.py" summary \
+          --synthesis-enabled "${SYNTHESIS_ENABLED}" \
+          --released "${RELEASED}" \
+          --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
+          --synth-quality "${SYNTH_QUALITY}" \
+          --update-succeeded "${UPDATE_STEP_SUCCEEDED}" \
+          --synth-failure-stage "${SYNTH_FAILURE_STAGE}" \
+          --synth-failure-message "${SYNTH_FAILURE_MESSAGE}" \
+          --update-failure-stage "${UPDATE_FAILURE_STAGE}" \
+          --update-failure-message "${UPDATE_FAILURE_MESSAGE}" \
+          --artifact-succeeded "${ARTIFACT_STEP_SUCCEEDED}" \
+          --artifact-failure-stage "${ARTIFACT_FAILURE_STAGE}" \
+          --artifact-failure-message "${ARTIFACT_FAILURE_MESSAGE}" \
+          --rss-enabled "${RSS_ENABLED}" \
+          --rss-succeeded "${RSS_STEP_SUCCEEDED}" \
+          --rss-failure-stage "${RSS_FAILURE_STAGE}" \
+          --rss-failure-message "${RSS_FAILURE_MESSAGE}" \
+          --github-output "${GITHUB_OUTPUT}"
 
     - name: Update floating major tag
       id: update_floating_tag
-      if: inputs.floating-tags == 'true' && steps.resolve_release.outputs.released == 'true' && (inputs.synthesis != 'true' || inputs.synthesis-required != 'true' || steps.synthesis_result.outputs.succeeded == 'true')
+      if: inputs.floating-tags == 'true' && steps.resolve_release.outputs.released == 'true' && (inputs.synthesis != 'true' || steps.synthesis_result.outputs.succeeded == 'true')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -741,10 +841,29 @@ runs:
         set -euo pipefail
 
         release_tag="${RELEASE_TAG}"
+        tag_log="${RUNNER_TEMP}/landfall-update-floating-tag.log"
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-        git fetch --tags --force
+
+        retry_command() {
+          local log_file="$1"
+          shift
+          local attempt=1
+          while [ "${attempt}" -le 3 ]; do
+            if timeout 120s "$@" >> "${log_file}" 2>&1; then
+              return 0
+            fi
+            attempt=$((attempt + 1))
+            sleep "$((attempt * 2))"
+          done
+          return 1
+        }
+
+        if ! retry_command "${tag_log}" git fetch --tags --force; then
+          cat "${tag_log}" >&2
+          exit 1
+        fi
 
         major_tag="$(python "${GITHUB_ACTION_PATH}/scripts/update-floating-tag.py" --release-tag "${release_tag}")"
         if [ -z "${major_tag}" ]; then
@@ -755,7 +874,10 @@ runs:
 
         echo "Updating floating tag ${major_tag} → ${sha}"
         git tag -f "${major_tag}" "${sha}"
-        git push origin "refs/tags/${major_tag}" --force
+        if ! retry_command "${tag_log}" git push origin "refs/tags/${major_tag}" --force; then
+          cat "${tag_log}" >&2
+          exit 1
+        fi
 
     - name: Close resolved synthesis failure issues
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded == 'true'

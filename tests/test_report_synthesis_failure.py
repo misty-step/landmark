@@ -18,6 +18,8 @@ def test_validate_args_accepts_valid_inputs(report_synthesis_failure):
         workflow_name="Release",
         api_base_url="https://api.github.com",
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         log_level="INFO",
     )
 
@@ -37,6 +39,8 @@ def test_validate_args_rejects_invalid_repository(report_synthesis_failure):
         workflow_name="Release",
         api_base_url="https://api.github.com",
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         log_level="INFO",
     )
 
@@ -57,6 +61,8 @@ def test_validate_args_rejects_invalid_workflow_run_url_scheme(report_synthesis_
         workflow_name="Release",
         api_base_url="https://api.github.com",
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         log_level="INFO",
     )
 
@@ -117,11 +123,9 @@ def test_compose_issue_body_contains_all_fields(report_synthesis_failure):
     assert "could not patch release body" in body
 
 
-def test_create_issue_posts_expected_payload(report_synthesis_failure, post_session_factory):
+def test_create_issue_posts_expected_payload(report_synthesis_failure, request_session_factory):
     # Arrange
-    session = post_session_factory(
-        outcome=create_issue_test_response(status_code=201, json_data={"html_url": "https://x/y"})
-    )
+    session = request_session_factory([create_issue_test_response(status_code=201, json_data={"html_url": "https://x/y"})])
     headers = {"Authorization": "Bearer token"}
 
     # Act
@@ -132,26 +136,29 @@ def test_create_issue_posts_expected_payload(report_synthesis_failure, post_sess
         title="title",
         body="body",
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         session=session,
     )
 
     # Assert
     assert result["html_url"] == "https://x/y"
+    assert session.calls[0]["method"] == "POST"
     assert session.calls[0]["url"].endswith("/repos/octo/example/issues")
-    assert session.calls[0]["headers"] == headers
-    assert session.calls[0]["json"] == {"title": "title", "body": "body"}
+    assert session.calls[0]["kwargs"]["headers"] == headers
+    assert session.calls[0]["kwargs"]["json"] == {"title": "title", "body": "body"}
     assert session.calls[0]["timeout"] == 5
 
 
-def test_find_existing_failure_issue_returns_match(report_synthesis_failure):
+def test_find_existing_failure_issue_returns_match(report_synthesis_failure, request_session_factory):
     """find_existing_failure_issue returns issue dict when title matches."""
     # Arrange
     title = "[Landfall] Synthesis failed for v2"
     existing_issue = {"number": 138, "title": title, "html_url": "https://x/138"}
-    session = _GetCaptureSession(
-        outcome=create_issue_test_response(
+    session = request_session_factory(
+        outcomes=[create_issue_test_response(
             status_code=200, json_data=[existing_issue, {"number": 1, "title": "unrelated"}]
-        )
+        )]
     )
     headers = {"Authorization": "Bearer token"}
 
@@ -162,6 +169,8 @@ def test_find_existing_failure_issue_returns_match(report_synthesis_failure):
         title=title,
         headers=headers,
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         session=session,
     )
 
@@ -170,13 +179,13 @@ def test_find_existing_failure_issue_returns_match(report_synthesis_failure):
     assert result["number"] == 138
 
 
-def test_find_existing_failure_issue_returns_none_when_no_match(report_synthesis_failure):
+def test_find_existing_failure_issue_returns_none_when_no_match(report_synthesis_failure, request_session_factory):
     """find_existing_failure_issue returns None when no issue matches."""
     # Arrange
-    session = _GetCaptureSession(
-        outcome=create_issue_test_response(
+    session = request_session_factory(
+        outcomes=[create_issue_test_response(
             status_code=200, json_data=[{"number": 1, "title": "unrelated issue"}]
-        )
+        )]
     )
     headers = {"Authorization": "Bearer token"}
 
@@ -187,6 +196,8 @@ def test_find_existing_failure_issue_returns_none_when_no_match(report_synthesis
         title="[Landfall] Synthesis failed for v2",
         headers=headers,
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         session=session,
     )
 
@@ -194,12 +205,10 @@ def test_find_existing_failure_issue_returns_none_when_no_match(report_synthesis
     assert result is None
 
 
-def test_find_existing_failure_issue_returns_none_on_empty_list(report_synthesis_failure):
+def test_find_existing_failure_issue_returns_none_on_empty_list(report_synthesis_failure, request_session_factory):
     """find_existing_failure_issue returns None when no issues exist."""
     # Arrange
-    session = _GetCaptureSession(
-        outcome=create_issue_test_response(status_code=200, json_data=[])
-    )
+    session = request_session_factory([create_issue_test_response(status_code=200, json_data=[])])
     headers = {"Authorization": "Bearer token"}
 
     # Act
@@ -209,30 +218,13 @@ def test_find_existing_failure_issue_returns_none_on_empty_list(report_synthesis
         title="[Landfall] Synthesis failed for v2",
         headers=headers,
         timeout=5,
+        retries=0,
+        retry_backoff=0.0,
         session=session,
     )
 
     # Assert
     assert result is None
-
-
-class _GetCaptureSession:
-    """Minimal session mock that captures GET calls."""
-
-    def __init__(self, outcome: object):
-        self._outcome = outcome
-        self.calls: list[dict] = []
-        self.closed = False
-
-    def get(self, *, url: str, headers: dict, params: dict, timeout: int) -> object:
-        self.calls.append({"url": url, "headers": headers, "params": params, "timeout": timeout})
-        if isinstance(self._outcome, Exception):
-            raise self._outcome
-        return self._outcome
-
-    def close(self) -> None:
-        self.closed = True
-
 
 def create_issue_test_response(*, status_code: int, json_data: object):
     class _Response:
@@ -251,4 +243,3 @@ def create_issue_test_response(*, status_code: int, json_data: object):
                 raise error
 
     return _Response(status_code=status_code, json_data=json_data)
-

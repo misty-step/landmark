@@ -109,6 +109,22 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `webhook-sent` | `true` when the generic webhook notification was sent successfully. |
 | `slack-sent` | `true` when the Slack notification was sent successfully. |
 
+## Release Integrity Policy
+
+Landfall separates the semantic-release publish step from its owned synthesis and
+distribution steps:
+
+- `synthesis-required: "true"` treats failed or degraded synthesis as a hard
+  failure and blocks release-body mutation and floating-tag movement.
+- Optional synthesis still allows the release to exist, but partial Landfall
+  failures are reported through `synthesis-succeeded: false` and protected
+  outputs such as floating tags do not move unless synthesis and release-body
+  update both succeed.
+- External GitHub and LLM calls made by Landfall-owned scripts use bounded
+  timeouts and retry policy.
+- Generated `release-notes` output uses a collision-resistant GitHub output
+  delimiter so synthesized content cannot truncate the output payload.
+
 ## Provider Examples
 
 ### OpenRouter (default)

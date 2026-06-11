@@ -4,7 +4,7 @@ version = "1.17.2"
 requires-python = ">=3.12"
 
 [project.optional-dependencies]
-test = ["pytest", "requests"]
+test = ["pytest", "requests==2.34.2"]
 
 [tool.ruff]
 target-version = "py312"

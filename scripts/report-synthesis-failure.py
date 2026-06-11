@@ -4,27 +4,21 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import re
-import sys
 from typing import Any
 
 import requests
+
+from shared import configure_logging, log_event as shared_log_event, request_with_retry
 
 
 REPOSITORY_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 LOGGER = logging.getLogger("landfall.report_synthesis_failure")
 
 
-def configure_logging(level_name: str) -> None:
-    level = getattr(logging, level_name.upper(), logging.INFO)
-    logging.basicConfig(level=level, format="%(message)s", stream=sys.stderr)
-
-
 def log_event(level: int, event: str, **fields: Any) -> None:
-    payload = {"event": event, **fields}
-    LOGGER.log(level, json.dumps(payload, sort_keys=True, default=str))
+    shared_log_event(LOGGER, level, event, **fields)
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +34,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workflow-name", required=True, help="Workflow name.")
     parser.add_argument("--api-base-url", default="https://api.github.com", help="GitHub API base URL.")
     parser.add_argument("--timeout", type=int, default=30, help="HTTP timeout in seconds.")
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=2,
+        help="Number of retries for retryable HTTP failures (default: 2).",
+    )
+    parser.add_argument(
+        "--retry-backoff",
+        type=float,
+        default=1.0,
+        help="Base backoff seconds between retries (default: 1.0).",
+    )
     parser.add_argument(
         "--log-level",
         default="INFO",
@@ -66,6 +72,10 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("workflow-name must be non-empty")
     if args.timeout <= 0:
         raise ValueError("timeout must be greater than zero")
+    if args.retries < 0:
+        raise ValueError("retries cannot be negative")
+    if args.retry_backoff < 0:
+        raise ValueError("retry-backoff cannot be negative")
     if not args.api_base_url.startswith(("http://", "https://")):
         raise ValueError("api-base-url must start with http:// or https://")
 
@@ -121,6 +131,8 @@ def find_existing_failure_issue(
     title: str,
     headers: dict[str, str],
     timeout: int,
+    retries: int,
+    retry_backoff: float,
     session: requests.Session | None = None,
 ) -> dict[str, Any] | None:
     """Return an existing open issue with the exact title, or None."""
@@ -130,8 +142,17 @@ def find_existing_failure_issue(
     created_session = session is None
     http = session or requests.Session()
     try:
-        response = http.get(url=url, headers=headers, params=params, timeout=timeout)
-        response.raise_for_status()
+        response = request_with_retry(
+            LOGGER,
+            http,
+            "GET",
+            url,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            retries=retries,
+            retry_backoff=retry_backoff,
+        )
         issues = response.json()
     finally:
         if created_session:
@@ -150,6 +171,8 @@ def create_issue(
     title: str,
     body: str,
     timeout: int,
+    retries: int,
+    retry_backoff: float,
     session: requests.Session | None = None,
 ) -> dict[str, Any]:
     url = f"{api_base_url}/repos/{repository}/issues"
@@ -158,8 +181,17 @@ def create_issue(
     created_session = session is None
     http = session or requests.Session()
     try:
-        response = http.post(url=url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
+        response = request_with_retry(
+            LOGGER,
+            http,
+            "POST",
+            url,
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+            retries=retries,
+            retry_backoff=retry_backoff,
+        )
         return response.json()
     finally:
         if created_session:
@@ -187,6 +219,8 @@ def main() -> int:
             title=title,
             headers=headers,
             timeout=args.timeout,
+            retries=args.retries,
+            retry_backoff=args.retry_backoff,
         )
     except requests.RequestException:
         existing = None  # If search fails, proceed with creation
@@ -221,6 +255,8 @@ def main() -> int:
             title=title,
             body=body,
             timeout=args.timeout,
+            retries=args.retries,
+            retry_backoff=args.retry_backoff,
         )
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
