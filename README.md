@@ -299,6 +299,12 @@ This repository keeps `package.json` and `pyproject.toml` versions aligned to re
 - The release commit includes `CHANGELOG.md`, `package.json`, and `pyproject.toml`.
 - CI runs `python scripts/check-version-sync.py` to fail fast when metadata drifts from the latest semver tag.
 
+Landfall's own release workflow is manual because `master` is protected by the
+required `merge-gate` check. Automatic self-release would need a PR-based
+release-commit path before it can safely publish generated changelog and version
+metadata back to `master`; manual dispatch should be used only after that path
+or a bypass-capable release token exists.
+
 ### Action Contract Validation (Landfall Repo)
 
 The public action contract is checked from `action.yml`:
