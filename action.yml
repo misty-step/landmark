@@ -129,12 +129,18 @@ outputs:
   synthesis-quality:
     description: "Quality of synthesized output: valid (passed validation), degraded (validation failed, using unvalidated output), or failed (synthesis itself failed)."
     value: ${{ steps.synthesis_result.outputs.quality }}
+  synthesis-status:
+    description: Machine-readable JSON status for synthesis, model attempts, and publication destinations.
+    value: ${{ steps.synthesis_result.outputs.status_json }}
   webhook-sent:
     description: Whether the webhook notification was sent successfully.
     value: ${{ steps.notify_webhook.outputs.sent || 'false' }}
   slack-sent:
     description: Whether the Slack notification was sent successfully.
     value: ${{ steps.notify_slack.outputs.sent || 'false' }}
+  synthesis-failure-issue-action:
+    description: "Companion issue lifecycle result: closed, reported, failed, or skipped."
+    value: ${{ steps.close_failure_issues.outputs.action || steps.report_synthesis_failure.outputs.action || 'skipped' }}
 
 runs:
   using: composite
@@ -411,7 +417,9 @@ runs:
         fi
 
         quality_file="${RUNNER_TEMP}/landfall-synthesis-quality.txt"
+        attempts_file="${RUNNER_TEMP}/landfall-synthesis-attempts.json"
         synth_log="${RUNNER_TEMP}/landfall-synthesize.log"
+        set_output "attempts_file" "${attempts_file}"
         synth_source_args=()
         if [ -n "${release_body_file}" ]; then
           synth_source_args+=(--release-body-file "${release_body_file}")
@@ -437,6 +445,7 @@ runs:
           "${synth_source_args[@]}" \
           --templates-dir "${GITHUB_ACTION_PATH}/templates/prompts" \
           --quality-file "${quality_file}" \
+          --attempts-file "${attempts_file}" \
           > "${notes_file}" \
           2> "${synth_log}"; then
           details="$(tail -n 5 "${synth_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
@@ -807,6 +816,11 @@ runs:
         RSS_STEP_SUCCEEDED: ${{ steps.update_rss.outputs.succeeded }}
         RSS_FAILURE_STAGE: ${{ steps.update_rss.outputs.failure_stage }}
         RSS_FAILURE_MESSAGE: ${{ steps.update_rss.outputs.failure_message }}
+        WEBHOOK_ENABLED: ${{ inputs.webhook-url != '' }}
+        WEBHOOK_SENT: ${{ steps.notify_webhook.outputs.sent }}
+        SLACK_ENABLED: ${{ inputs.slack-webhook-url != '' }}
+        SLACK_SENT: ${{ steps.notify_slack.outputs.sent }}
+        MODEL_ATTEMPTS_FILE: ${{ steps.synthesize.outputs.attempts_file }}
       run: |
         set -euo pipefail
         "${GITHUB_ACTION_PATH}/dist/landfall" release-policy summary \
@@ -826,6 +840,11 @@ runs:
           --rss-succeeded "${RSS_STEP_SUCCEEDED}" \
           --rss-failure-stage "${RSS_FAILURE_STAGE}" \
           --rss-failure-message "${RSS_FAILURE_MESSAGE}" \
+          --webhook-enabled "${WEBHOOK_ENABLED}" \
+          --webhook-sent "${WEBHOOK_SENT}" \
+          --slack-enabled "${SLACK_ENABLED}" \
+          --slack-sent "${SLACK_SENT}" \
+          --attempts-file "${MODEL_ATTEMPTS_FILE}" \
           --github-output "${GITHUB_OUTPUT}"
 
     - name: Update floating major tag
@@ -878,6 +897,7 @@ runs:
         fi
 
     - name: Close resolved synthesis failure issues
+      id: close_failure_issues
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded == 'true'
       shell: bash
       env:
@@ -885,14 +905,23 @@ runs:
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
-        if ! "${GITHUB_ACTION_PATH}/dist/landfall" close-resolved-failures \
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+        if "${GITHUB_ACTION_PATH}/dist/landfall" close-resolved-failures \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}"; then
+          set_output "action" "closed"
+        else
           echo "::warning::Landfall could not close resolved failure issues."
+          set_output "action" "failed"
         fi
 
     - name: Report synthesis failure
+      id: report_synthesis_failure
       if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true' && steps.synthesis_result.outputs.failure_stage != 'configuration'
       shell: bash
       env:
@@ -902,8 +931,13 @@ runs:
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
         run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-        if ! "${GITHUB_ACTION_PATH}/dist/landfall" report-synthesis-failure \
+        if "${GITHUB_ACTION_PATH}/dist/landfall" report-synthesis-failure \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}" \
@@ -911,7 +945,10 @@ runs:
           --workflow-name "${GITHUB_WORKFLOW}" \
           --failure-stage "${FAILURE_STAGE}" \
           --failure-message "${FAILURE_MESSAGE}"; then
+          set_output "action" "reported"
+        else
           echo "::warning::Landfall could not create a synthesis failure issue."
+          set_output "action" "failed"
         fi
 
     - name: Enforce synthesis required

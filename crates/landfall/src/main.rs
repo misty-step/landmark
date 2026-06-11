@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use hmac::{Hmac, Mac};
 use pulldown_cmark::{Options, Parser as MarkdownParser, html};
 use regex::Regex;
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,7 +39,7 @@ enum Commands {
     PreflightTags,
     FetchReleaseBody(FetchReleaseBodyArgs),
     ExtractPrs(ExtractPrsArgs),
-    Synthesize(SynthesizeArgs),
+    Synthesize(Box<SynthesizeArgs>),
     ReleasePolicy(ReleasePolicyArgs),
     UpdateRelease(UpdateReleaseArgs),
     WriteArtifacts(WriteArtifactsArgs),
@@ -127,6 +128,8 @@ struct SynthesizeArgs {
     prompt_template: PathBuf,
     #[arg(long = "quality-file")]
     quality_file: PathBuf,
+    #[arg(long = "attempts-file", default_value = ".")]
+    attempts_file: PathBuf,
     #[arg(long = "templates-dir", default_value = "templates/prompts")]
     templates_dir: PathBuf,
 }
@@ -195,8 +198,18 @@ struct SummaryArgs {
     rss_failure_stage: String,
     #[arg(long = "rss-failure-message", default_value = "")]
     rss_failure_message: String,
+    #[arg(long = "webhook-enabled", default_value = "")]
+    webhook_enabled: String,
+    #[arg(long = "webhook-sent", default_value = "")]
+    webhook_sent: String,
+    #[arg(long = "slack-enabled", default_value = "")]
+    slack_enabled: String,
+    #[arg(long = "slack-sent", default_value = "")]
+    slack_sent: String,
     #[arg(long = "github-output")]
     github_output: PathBuf,
+    #[arg(long = "attempts-file", default_value = ".")]
+    attempts_file: PathBuf,
 }
 
 #[derive(Args)]
@@ -364,7 +377,7 @@ fn run() -> Result<()> {
         Commands::PreflightTags => preflight_tags(),
         Commands::FetchReleaseBody(args) => fetch_release_body(args),
         Commands::ExtractPrs(args) => extract_prs(args),
-        Commands::Synthesize(args) => synthesize(args),
+        Commands::Synthesize(args) => synthesize(*args),
         Commands::ReleasePolicy(args) => release_policy(args),
         Commands::UpdateRelease(args) => update_release(args),
         Commands::WriteArtifacts(args) => write_artifacts(args),
@@ -623,6 +636,7 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
             .map(str::to_string),
     );
     let mut last_error = String::new();
+    let mut attempts = Vec::new();
     for model in models {
         match request_synthesis(&args.api_url, &args.api_key, &model, &prompt) {
             Ok(notes) if !notes.trim().is_empty() => {
@@ -631,15 +645,39 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
                 } else {
                     "degraded"
                 };
+                attempts.push(json!({
+                    "model": model,
+                    "succeeded": true,
+                    "quality": quality,
+                    "message": "",
+                }));
+                write_json_if_requested(&args.attempts_file, &attempts)?;
                 ensure_parent(&args.quality_file)?;
                 fs::write(&args.quality_file, quality)?;
                 println!("{}", notes.trim());
                 return Ok(());
             }
-            Ok(_) => last_error = format!("model {model} returned empty content"),
-            Err(error) => last_error = format!("model {model} failed: {error}"),
+            Ok(_) => {
+                last_error = format!("model {model} returned empty content");
+                attempts.push(json!({
+                    "model": model,
+                    "succeeded": false,
+                    "quality": "failed",
+                    "message": last_error,
+                }));
+            }
+            Err(error) => {
+                last_error = format!("model {model} failed: {error}");
+                attempts.push(json!({
+                    "model": model,
+                    "succeeded": false,
+                    "quality": "failed",
+                    "message": last_error,
+                }));
+            }
         }
     }
+    write_json_if_requested(&args.attempts_file, &attempts)?;
     Err(last_error.into())
 }
 
@@ -853,6 +891,10 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
     let artifact_succeeded = parse_bool(&args.artifact_succeeded);
     let rss_enabled = parse_bool(&args.rss_enabled);
     let rss_succeeded = parse_bool(&args.rss_succeeded);
+    let webhook_enabled = parse_bool(&args.webhook_enabled);
+    let webhook_sent = parse_bool(&args.webhook_sent);
+    let slack_enabled = parse_bool(&args.slack_enabled);
+    let slack_sent = parse_bool(&args.slack_sent);
     let quality = normalize_quality(&args.synth_quality);
     let (succeeded, failure_stage, failure_message) = if !synthesis_enabled || !released {
         (true, "", "")
@@ -883,6 +925,62 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
     } else {
         (true, "", "")
     };
+    let mut destinations = BTreeMap::new();
+    destinations.insert(
+        "release_body".to_string(),
+        DestinationStatus {
+            enabled: synthesis_enabled && released && synth_succeeded,
+            succeeded: update_succeeded,
+            failure_stage: sanitize_text(&args.update_failure_stage),
+            failure_message: sanitize_text(&args.update_failure_message),
+        },
+    );
+    destinations.insert(
+        "artifacts".to_string(),
+        DestinationStatus {
+            enabled: synthesis_enabled && released && synth_succeeded && update_succeeded,
+            succeeded: artifact_succeeded,
+            failure_stage: sanitize_text(&args.artifact_failure_stage),
+            failure_message: sanitize_text(&args.artifact_failure_message),
+        },
+    );
+    destinations.insert(
+        "rss".to_string(),
+        DestinationStatus {
+            enabled: rss_enabled,
+            succeeded: rss_succeeded,
+            failure_stage: sanitize_text(&args.rss_failure_stage),
+            failure_message: sanitize_text(&args.rss_failure_message),
+        },
+    );
+    destinations.insert(
+        "webhook".to_string(),
+        DestinationStatus {
+            enabled: webhook_enabled,
+            succeeded: webhook_sent,
+            failure_stage: String::new(),
+            failure_message: String::new(),
+        },
+    );
+    destinations.insert(
+        "slack".to_string(),
+        DestinationStatus {
+            enabled: slack_enabled,
+            succeeded: slack_sent,
+            failure_stage: String::new(),
+            failure_message: String::new(),
+        },
+    );
+    let status = SynthesisStatus {
+        synthesis_enabled,
+        released,
+        succeeded,
+        quality: quality.clone(),
+        failure_stage: sanitize_text(failure_stage),
+        failure_message: sanitize_text(failure_message),
+        model_attempts: read_json_array_if_requested(&args.attempts_file)?,
+        destinations,
+    };
     write_outputs(
         &args.github_output,
         &[
@@ -890,6 +988,7 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
             ("quality", quality),
             ("failure_stage", sanitize_text(failure_stage)),
             ("failure_message", sanitize_text(failure_message)),
+            ("status_json", serde_json::to_string(&status)?),
         ],
     )
 }
@@ -968,29 +1067,126 @@ fn strip_existing_whats_new(body: &str) -> String {
     output.join("\n").trim().to_string()
 }
 
+#[derive(Clone, Serialize)]
+struct ReleaseNoteArtifact {
+    version: String,
+    tag: String,
+    notes: String,
+    plaintext: String,
+    html: String,
+    slack: String,
+    sections: Vec<NoteSection>,
+    published_at: String,
+}
+
+#[derive(Clone, Serialize)]
+struct NoteSection {
+    title: String,
+    bullets: Vec<NoteBullet>,
+}
+
+#[derive(Clone, Serialize)]
+struct NoteBullet {
+    text: String,
+    links: Vec<NoteLink>,
+}
+
+#[derive(Clone, Serialize)]
+struct NoteLink {
+    label: String,
+    href: String,
+}
+
+impl ReleaseNoteArtifact {
+    fn from_markdown(version: &str, notes: &str) -> Self {
+        let trimmed = notes.trim().to_string();
+        Self {
+            version: version.trim_start_matches('v').to_string(),
+            tag: version.to_string(),
+            plaintext: markdown_to_plaintext(&trimmed),
+            html: markdown_to_html_fragment(&trimmed),
+            slack: markdown_to_slack(&trimmed),
+            sections: parse_note_sections(&trimmed),
+            published_at: Utc::now().to_rfc3339(),
+            notes: trimmed,
+        }
+    }
+
+    fn json_entry(&self) -> Value {
+        json!({
+            "version": self.version,
+            "tag": self.tag,
+            "notes": self.notes,
+            "markdown": self.notes,
+            "html": self.html,
+            "plaintext": self.plaintext,
+            "slack": self.slack,
+            "sections": self.sections,
+            "published_at": self.published_at,
+        })
+    }
+
+    fn webhook_payload(&self, repository: &str, release_url: &str) -> Value {
+        json!({
+            "version": self.tag,
+            "repository": repository,
+            "release_url": release_url,
+            "notes": self.notes,
+            "markdown": self.notes,
+            "html": self.html,
+            "plaintext": self.plaintext,
+            "sections": self.sections,
+            "published_at": self.published_at,
+        })
+    }
+
+    fn slack_payload(&self, repository: &str, release_url: &str) -> Value {
+        json!({
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": format!("{} {}", repository, self.tag)}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": self.slack}},
+                {"type": "context", "elements": [{"type": "mrkdwn", "text": format!("<{}|View release>", release_url)}]}
+            ]
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct SynthesisStatus {
+    synthesis_enabled: bool,
+    released: bool,
+    succeeded: bool,
+    quality: String,
+    failure_stage: String,
+    failure_message: String,
+    model_attempts: Vec<Value>,
+    destinations: BTreeMap<String, DestinationStatus>,
+}
+
+#[derive(Serialize)]
+struct DestinationStatus {
+    enabled: bool,
+    succeeded: bool,
+    failure_stage: String,
+    failure_message: String,
+}
+
 fn write_artifacts(args: WriteArtifactsArgs) -> Result<()> {
     let notes = read_nonempty(&args.notes_file)?;
+    let artifact = ReleaseNoteArtifact::from_markdown(&args.version, &notes);
     if !args.output_file.trim().is_empty() {
-        write_notes_file(&notes, &args.output_file, &args.version)?;
+        write_notes_file(&artifact.notes, &args.output_file, &args.version)?;
     }
     if !args.output_text_file.trim().is_empty() {
-        write_notes_file(
-            &markdown_to_plaintext(&notes),
-            &args.output_text_file,
-            &args.version,
-        )?;
+        write_notes_file(&artifact.plaintext, &args.output_text_file, &args.version)?;
     }
     if !args.output_html_file.trim().is_empty() {
-        write_notes_file(
-            &markdown_to_html_fragment(&notes),
-            &args.output_html_file,
-            &args.version,
-        )?;
+        write_notes_file(&artifact.html, &args.output_html_file, &args.version)?;
     }
     if !args.output_json.trim().is_empty() {
-        append_json_entry(&args.output_json, &args.version, &notes)?;
+        append_json_entry(&args.output_json, &artifact)?;
     }
-    print!("{}", notes);
+    print!("{}", artifact.notes);
     Ok(())
 }
 
@@ -1001,25 +1197,63 @@ fn write_notes_file(content: &str, template: &str, version: &str) -> Result<Path
     Ok(path)
 }
 
-fn append_json_entry(template: &str, version: &str, notes: &str) -> Result<()> {
-    let path = PathBuf::from(template.replace("{version}", version));
+fn append_json_entry(template: &str, artifact: &ReleaseNoteArtifact) -> Result<()> {
+    let path = PathBuf::from(template.replace("{version}", &artifact.tag));
     let mut entries = if path.is_file() {
         serde_json::from_str::<Vec<Value>>(&fs::read_to_string(&path)?)?
     } else {
         Vec::new()
     };
-    entries.retain(|entry| entry["version"].as_str() != Some(version));
-    entries.push(json!({
-        "version": version.trim_start_matches('v'),
-        "tag": version,
-        "notes": notes,
-        "html": markdown_to_html_fragment(notes),
-        "plaintext": markdown_to_plaintext(notes),
-        "published_at": Utc::now().to_rfc3339(),
-    }));
+    entries.retain(|entry| {
+        entry["tag"].as_str() != Some(&artifact.tag)
+            && entry["version"].as_str() != Some(&artifact.version)
+    });
+    entries.push(artifact.json_entry());
     ensure_parent(&path)?;
     fs::write(path, serde_json::to_string_pretty(&entries)? + "\n")?;
     Ok(())
+}
+
+fn parse_note_sections(markdown: &str) -> Vec<NoteSection> {
+    let mut sections = Vec::new();
+    let mut current = NoteSection {
+        title: "Release notes".to_string(),
+        bullets: Vec::new(),
+    };
+    let link_re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
+    for line in markdown.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("## ") {
+            if !current.bullets.is_empty() || current.title != "Release notes" {
+                sections.push(current);
+            }
+            current = NoteSection {
+                title: trimmed.trim_start_matches('#').trim().to_string(),
+                bullets: Vec::new(),
+            };
+            continue;
+        }
+        if let Some(text) = trimmed.strip_prefix("- ") {
+            let links = link_re
+                .captures_iter(text)
+                .filter_map(|caps| {
+                    let href = caps.get(2)?.as_str();
+                    Some(NoteLink {
+                        label: caps.get(1)?.as_str().to_string(),
+                        href: safe_link_href(href)?.to_string(),
+                    })
+                })
+                .collect();
+            current.bullets.push(NoteBullet {
+                text: markdown_to_plaintext(text),
+                links,
+            });
+        }
+    }
+    if !current.bullets.is_empty() || current.title != "Release notes" {
+        sections.push(current);
+    }
+    sections
 }
 
 fn markdown_to_plaintext(markdown: &str) -> String {
@@ -1076,6 +1310,7 @@ fn update_feed(args: UpdateFeedArgs) -> Result<()> {
         return Err("max-entries must be positive".into());
     }
     let notes = read_nonempty(&args.notes_file)?;
+    let artifact = ReleaseNoteArtifact::from_markdown(&args.release_tag, &notes);
     let path = args.workspace.join(&args.feed_file);
     let canonical_workspace = args
         .workspace
@@ -1095,7 +1330,7 @@ fn update_feed(args: UpdateFeedArgs) -> Result<()> {
         title: format!("{} {}", args.repository, args.release_tag),
         link: args.release_url,
         guid: args.release_tag.clone(),
-        description: markdown_to_html_fragment(&notes),
+        description: artifact.html,
         pub_date: Utc::now().to_rfc2822(),
     };
     items.retain(|item| item.guid != new_item.guid);
@@ -1171,15 +1406,8 @@ fn notify_webhook(args: NotifyWebhookArgs) -> Result<()> {
     validate_url(&args.webhook_url)?;
     validate_repo(&args.repository)?;
     let notes = read_nonempty(&args.notes_file)?;
-    let payload = json!({
-        "version": args.version,
-        "repository": args.repository,
-        "release_url": args.release_url,
-        "notes": notes,
-        "html": markdown_to_html_fragment(&notes),
-        "plaintext": markdown_to_plaintext(&notes),
-        "published_at": Utc::now().to_rfc3339(),
-    });
+    let artifact = ReleaseNoteArtifact::from_markdown(&args.version, &notes);
+    let payload = artifact.webhook_payload(&args.repository, &args.release_url);
     let body = payload.to_string();
     let mut command = Command::new("curl");
     command
@@ -1224,13 +1452,8 @@ fn notify_slack(args: NotifySlackArgs) -> Result<()> {
     }
     validate_repo(&args.repository)?;
     let notes = read_nonempty(&args.notes_file)?;
-    let payload = json!({
-        "blocks": [
-            {"type": "header", "text": {"type": "plain_text", "text": format!("{} {}", args.repository, args.version)}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": markdown_to_slack(&notes)}},
-            {"type": "context", "elements": [{"type": "mrkdwn", "text": format!("<{}|View release>", args.release_url)}]}
-        ]
-    });
+    let artifact = ReleaseNoteArtifact::from_markdown(&args.version, &notes);
+    let payload = artifact.slack_payload(&args.repository, &args.release_url);
     let response = curl_json("POST", &args.slack_webhook_url, None, Some(&payload))?;
     if (200..300).contains(&response.status) {
         Ok(())
@@ -1240,9 +1463,17 @@ fn notify_slack(args: NotifySlackArgs) -> Result<()> {
 }
 
 fn markdown_to_slack(markdown: &str) -> String {
-    let text = Regex::new(r"\[([^\]]+)\]\((https?://[^)]+)\)")
+    let text = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)")
         .unwrap()
-        .replace_all(markdown, "<$2|$1>")
+        .replace_all(markdown, |caps: &regex::Captures| {
+            let label = caps.get(1).unwrap().as_str();
+            let href = caps.get(2).unwrap().as_str();
+            if safe_link_href(href).is_some() {
+                format!("<{href}|{label}>")
+            } else {
+                label.to_string()
+            }
+        })
         .to_string();
     text.replace("**", "*")
 }
@@ -2203,6 +2434,26 @@ fn read_nonempty(path: &Path) -> Result<String> {
     }
 }
 
+fn write_json_if_requested<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    if !is_requested_path(path) {
+        return Ok(());
+    }
+    ensure_parent(path)?;
+    fs::write(path, serde_json::to_string_pretty(value)? + "\n")?;
+    Ok(())
+}
+
+fn read_json_array_if_requested(path: &Path) -> Result<Vec<Value>> {
+    if !is_requested_path(path) || !path.is_file() {
+        return Ok(Vec::new());
+    }
+    Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
+}
+
+fn is_requested_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty() && path != Path::new(".")
+}
+
 fn validate_nonblank(value: &str, name: &str) -> Result<()> {
     if value.trim().is_empty() {
         Err(format!("{name} must not be blank").into())
@@ -2265,6 +2516,70 @@ mod tests {
             markdown_to_html_fragment("[bad](javascript:alert(1)) [ok](https://example.com)");
         assert!(html.contains("href=\"#\""));
         assert!(html.contains("href=\"https://example.com\""));
+    }
+
+    #[test]
+    fn typed_artifact_renders_shared_outputs() {
+        let artifact = ReleaseNoteArtifact::from_markdown(
+            "v1.2.3",
+            "## Added\n\n- See [docs](https://example.com) and [bad](javascript:alert(1))",
+        );
+        assert_eq!(artifact.version, "1.2.3");
+        assert!(artifact.html.contains("href=\"https://example.com\""));
+        assert!(artifact.html.contains("href=\"#\""));
+        assert!(artifact.plaintext.contains("See docs and bad"));
+        assert!(artifact.slack.contains("<https://example.com|docs>"));
+        assert!(!artifact.slack.contains("javascript:"));
+        assert_eq!(artifact.sections[0].title, "Added");
+        assert_eq!(
+            artifact.sections[0].bullets[0].links[0].href,
+            "https://example.com"
+        );
+        assert!(artifact.json_entry()["sections"].is_array());
+    }
+
+    #[test]
+    fn summary_status_includes_attempts_and_destinations() {
+        let output = temp_file("summary-test").unwrap();
+        let attempts = temp_file("attempts-test").unwrap();
+        fs::write(
+            &attempts,
+            r#"[{"model":"primary","succeeded":false},{"model":"fallback","succeeded":true}]"#,
+        )
+        .unwrap();
+        let args = SummaryArgs {
+            synthesis_enabled: "true".into(),
+            released: "true".into(),
+            synth_succeeded: "true".into(),
+            synth_quality: "valid".into(),
+            update_succeeded: "true".into(),
+            synth_failure_stage: "".into(),
+            synth_failure_message: "".into(),
+            update_failure_stage: "".into(),
+            update_failure_message: "".into(),
+            artifact_succeeded: "true".into(),
+            artifact_failure_stage: "".into(),
+            artifact_failure_message: "".into(),
+            rss_enabled: "true".into(),
+            rss_succeeded: "false".into(),
+            rss_failure_stage: "rss_update".into(),
+            rss_failure_message: "push failed".into(),
+            webhook_enabled: "true".into(),
+            webhook_sent: "true".into(),
+            slack_enabled: "true".into(),
+            slack_sent: "false".into(),
+            github_output: output.clone(),
+            attempts_file: attempts,
+        };
+        summary_policy(args).unwrap();
+        let outputs = parse_outputs(&output).unwrap();
+        assert_eq!(outputs["succeeded"], "false");
+        let status: Value = serde_json::from_str(&outputs["status_json"]).unwrap();
+        assert_eq!(status["model_attempts"].as_array().unwrap().len(), 2);
+        assert_eq!(status["destinations"]["rss"]["enabled"], true);
+        assert_eq!(status["destinations"]["rss"]["failure_stage"], "rss_update");
+        assert_eq!(status["destinations"]["webhook"]["succeeded"], true);
+        assert_eq!(status["destinations"]["slack"]["succeeded"], false);
     }
 
     #[test]
