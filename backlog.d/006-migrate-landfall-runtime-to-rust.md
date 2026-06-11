@@ -1,17 +1,17 @@
 # Migrate the Landfall runtime to Rust
 
-Priority: P1 · Status: ready · Estimate: XL
+Priority: P1 · Status: done · Estimate: XL
 
 ## Goal
 Move Landfall's owned runtime from Python and bash orchestration to a tested Rust binary while preserving the public GitHub Action contract and the semantic-release engine boundary.
 
 ## Oracle
-- [ ] `bin/gate` exits 0 and runs Rust fmt, clippy, tests, action metadata validation, contract validation, and the consumer replay harness.
-- [ ] `cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings` exit 0.
-- [ ] `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback` exits 0 and leaves an evidence packet.
-- [ ] `! rg -n "setup-python|python -m pip|\\$\\{GITHUB_ACTION_PATH\\}/scripts/.*\\.py|scripts/.*\\.py" action.yml .github/workflows README.md` exits 0, except historical changelog text.
-- [ ] `test -z "$(find scripts tests -name '*.py' -print)"` exits 0 after the final removal milestone.
-- [ ] `npm ci --no-fund --no-audit` still exits 0 because semantic-release remains the external release engine for full mode.
+- [x] `bin/gate` exits 0 and runs Rust fmt, clippy, tests, action metadata validation, contract validation, and the consumer replay harness.
+- [x] `cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings` exit 0.
+- [x] `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback` exits 0 and leaves an evidence packet.
+- [x] `! rg -n "setup-python|python -m pip|\\$\\{GITHUB_ACTION_PATH\\}/scripts/.*\\.py|scripts/.*\\.py" action.yml .github/workflows README.md` exits 0, except historical changelog text.
+- [x] `test -z "$(find scripts tests -name '*.py' -print)"` exits 0 after the final removal milestone.
+- [x] `npm ci --no-fund --no-audit` still exits 0 because semantic-release remains the external release engine for full mode.
 
 ## PRD Summary
 - User: maintainers shipping Landfall and consumer-repo developers who need predictable release automation.
@@ -127,3 +127,11 @@ Evidence artifacts:
 - Stop and reshape if GitHub Action distribution cannot use a checked-in Linux binary and source-building is too slow for consumers.
 - Stop and return to product direction if preserving `synthesis-strict` or failure-issue behavior conflicts with the new release integrity policy.
 - Stop if replay fixtures show behavior drift that is not an explicitly approved contract change.
+
+## Delivery
+- Added the Rust workspace and `landfall` CLI in `crates/landfall`, with subcommands for synthesis, release-body mutation, policy, artifacts, feeds, notifications, failure issues, metadata checks, action-contract checks, floating tags, and replay.
+- Replaced Python setup and script invocation in `action.yml` and CI with the Rust runtime while retaining Node only for `semantic-release`.
+- Added `dist/landfall` as a static x86-64 Linux binary, `dist/landfall.sha256`, `.cargo/config.toml` for musl `rust-lld` builds, `bin/replay-action`, and Rust-owned `bin/gate`.
+- Deleted the Python scripts, pytest suite, and `pyproject.toml`.
+- Added ADR `docs/adr/0001-rust-runtime-boundary.md`.
+- Evidence: `bin/gate`; `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback --evidence-dir .landfall/replay-ticket-006`; `file dist/landfall`; `shasum -a 256 -c dist/landfall.sha256`; no Python script references in action/CI/README; no `scripts` or `tests` Python files remain.

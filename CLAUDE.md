@@ -12,7 +12,7 @@ A reusable GitHub Action that handles the complete release pipeline:
 ## Architecture
 Composite GitHub Action with these steps:
 - `semantic-release` handles steps 1-4 (proven, battle-tested)
-- Custom Python script handles step 5-6 (LLM synthesis via OpenAI-compatible API)
+- Checked-in Rust runtime handles step 5-6 plus policy, artifacts, notifications, and replay
 
 ## Key Design Decisions
 - **Unix philosophy**: This does ONE thing — releases. Not code review, not monitoring.
@@ -25,9 +25,11 @@ Composite GitHub Action with these steps:
 ```
 landfall/
 ├── action.yml              # Reusable GitHub Action (called by repos)
-├── scripts/
-│   ├── synthesize.py       # LLM synthesis of user-facing notes
-│   └── update-release.py   # Updates GitHub Release body
+├── crates/
+│   └── landfall/           # Rust runtime
+├── dist/
+│   ├── landfall            # Linux action binary
+│   └── landfall.sha256     # Checksum
 ├── templates/
 │   └── synthesis-prompt.md # Prompt template for LLM
 ├── configs/
@@ -66,6 +68,6 @@ jobs:
 
 ## Requirements
 - Node.js 22+
-- Python 3.12+
+- Rust stable
 - `GH_RELEASE_TOKEN` secret (PAT with repo write + admin bypass)
 - `OPENROUTER_API_KEY` secret (or another compatible provider API key)

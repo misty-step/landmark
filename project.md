@@ -44,19 +44,19 @@ Automated release pipeline GitHub Action â€” semantic-release + LLM synthesis â€
 - [ ] Tests cover both the happy path and every failure branch
 - [ ] Default action mode publishes the release even when synthesis fails; `synthesis-required` makes synthesis and publication policy failures explicit blockers
 - [ ] No shell injection vectors in `run:` blocks (use `env:` for all inputs)
-- [ ] Python scripts handle all edge cases without crashing CI
+- [ ] Rust runtime handles all edge cases without crashing CI
 
 ## Patterns to Follow
 
 ### Shell Safety (action.yml run blocks)
 ```yaml
 # NEVER interpolate inputs directly
-run: python script.py --key "${{ inputs.llm-api-key }}"  # BAD
+run: landfall synthesize --api-key "${{ inputs.llm-api-key }}"  # BAD
 
 # ALWAYS use env: block
 env:
   API_KEY: ${{ inputs.llm-api-key }}
-run: python script.py --key "${API_KEY}"                  # GOOD
+run: landfall synthesize --api-key "${API_KEY}"                  # GOOD
 ```
 
 ### Output Writing
@@ -77,11 +77,11 @@ set_output "failure_stage" "synthesis"
 exit 0   # NOT exit 1
 ```
 
-### Python Script Conventions
-- All scripts use `argparse`, structured logging via `shared.py`
-- `log_event()` for structured JSON log lines
-- `request_with_retry()` for all HTTP calls
-- Tests in `tests/test_<script>.py` with fixtures in `conftest.py`
+### Rust Runtime Conventions
+- One CLI owns Landfall behavior behind stable subcommands
+- Structured diagnostics stay actionable in GitHub Actions logs
+- HTTP calls use bounded failure semantics
+- Tests live with the Rust crate; replay verifies action-level behavior
 
 ## Lessons Learned
 

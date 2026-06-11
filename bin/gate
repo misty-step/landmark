@@ -2,27 +2,28 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-VENV_DIR="${LANDFALL_GATE_VENV:-${TMPDIR:-/tmp}/landfall-gate-venv}"
 
 cd "${ROOT}"
 
-"${PYTHON_BIN}" -m venv "${VENV_DIR}"
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install "requests==2.34.2" pytest ruff check-jsonschema
-
 npm ci --no-fund --no-audit
-"${VENV_DIR}/bin/python" -m ruff check scripts/ tests/
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
 tag_ref="HEAD"
 if git remote get-url origin >/dev/null 2>&1; then
   git fetch --tags --force origin master
   tag_ref="origin/master"
 fi
-"${VENV_DIR}/bin/python" scripts/check-version-sync.py --reference "${tag_ref}"
-"${VENV_DIR}/bin/python" scripts/check-action-contract.py
-"${VENV_DIR}/bin/python" -m pytest -q tests/
-"${VENV_DIR}/bin/python" scripts/replay-action.py --evidence-dir .landfall/replay
-"${VENV_DIR}/bin/python" -m check_jsonschema --schemafile https://json.schemastore.org/github-action.json action.yml
+cargo run --locked -- check-version-sync --reference "${tag_ref}"
+cargo run --locked -- check-action-contract
+cargo run --locked -- replay-action --evidence-dir .landfall/replay
+if command -v rustup >/dev/null 2>&1; then
+  rustup target add x86_64-unknown-linux-musl
+fi
+cargo build --locked --release --target x86_64-unknown-linux-musl
+test -x dist/landfall
+cmp target/x86_64-unknown-linux-musl/release/landfall dist/landfall
+shasum -a 256 -c dist/landfall.sha256
 
 if command -v actionlint >/dev/null 2>&1; then
   actionlint

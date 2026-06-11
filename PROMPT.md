@@ -16,20 +16,20 @@ Inputs:
 
 Steps:
 1. Setup Node.js
-2. Setup Python 3.12
+2. Use the checked-in Rust runtime for Landfall-owned behavior
 3. Install dependencies (semantic-release + plugins)
 4. Run semantic-release (generates changelog, bumps version, creates release)
-5. If synthesis=true: Run synthesis script to generate user-facing notes
+5. If synthesis=true: Run the Rust runtime to generate user-facing notes
 6. Update the GitHub Release body with synthesized notes
 
-### 2. scripts/synthesize.py
+### 2. Rust synthesize command
 - Takes the technical changelog (from semantic-release output or CHANGELOG.md diff)
 - Calls any OpenAI-compatible API to synthesize user-facing release notes
 - Uses the prompt template from templates/synthesis-prompt.md
 - Tries primary model first, then fallback models in order
 - Outputs the synthesized notes to stdout
 
-### 3. scripts/update-release.py
+### 3. Rust update-release command
 - Takes the synthesized notes and the release tag
 - Updates the GitHub Release body via GitHub API
 - Prepends "## What's New" (user-facing) above the technical notes
@@ -58,8 +58,7 @@ Steps:
 - Uses OpenRouter by default: POST https://openrouter.ai/api/v1/chat/completions
 - Default model: anthropic/claude-sonnet-4 with fallbacks to gemini-2.5-flash and gpt-4o-mini
 - The synthesis doesn't need to be agentic — a single chat completion is fine
-- Use `requests` for HTTP calls in Python (pip install requests)
-- For the GitHub API calls, use `requests` with the token
+- Keep HTTP calls inside the Rust runtime and preserve token redaction boundaries
 
 ## Git Workflow
 - Commit frequently with conventional commit messages

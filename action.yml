@@ -145,11 +145,6 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-
     - name: Install Node dependencies
       if: inputs.mode != 'synthesis-only'
       shell: bash
@@ -157,13 +152,6 @@ runs:
       run: |
         set -euo pipefail
         npm ci --no-fund --no-audit
-
-    - name: Install Python dependencies
-      shell: bash
-      run: |
-        set -euo pipefail
-        python -m pip install --upgrade pip
-        python -m pip install "requests==2.34.2"
 
     - name: Validate LLM API key
       if: (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
@@ -179,7 +167,7 @@ runs:
         if [ "${SYNTHESIS_REQUIRED}" != "true" ]; then
           WARN_ONLY_ARGS=(--warn-only)
         fi
-        python "${GITHUB_ACTION_PATH}/scripts/healthcheck.py" \
+        "${GITHUB_ACTION_PATH}/dist/landfall" healthcheck \
           --api-key "${LLM_API_KEY}" \
           --model "${LLM_MODEL}" \
           --api-url "${LLM_API_URL}" \
@@ -191,7 +179,7 @@ runs:
       run: |
         set -euo pipefail
         git fetch --tags --force 2>/dev/null || true
-        python "${GITHUB_ACTION_PATH}/scripts/preflight-tags.py"
+        "${GITHUB_ACTION_PATH}/dist/landfall" preflight-tags
 
     - name: Run semantic-release
       id: semantic_release
@@ -327,7 +315,7 @@ runs:
         fetch_release_body() {
           local target_file="$1"
           local fetch_log="${RUNNER_TEMP}/landfall-fetch-release-body.log"
-          if ! python "${GITHUB_ACTION_PATH}/scripts/fetch-release-body.py" \
+          if ! "${GITHUB_ACTION_PATH}/dist/landfall" fetch-release-body \
             --github-token "${GITHUB_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --release-tag "${release_tag}" \
@@ -342,7 +330,7 @@ runs:
 
         build_pr_changelog() {
           local target_file="$1"
-          python "${GITHUB_ACTION_PATH}/scripts/extract-prs.py" \
+          "${GITHUB_ACTION_PATH}/dist/landfall" extract-prs \
             --github-token "${GITHUB_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --release-tag "${release_tag}" \
@@ -424,7 +412,17 @@ runs:
 
         quality_file="${RUNNER_TEMP}/landfall-synthesis-quality.txt"
         synth_log="${RUNNER_TEMP}/landfall-synthesize.log"
-        if ! python "${GITHUB_ACTION_PATH}/scripts/synthesize.py" \
+        synth_source_args=()
+        if [ -n "${release_body_file}" ]; then
+          synth_source_args+=(--release-body-file "${release_body_file}")
+        fi
+        if [ -n "${pr_changelog_file}" ]; then
+          synth_source_args+=(--pr-changelog-file "${pr_changelog_file}")
+        fi
+        if [ -n "${prompt_template}" ]; then
+          synth_source_args+=(--prompt-template "${prompt_template}")
+        fi
+        if ! "${GITHUB_ACTION_PATH}/dist/landfall" synthesize \
           --api-key "${api_key}" \
           --model "${LLM_MODEL}" \
           --api-url "${LLM_API_URL}" \
@@ -436,9 +434,8 @@ runs:
           --changelog-source "${changelog_source}" \
           --version "${release_tag}" \
           --changelog-file "${changelog_file}" \
-          --release-body-file "${release_body_file}" \
-          --pr-changelog-file "${pr_changelog_file}" \
-          --prompt-template "${prompt_template}" \
+          "${synth_source_args[@]}" \
+          --templates-dir "${GITHUB_ACTION_PATH}/templates/prompts" \
           --quality-file "${quality_file}" \
           > "${notes_file}" \
           2> "${synth_log}"; then
@@ -483,7 +480,7 @@ runs:
         SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
       run: |
         set -euo pipefail
-        python "${GITHUB_ACTION_PATH}/scripts/release-policy.py" publication \
+        "${GITHUB_ACTION_PATH}/dist/landfall" release-policy publication \
           --synthesis-required "${SYNTHESIS_REQUIRED}" \
           --synthesis-strict "${SYNTHESIS_STRICT}" \
           --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
@@ -535,7 +532,7 @@ runs:
         fi
 
         update_log="${RUNNER_TEMP}/landfall-update-release.log"
-        if ! python "${GITHUB_ACTION_PATH}/scripts/update-release.py" \
+        if ! "${GITHUB_ACTION_PATH}/dist/landfall" update-release \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --tag "${RELEASE_TAG}" \
@@ -587,7 +584,7 @@ runs:
 
         if [ -f "${NOTES_FILE}" ]; then
           artifacts_log="${RUNNER_TEMP}/landfall-write-artifacts.log"
-          if notes_output="$(python "${GITHUB_ACTION_PATH}/scripts/write-artifacts.py" \
+          if notes_output="$("${GITHUB_ACTION_PATH}/dist/landfall" write-artifacts \
             --notes-file "${NOTES_FILE}" \
             --version "${RELEASE_TAG}" \
             --output-file "${OUTPUT_FILE}" \
@@ -673,7 +670,7 @@ runs:
         rss_log="${RUNNER_TEMP}/landfall-update-rss.log"
 
         if {
-          python "${GITHUB_ACTION_PATH}/scripts/update-feed.py" \
+          "${GITHUB_ACTION_PATH}/dist/landfall" update-feed \
             --feed-file "${RSS_FEED_FILE}" \
             --max-entries "${RSS_MAX_ENTRIES}" \
             --repository "${GITHUB_REPOSITORY}" \
@@ -739,7 +736,7 @@ runs:
           exit 0
         fi
 
-        if python "${GITHUB_ACTION_PATH}/scripts/notify.py" \
+        if "${GITHUB_ACTION_PATH}/dist/landfall" notify-webhook \
           --webhook-url "${WEBHOOK_URL}" \
           --webhook-secret "${WEBHOOK_SECRET}" \
           --version "${release_tag}" \
@@ -779,7 +776,8 @@ runs:
           exit 0
         fi
 
-        if python "${GITHUB_ACTION_PATH}/scripts/notify-slack.py" \
+        if "${GITHUB_ACTION_PATH}/dist/landfall" notify-slack \
+          --slack-webhook-url "${SLACK_WEBHOOK_URL}" \
           --version "${release_tag}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-url "${release_url}" \
@@ -811,7 +809,7 @@ runs:
         RSS_FAILURE_MESSAGE: ${{ steps.update_rss.outputs.failure_message }}
       run: |
         set -euo pipefail
-        python "${GITHUB_ACTION_PATH}/scripts/release-policy.py" summary \
+        "${GITHUB_ACTION_PATH}/dist/landfall" release-policy summary \
           --synthesis-enabled "${SYNTHESIS_ENABLED}" \
           --released "${RELEASED}" \
           --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
@@ -865,7 +863,7 @@ runs:
           exit 1
         fi
 
-        major_tag="$(python "${GITHUB_ACTION_PATH}/scripts/update-floating-tag.py" --release-tag "${release_tag}")"
+        major_tag="$("${GITHUB_ACTION_PATH}/dist/landfall" floating-tag --release-tag "${release_tag}")"
         if [ -z "${major_tag}" ]; then
           echo "::notice::Skipping floating tag update for pre-release tag ${release_tag}."
           exit 0
@@ -887,7 +885,7 @@ runs:
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
       run: |
         set -euo pipefail
-        if ! python "${GITHUB_ACTION_PATH}/scripts/close-resolved-failures.py" \
+        if ! "${GITHUB_ACTION_PATH}/dist/landfall" close-resolved-failures \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}"; then
@@ -905,7 +903,7 @@ runs:
       run: |
         set -euo pipefail
         run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-        if ! python "${GITHUB_ACTION_PATH}/scripts/report-synthesis-failure.py" \
+        if ! "${GITHUB_ACTION_PATH}/dist/landfall" report-synthesis-failure \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}" \

@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: npm ci --no-fund --no-audit
 
-  python-checks:
+  rust-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,21 +30,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust targets
+        shell: bash
+        run: rustup target add x86_64-unknown-linux-musl
 
       - name: Install tooling
         shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install "requests==2.34.2" pytest ruff check-jsonschema
+        run: npm ci --no-fund --no-audit
 
-      - name: Lint Python
+      - name: Format Rust
         shell: bash
-        run: python -m ruff check scripts/ tests/
+        run: cargo fmt --check
+
+      - name: Lint Rust
+        shell: bash
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Verify metadata versions match latest release tag
         shell: bash
@@ -57,22 +60,31 @@ jobs:
           if [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
             tag_ref="${PR_BASE_SHA}"
           fi
-          python scripts/check-version-sync.py --reference "${tag_ref}"
+          cargo run --locked -- check-version-sync --reference "${tag_ref}"
 
       - name: Verify public action contract
         shell: bash
-        run: python scripts/check-action-contract.py
+        run: cargo run --locked -- check-action-contract
 
       - name: Run tests
         shell: bash
-        run: python -m pytest -q tests/
+        run: cargo test --locked
+
+      - name: Verify checked-in Linux action binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --target x86_64-unknown-linux-musl
+          test -x dist/landfall
+          shasum -a 256 -c dist/landfall.sha256
+          dist/landfall --help >/dev/null
 
       - name: Replay Landfall action behavior
         shell: bash
         run: |
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-            python scripts/replay-action.py \
+            dist/landfall replay-action \
               --evidence-dir .landfall/replay \
               --scenario action_static_contract \
               --scenario consumer_full_mode_success \
@@ -81,7 +93,7 @@ jobs:
               --scenario consumer_release_update_failure \
               --scenario consumer_floating_tag_behavior
           else
-            python scripts/replay-action.py --evidence-dir .landfall/replay
+            dist/landfall replay-action --evidence-dir .landfall/replay
           fi
 
       - name: Upload replay evidence
@@ -94,11 +106,11 @@ jobs:
 
       - name: Validate action metadata
         shell: bash
-        run: python -m check_jsonschema --schemafile https://json.schemastore.org/github-action.json action.yml
+        run: cargo run --locked -- check-action-contract
 
   merge-gate:
     runs-on: ubuntu-latest
-    needs: [lockfile-check, python-checks]
+    needs: [lockfile-check, rust-checks]
     if: always()
     steps:
       - name: All checks passed

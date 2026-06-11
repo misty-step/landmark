@@ -1,0 +1,7 @@
+[workspace]
+members = ["crates/landfall"]
+resolver = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
