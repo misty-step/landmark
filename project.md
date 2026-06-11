@@ -14,7 +14,7 @@ Automated release pipeline GitHub Action — semantic-release + LLM synthesis �
 - Distribution channels: GitHub Release, webhook, Slack Block Kit, RSS
 - Fallback chains: primary model → fallback models → graceful degradation
 
-**Current Focus:** DX hardening — clearer errors when LLM config is wrong, better onboarding, polish before pushing adoption.
+**Current Focus:** Release integrity, contract validation, and consumer adoption after clearing the February backlog.
 
 ## Domain Glossary
 
@@ -33,9 +33,9 @@ Automated release pipeline GitHub Action — semantic-release + LLM synthesis �
 
 ## Active Focus
 
-- **Milestone:** Now: Current Sprint
-- **Key Issues:** #88 (LLM config mismatch fail-fast), #90 (tagFormat preflight)
-- **Theme:** Developer experience — better errors, faster onboarding, easier debugging
+- **Milestone:** Post-backlog reset
+- **Backlog source:** `backlog.d/`
+- **Theme:** Make Landfall trustworthy as reusable infrastructure: self-validating docs/contracts, explicit release integrity policy, live consumer replay, and lower-friction ecosystem adoption.
 
 ## Quality Bar
 
