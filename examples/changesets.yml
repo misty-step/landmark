@@ -67,42 +67,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Extract version from the first published package.
-      # Adjust the tag format (v{version}) to match your convention.
-      - name: Resolve release tag
-        id: tag
-        env:
-          PUBLISHED_PACKAGES: ${{ needs.release.outputs.published_packages }}
-        run: |
-          tag=$(echo "${PUBLISHED_PACKAGES}" \
-            | python3 -c "import sys,json; print('v' + json.load(sys.stdin)[0]['version'])")
-          echo "name=${tag}" >> "${GITHUB_OUTPUT}"
-
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
-          release-tag: ${{ steps.tag.outputs.name }}
+          release-tag: v${{ fromJson(needs.release.outputs.published_packages)[0].version }}
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize synthesis behavior.
           # audience: developer
           # changelog-source: release-body
 
-# Monorepo variant: if changesets publishes multiple packages,
-# use a matrix strategy to synthesize notes for each release.
-#
-#   synthesize:
-#     needs: release
-#     if: needs.release.outputs.published == 'true'
-#     runs-on: ubuntu-latest
-#     strategy:
-#       matrix:
-#         package: ${{ fromJson(needs.release.outputs.published_packages) }}
-#     steps:
-#       - uses: actions/checkout@v4
-#       - uses: misty-step/landfall@v1
-#         with:
-#           mode: synthesis-only
-#           release-tag: "${{ matrix.package.name }}@${{ matrix.package.version }}"
-#           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-#           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+# Monorepos should use examples/changesets-monorepo.yml, which runs Landfall
+# once per published package with a first-class matrix.
