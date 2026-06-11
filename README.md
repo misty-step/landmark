@@ -5,12 +5,13 @@ It runs `semantic-release` to publish a version and changelog, then optionally s
 
 ## What It Does
 
-1. Sets up Node.js and Python 3.12
-2. Installs `semantic-release` and release plugins
-3. Runs `semantic-release` (version bump, changelog update, release creation)
-4. Optionally synthesizes user-facing notes from technical changelog content
-5. Updates the GitHub Release body to prepend a `## What's New` section
-6. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
+1. Uses a checked-in Rust runtime for Landfall-owned release behavior
+2. Sets up Node.js only when full semantic-release mode is requested
+3. Installs `semantic-release` and release plugins
+4. Runs `semantic-release` (version bump, changelog update, release creation)
+5. Optionally synthesizes user-facing notes from technical changelog content
+6. Updates the GitHub Release body to prepend a `## What's New` section
+7. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
 
 ## Quick Start
 
@@ -122,7 +123,7 @@ distribution steps:
   failures are reported through `synthesis-succeeded: false` and protected
   outputs such as floating tags do not move unless synthesis and release-body
   update both succeed.
-- External GitHub and LLM calls made by Landfall-owned scripts use bounded
+- External GitHub and LLM calls made by the Rust runtime use bounded
   timeouts and retry policy.
 - Generated `release-notes` output uses a collision-resistant GitHub output
   delimiter so synthesized content cannot truncate the output payload.
@@ -173,7 +174,7 @@ Use `mode: synthesis-only` when another tool handles versioning and you only wan
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
-This skips Node.js setup and semantic-release entirely — only Python is installed for synthesis. Works with any release tool that creates GitHub Releases.
+This skips Node.js setup and semantic-release entirely; the Rust runtime handles synthesis. Works with any release tool that creates GitHub Releases.
 
 ### Integration with Other Tools
 
@@ -189,33 +190,20 @@ Copy the relevant example to `.github/workflows/` in your repository and update 
 
 ### Backfill Existing Releases
 
-Use `scripts/backfill.py` to repair already-published releases that are missing `## What's New`.
+Backfill is no longer part of the core action surface. To repair an already-published release, rerun Landfall in `synthesis-only` mode for the target tag so the same Rust runtime path updates the GitHub Release body.
 
 Single release tag:
 
-```bash
-python scripts/backfill.py \
-  --repo owner/repo \
-  --github-token "$GH_RELEASE_TOKEN" \
-  --llm-api-key "$OPENROUTER_API_KEY" \
-  --prompt-template templates/synthesis-prompt.md \
-  --release-tag v1.12.0
+```yaml
+- uses: misty-step/landfall@v1
+  with:
+    mode: synthesis-only
+    release-tag: v1.12.0
+    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
-All missing releases:
-
-```bash
-python scripts/backfill.py \
-  --repo owner/repo \
-  --github-token "$GH_RELEASE_TOKEN" \
-  --llm-api-key "$OPENROUTER_API_KEY" \
-  --prompt-template templates/synthesis-prompt.md \
-  --all-missing
-```
-
-Notes:
-- `--all-missing` is optional; omitting both selectors keeps current behavior (scan all releases and fill only missing ones).
-- Use `--dry-run` to preview without updating release bodies.
+For multiple historical tags, dispatch one synthesis-only run per tag. This keeps repair behavior identical to normal release-note synthesis.
 
 ## Portable Release Notes (Private Repos)
 
@@ -293,11 +281,11 @@ This keeps release + `v1` floating-tag management inside Landfall (no manual tag
 
 ### Metadata Version Sync (Landfall Repo)
 
-This repository keeps `package.json` and `pyproject.toml` versions aligned to release tags:
+This repository keeps `package.json` and the Rust crate version aligned to release tags:
 
-- `.releaserc.json` runs `scripts/update-version-metadata.py` in semantic-release `prepare`.
-- The release commit includes `CHANGELOG.md`, `package.json`, and `pyproject.toml`.
-- CI runs `python scripts/check-version-sync.py` to fail fast when metadata drifts from the latest semver tag.
+- `.releaserc.json` runs `./dist/landfall update-version-metadata` in semantic-release `prepare`.
+- The release commit includes `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, and `Cargo.lock`.
+- CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
 Landfall's own release workflow is manual because `master` is protected by the
 required `merge-gate` check. Automatic self-release would need a PR-based
@@ -309,7 +297,7 @@ or a bypass-capable release token exists.
 
 The public action contract is checked from `action.yml`:
 
-- `python scripts/check-action-contract.py` fails when the README inputs table diverges from action metadata.
+- `cargo run --locked -- check-action-contract` fails when the README inputs table diverges from action metadata.
 - The same command scans examples, project docs, and release workflows for unknown or deprecated Landfall inputs.
 - CI runs the contract check before tests so stale consumer instructions fail fast.
 
@@ -321,7 +309,7 @@ artifact writing, failure policy, and floating-tag behavior without production
 secrets:
 
 ```bash
-python scripts/replay-action.py --evidence-dir .landfall/replay
+bin/replay-action --evidence-dir .landfall/replay
 ```
 
 The command writes `.landfall/replay/replay-result.json` with action outputs,
@@ -329,7 +317,7 @@ generated notes, release body before/after state, git tags, structured logs, and
 fake service requests. CI runs a bounded replay on pull requests, the full replay
 on `master`, and uploads the evidence packet for inspection.
 
-For a local one-command gate that creates its own Python tool environment, run:
+For a local one-command gate, run:
 
 ```bash
 bin/gate

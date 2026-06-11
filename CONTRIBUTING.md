@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.12+
+- Rust stable
 - Node.js 22+
 - npm (ships with Node)
 
@@ -16,39 +16,36 @@ cd landfall
 
 # Node dependencies (semantic-release and plugins)
 npm ci --no-fund --no-audit
-
-# Python dependencies (synthesis scripts + dev tooling)
-python -m pip install requests pytest ruff check-jsonschema
 ```
 
 ## Linting
 
 ```bash
-python -m ruff check scripts/ tests/
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
 ```
-
-Ruff is configured in `pyproject.toml` — targets Python 3.12, 120-char line length, E/F/W rule sets.
 
 ## Testing
 
 ```bash
-python -m pytest -q tests/
+cargo test --locked
+bin/replay-action --evidence-dir .landfall/replay
 ```
 
-Tests live in `tests/` and import from `scripts/` via the `pythonpath` setting in `pyproject.toml`.
+Unit tests live with the Rust runtime. The replay harness creates disposable consumer repositories and fake local GitHub/LLM endpoints.
 
 ## Validating action.yml
 
-The action metadata is validated against the official JSON schema:
+The public action contract is validated against `action.yml` and README/examples:
 
 ```bash
-python -m check_jsonschema --schemafile https://json.schemastore.org/github-action.json action.yml
+cargo run --locked -- check-action-contract
 ```
 
 ## CI
 
 All of the above run automatically on PRs and pushes to `master`. See `.github/workflows/ci.yml`.
-CI also runs `python scripts/check-version-sync.py`, which ensures `package.json` and `pyproject.toml` match the latest semver git tag.
+CI also runs `cargo run --locked -- check-version-sync`, which ensures `package.json` and `crates/landfall/Cargo.toml` match the latest semver git tag.
 
 ## Commits
 
@@ -72,7 +69,7 @@ Releases are fully automated. Merging to `master` triggers:
 2. LLM synthesis generates user-facing "What's New" notes and prepends them to the release body
 
 No manual version bumping or tagging required.
-Metadata versions are updated automatically during release prepare via `scripts/update-version-metadata.py`.
+Metadata versions are updated automatically during release prepare via `./dist/landfall update-version-metadata`.
 
 ## Architecture
 
@@ -82,20 +79,17 @@ landfall/
 ├── .releaserc.json           # Repo-local semantic-release config (metadata sync + release commit assets)
 ├── configs/
 │   └── .releaserc.json       # semantic-release config
-├── scripts/
-│   ├── shared.py             # Common utilities
-│   ├── check-version-sync.py # CI drift detection against latest semver tag
-│   ├── update-version-metadata.py # Release-time metadata version synchronizer
-│   ├── synthesize.py         # LLM synthesis of user-facing notes
-│   ├── update-release.py     # Prepends notes to GitHub Release body
-│   ├── write-artifacts.py    # Writes notes to file/JSON outputs
-│   ├── report-synthesis-failure.py  # Creates issue on failure
-│   ├── update-floating-tag.py       # Manages vN major tags
-│   └── backfill.py           # Backfill synthesis for past releases
+├── crates/
+│   └── landfall/             # Rust runtime and tests
+├── dist/
+│   ├── landfall              # Checked-in Linux action binary
+│   └── landfall.sha256       # Runtime checksum
+├── bin/
+│   ├── gate                  # Local verification gate
+│   └── replay-action         # Local consumer replay wrapper
 ├── templates/
 │   └── synthesis-prompt.md   # LLM prompt template
-├── tests/                    # pytest suite mirroring scripts/
 └── package.json              # Node deps for semantic-release
 ```
 
-The action runs as a composite GitHub Action (`action.yml`). Node handles `semantic-release`; Python handles everything else (synthesis, API calls, artifact writing).
+The action runs as a composite GitHub Action (`action.yml`). Node handles `semantic-release`; the Rust runtime handles synthesis, API calls, artifact writing, policy, and replay.
