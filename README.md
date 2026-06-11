@@ -108,9 +108,11 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 | `release-tag` | Tag created by `semantic-release` (empty if no release). |
 | `synthesis-succeeded` | `true` only when synthesis and release-body update both succeed for the released tag. |
 | `synthesis-quality` | `valid`, `degraded`, or `failed`. |
+| `synthesis-status` | Compact JSON status with quality, failure stage/message, model attempts, and publication destination outcomes. |
 | `release-notes` | Synthesized user-facing release notes markdown. Empty if synthesis was skipped or failed. |
 | `webhook-sent` | `true` when the generic webhook notification was sent successfully. |
 | `slack-sent` | `true` when the Slack notification was sent successfully. |
+| `synthesis-failure-issue-action` | Companion failure-issue lifecycle result: `closed`, `reported`, `failed`, or `skipped`. |
 
 ## Release Integrity Policy
 
@@ -222,18 +224,60 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
     notes-output-json: releases.json
 ```
 
-This writes per-version markdown files and maintains a JSON feed for changelog pages:
+This writes per-version markdown files and maintains a typed JSON artifact feed for changelog pages:
 
 ```json
 [
   {
     "version": "1.2.0",
-    "date": "2026-02-08",
+    "tag": "v1.2.0",
     "notes": "## New Features\n- ...",
-    "notes_plaintext": "New Features\n\n- ...",
-    "notes_html": "<h2>New Features</h2>\n<ul>\n<li>...</li>\n</ul>"
+    "markdown": "## New Features\n- ...",
+    "plaintext": "New Features\n...",
+    "html": "<h2>New Features</h2>\n<ul>\n<li>...</li>\n</ul>",
+    "slack": "## New Features\n- ...",
+    "sections": [
+      {
+        "title": "New Features",
+        "bullets": [
+          {
+            "text": "...",
+            "links": []
+          }
+        ]
+      }
+    ],
+    "published_at": "2026-02-08T12:00:00Z"
   }
 ]
+```
+
+The `synthesis-status` output is a compact JSON object for automation:
+
+```json
+{
+  "synthesis_enabled": true,
+  "released": true,
+  "succeeded": true,
+  "quality": "valid",
+  "failure_stage": "",
+  "failure_message": "",
+  "model_attempts": [
+    {
+      "model": "anthropic/claude-sonnet-4",
+      "succeeded": true,
+      "quality": "valid",
+      "message": ""
+    }
+  ],
+  "destinations": {
+    "release_body": { "enabled": true, "succeeded": true, "failure_stage": "", "failure_message": "" },
+    "artifacts": { "enabled": true, "succeeded": true, "failure_stage": "", "failure_message": "" },
+    "rss": { "enabled": false, "succeeded": false, "failure_stage": "", "failure_message": "" },
+    "webhook": { "enabled": false, "succeeded": false, "failure_stage": "", "failure_message": "" },
+    "slack": { "enabled": false, "succeeded": false, "failure_stage": "", "failure_message": "" }
+  }
+}
 ```
 
 ## RSS Release Feed
