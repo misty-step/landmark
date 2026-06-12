@@ -345,6 +345,8 @@ struct CheckVersionArgs {
     reference: String,
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
+    #[arg(long = "allow-release-candidate")]
+    allow_release_candidate: bool,
 }
 
 #[derive(Args)]
@@ -1471,6 +1473,17 @@ fn changelog_section(path: &Path, version: &str) -> Result<String> {
     } else {
         Ok(section)
     }
+}
+
+fn release_candidate_changelog_exists(path: &Path, version: &str) -> bool {
+    changelog_section(path, version)
+        .map(|section| {
+            section
+                .lines()
+                .map(str::trim)
+                .any(|line| line.starts_with("* ") || line.starts_with("- "))
+        })
+        .unwrap_or(false)
 }
 
 #[derive(Debug)]
@@ -2650,6 +2663,13 @@ fn check_version_sync(args: CheckVersionArgs) -> Result<()> {
     }
     if drift.is_empty() {
         println!("metadata matches latest tag version {latest}");
+        Ok(())
+    } else if args.allow_release_candidate
+        && package_version == cargo_version
+        && semver_key(package_version)? > semver_key(&latest)?
+        && release_candidate_changelog_exists(&args.repo_root.join("CHANGELOG.md"), package_version)
+    {
+        println!("metadata is valid release candidate {package_version} above latest tag {latest}");
         Ok(())
     } else {
         Err(drift.join("\n").into())
@@ -3865,6 +3885,84 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         assert!(text.contains("name = \"dep\"\nversion = \"0.1.0\""));
         assert!(text.contains("name = \"landfall\"\nversion = \"1.3.0\""));
+    }
+
+    #[test]
+    fn version_sync_allows_explicit_release_candidate() {
+        let repo = tempfile::tempdir().unwrap();
+        fs::create_dir_all(repo.path().join("crates/landfall")).unwrap();
+        run_ok("git", ["init", "-q"], repo.path()).unwrap();
+        run_ok("git", ["config", "user.name", "Landfall Test"], repo.path()).unwrap();
+        run_ok(
+            "git",
+            ["config", "user.email", "landfall@example.invalid"],
+            repo.path(),
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("package.json"),
+            r#"{"name":"landfall","version":"1.18.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("crates/landfall/Cargo.toml"),
+            "[package]\nname = \"landfall\"\nversion = \"1.18.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("CHANGELOG.md"),
+            "# [1.18.0](compare) (2026-06-12)\n\n### Features\n\n* release candidate\n",
+        )
+        .unwrap();
+        run_ok("git", ["add", "."], repo.path()).unwrap();
+        run_ok(
+            "git",
+            ["commit", "-q", "-m", "chore: candidate"],
+            repo.path(),
+        )
+        .unwrap();
+        run_ok("git", ["tag", "v1.17.2"], repo.path()).unwrap();
+        let strict = CheckVersionArgs {
+            reference: "HEAD".into(),
+            repo_root: repo.path().to_path_buf(),
+            allow_release_candidate: false,
+        };
+        assert!(check_version_sync(strict).is_err());
+        let candidate = CheckVersionArgs {
+            reference: "HEAD".into(),
+            repo_root: repo.path().to_path_buf(),
+            allow_release_candidate: true,
+        };
+        assert!(check_version_sync(candidate).is_ok());
+
+        fs::write(
+            repo.path().join("CHANGELOG.md"),
+            "# [1.18.0](compare) (2026-06-12)\n\n### Features\n\n",
+        )
+        .unwrap();
+        let missing_entry = CheckVersionArgs {
+            reference: "HEAD".into(),
+            repo_root: repo.path().to_path_buf(),
+            allow_release_candidate: true,
+        };
+        assert!(check_version_sync(missing_entry).is_err());
+
+        fs::write(
+            repo.path().join("CHANGELOG.md"),
+            "# [1.18.0](compare) (2026-06-12)\n\n### Features\n\n* release candidate\n",
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("crates/landfall/Cargo.toml"),
+            "[package]\nname = \"landfall\"\nversion = \"1.17.9\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        let mismatched_metadata = CheckVersionArgs {
+            reference: "HEAD".into(),
+            repo_root: repo.path().to_path_buf(),
+            allow_release_candidate: true,
+        };
+        assert!(check_version_sync(mismatched_metadata).is_err());
     }
 
     #[test]
