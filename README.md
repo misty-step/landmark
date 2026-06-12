@@ -65,6 +65,25 @@ jobs:
 
 Landfall is language-agnostic. Your repo does not need `package.json` or Node.js — the action handles its own runtime setup. Any project using conventional commits works.
 
+## Adoption Dry Run
+
+Before wiring a release workflow, run Landfall's setup analyzer from a checkout:
+
+```bash
+dist/landfall setup --repo-root . --output-dir .landfall/setup
+```
+
+The command inspects release-tool signals, default branch, tag format, required
+secrets, permissions, package topology, and recent conventional-commit usage. It
+prints a JSON report with a recommended Landfall mode and writes workflow
+candidates for semantic-release, release-please, changesets, changesets
+monorepos, and manual-tag repositories. Every generated workflow includes
+`healthcheck: "true"`, `GH_RELEASE_TOKEN`, `OPENROUTER_API_KEY`, and the
+`contents`, `issues`, and `pull-requests` permissions Landfall needs.
+
+The old Python backfill script is retired from the maintenance surface; use a
+release re-run or `mode: synthesis-only` for repair runs.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -186,6 +205,7 @@ Ready-to-use workflow examples for common release tools. Each uses `mode: synthe
 | --- | --- | --- |
 | [release-please](https://github.com/googleapis/release-please-action) | [`examples/release-please.yml`](examples/release-please.yml) | Push to main (release-please creates the release) |
 | [Changesets](https://github.com/changesets/changesets) | [`examples/changesets.yml`](examples/changesets.yml) | Push to main (changesets publishes packages) |
+| Changesets monorepo | [`examples/changesets-monorepo.yml`](examples/changesets-monorepo.yml) | Push to main (matrix per published package) |
 | Manual tags | [`examples/manual-tag.yml`](examples/manual-tag.yml) | Tag push matching `v*` |
 
 Copy the relevant example to `.github/workflows/` in your repository and update the secrets.

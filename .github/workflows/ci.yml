@@ -66,6 +66,10 @@ jobs:
         shell: bash
         run: cargo run --locked -- check-action-contract
 
+      - name: Verify adoption setup analyzer
+        shell: bash
+        run: cargo run --locked -- setup --repo-root . --output-dir .landfall/setup
+
       - name: Run tests
         shell: bash
         run: cargo test --locked

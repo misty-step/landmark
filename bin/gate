@@ -16,6 +16,7 @@ if git remote get-url origin >/dev/null 2>&1; then
 fi
 cargo run --locked -- check-version-sync --reference "${tag_ref}"
 cargo run --locked -- check-action-contract
+cargo run --locked -- setup --repo-root . --output-dir .landfall/setup
 cargo run --locked -- replay-action --evidence-dir .landfall/replay
 if command -v rustup >/dev/null 2>&1; then
   rustup target add x86_64-unknown-linux-musl

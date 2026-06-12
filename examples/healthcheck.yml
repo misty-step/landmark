@@ -1,4 +1,4 @@
-# Weekly LLM API key validation
+# Weekly Landfall LLM API key validation.
 # Catches stale or revoked keys before they cause release failures.
 name: LLM Key Health Check
 
@@ -7,6 +7,9 @@ on:
     - cron: "0 9 * * 1" # Monday 9am UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   healthcheck:
     runs-on: ubuntu-latest
@@ -14,18 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: misty-step/landfall@v1
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Validate API key
-        run: |
-          # Download and run the healthcheck script directly
-          curl -sSfL https://raw.githubusercontent.com/misty-step/landfall/v1/scripts/healthcheck.py -o healthcheck.py
-          curl -sSfL https://raw.githubusercontent.com/misty-step/landfall/v1/scripts/shared.py -o shared.py
-          python healthcheck.py \
-            --api-key "${{ secrets.OPENROUTER_API_KEY }}" \
-            --model "anthropic/claude-sonnet-4"
+          mode: synthesis-only
+          release-tag: v0.0.0
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          healthcheck: "true"
+          synthesis: "false"

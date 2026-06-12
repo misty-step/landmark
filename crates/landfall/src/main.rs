@@ -54,6 +54,7 @@ enum Commands {
     CheckActionContract(CheckActionContractArgs),
     ReplayAction(ReplayArgs),
     Backfill(BackfillArgs),
+    Setup(SetupArgs),
 }
 
 #[derive(Args)]
@@ -364,6 +365,14 @@ struct BackfillArgs {
     dry_run: bool,
 }
 
+#[derive(Args)]
+struct SetupArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+    #[arg(long = "output-dir", default_value = "")]
+    output_dir: String,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("{error}");
@@ -402,6 +411,7 @@ fn run() -> Result<()> {
             );
             Ok(())
         }
+        Commands::Setup(args) => setup(args),
     }
 }
 
@@ -460,6 +470,517 @@ where
         .into());
     }
     Ok(String::from_utf8(output.stdout)?)
+}
+
+#[derive(Serialize)]
+struct SetupReport {
+    diagnosis: SetupDiagnosis,
+    recommendation: SetupRecommendation,
+    required_permissions: BTreeMap<String, String>,
+    required_secrets: Vec<String>,
+    workflows: BTreeMap<String, WorkflowCandidate>,
+    backfill: String,
+}
+
+#[derive(Serialize)]
+struct SetupDiagnosis {
+    release_tool: String,
+    default_branch: String,
+    tag_format: String,
+    conventional_commits: String,
+    monorepo: bool,
+    packages: Vec<String>,
+    signals: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SetupRecommendation {
+    mode: String,
+    workflow: String,
+    rationale: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct WorkflowCandidate {
+    path: String,
+    release_tool: String,
+    mode: String,
+    rationale: Vec<String>,
+    content: String,
+}
+
+fn setup(args: SetupArgs) -> Result<()> {
+    let diagnosis = diagnose_setup(&args.repo_root);
+    let recommendation = recommend_setup(&diagnosis);
+    let workflows = setup_workflows(&diagnosis);
+    if !args.output_dir.trim().is_empty() {
+        let output_dir = args.repo_root.join(args.output_dir.trim());
+        fs::create_dir_all(&output_dir)?;
+        for candidate in workflows.values() {
+            let filename = Path::new(&candidate.path)
+                .file_name()
+                .unwrap_or_else(|| OsStr::new("landfall-release.yml"));
+            fs::write(output_dir.join(filename), &candidate.content)?;
+        }
+    }
+    let mut required_permissions = BTreeMap::new();
+    required_permissions.insert("contents".into(), "write".into());
+    required_permissions.insert("issues".into(), "write".into());
+    required_permissions.insert("pull-requests".into(), "write".into());
+    let report = SetupReport {
+        diagnosis,
+        recommendation,
+        required_permissions,
+        required_secrets: vec!["GH_RELEASE_TOKEN".into(), "OPENROUTER_API_KEY".into()],
+        workflows,
+        backfill: "retired: use release re-run or synthesis-only mode; no Python backfill script is part of the maintenance surface".into(),
+    };
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+fn diagnose_setup(root: &Path) -> SetupDiagnosis {
+    let mut signals = Vec::new();
+    let package = read_package_json(root);
+    let release_tool = detect_release_tool(root, package.as_ref(), &mut signals);
+    let packages = detect_packages(root, package.as_ref(), &mut signals);
+    let monorepo = packages.len() > 1 || root.join(".changeset").is_dir();
+    if root.join(".changeset").is_dir() {
+        signals.push(".changeset directory present".into());
+    }
+    SetupDiagnosis {
+        release_tool,
+        default_branch: detect_default_branch(root),
+        tag_format: detect_tag_format(root, &packages),
+        conventional_commits: diagnose_conventional_commits(root),
+        monorepo,
+        packages,
+        signals,
+    }
+}
+
+fn read_package_json(root: &Path) -> Option<Value> {
+    serde_json::from_str(&fs::read_to_string(root.join("package.json")).ok()?).ok()
+}
+
+fn detect_release_tool(root: &Path, package: Option<&Value>, signals: &mut Vec<String>) -> String {
+    let workflows = read_dir_text(root.join(".github/workflows"));
+    if workflows.contains("googleapis/release-please-action")
+        || root.join("release-please-config.json").is_file()
+    {
+        signals.push("release-please workflow or config present".into());
+        return "release-please".into();
+    }
+    if root.join(".changeset").is_dir() || workflows.contains("changesets/action") {
+        signals.push("changesets workflow or .changeset directory present".into());
+        return "changesets".into();
+    }
+    if root.join(".releaserc").is_file()
+        || root.join(".releaserc.json").is_file()
+        || package_has_dependency(package, "semantic-release")
+    {
+        signals.push("semantic-release config or dependency present".into());
+        return "semantic-release".into();
+    }
+    if workflows.contains("gh release create") {
+        signals.push("manual GitHub release command detected".into());
+    }
+    "manual-tag".into()
+}
+
+fn read_dir_text(path: PathBuf) -> String {
+    let mut text = String::new();
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if entry.path().is_file()
+                && let Ok(file_text) = fs::read_to_string(entry.path())
+            {
+                text.push_str(&file_text);
+                text.push('\n');
+            }
+        }
+    }
+    text
+}
+
+fn package_has_dependency(package: Option<&Value>, name: &str) -> bool {
+    let Some(package) = package else {
+        return false;
+    };
+    ["dependencies", "devDependencies"]
+        .iter()
+        .any(|key| package[*key].get(name).is_some())
+}
+
+fn detect_packages(root: &Path, package: Option<&Value>, signals: &mut Vec<String>) -> Vec<String> {
+    let mut packages = Vec::new();
+    if let Some(name) = package.and_then(|value| value["name"].as_str()) {
+        packages.push(name.to_string());
+    }
+    if let Some(workspaces) = package.and_then(|value| value["workspaces"].as_array()) {
+        signals.push("package.json workspaces present".into());
+        packages.extend(
+            workspaces
+                .iter()
+                .filter_map(|value| value.as_str())
+                .map(str::to_string),
+        );
+    }
+    for manifest in ["Cargo.toml", "pyproject.toml", "go.mod"] {
+        if root.join(manifest).is_file() {
+            signals.push(format!("{manifest} present"));
+        }
+    }
+    packages.sort();
+    packages.dedup();
+    packages
+}
+
+fn detect_default_branch(root: &Path) -> String {
+    if let Ok(output) = run_ok(
+        "git",
+        ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        root,
+    ) && let Some(branch) = output.trim().strip_prefix("origin/")
+    {
+        return branch.to_string();
+    }
+    for branch in ["main", "master"] {
+        if run_ok("git", ["rev-parse", "--verify", branch], root).is_ok() {
+            return branch.to_string();
+        }
+    }
+    "main".into()
+}
+
+fn detect_tag_format(root: &Path, packages: &[String]) -> String {
+    let tags = run_ok("git", ["tag", "--list"], root).unwrap_or_default();
+    let package_re = Regex::new(r"^[A-Za-z0-9_.-]+@v?[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    let v_re = Regex::new(r"^v[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    let bare_re = Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    let package_tag = tags.lines().any(|tag| package_re.is_match(tag));
+    let v_tag = tags.lines().any(|tag| v_re.is_match(tag));
+    let bare_tag = tags.lines().any(|tag| bare_re.is_match(tag));
+    if package_tag || packages.len() > 1 {
+        "package@{version}".into()
+    } else if v_tag || !bare_tag {
+        "v{version}".into()
+    } else {
+        "{version}".into()
+    }
+}
+
+fn diagnose_conventional_commits(root: &Path) -> String {
+    let log = run_ok("git", ["log", "-n", "30", "--pretty=%s"], root).unwrap_or_default();
+    let subjects: Vec<_> = log.lines().collect();
+    if subjects.is_empty() {
+        return "unknown: no git history visible".into();
+    }
+    let conventional =
+        Regex::new(r"^(feat|fix|docs|chore|refactor|test|ci|build|perf)(\(.+\))?!?: ").unwrap();
+    let matches = subjects
+        .iter()
+        .filter(|subject| conventional.is_match(subject))
+        .count();
+    if matches * 2 >= subjects.len() {
+        format!(
+            "ready: {matches}/{} recent commits look conventional",
+            subjects.len()
+        )
+    } else {
+        format!(
+            "needs-review: {matches}/{} recent commits look conventional",
+            subjects.len()
+        )
+    }
+}
+
+fn recommend_setup(diagnosis: &SetupDiagnosis) -> SetupRecommendation {
+    let workflow = match diagnosis.release_tool.as_str() {
+        "semantic-release" => "semantic-release",
+        "release-please" => "release-please",
+        "changesets" if diagnosis.monorepo => "changesets-monorepo",
+        "changesets" => "changesets",
+        _ => "manual-tag",
+    };
+    let mode = if workflow == "semantic-release" {
+        "full"
+    } else {
+        "synthesis-only"
+    };
+    let mut rationale = vec![format!("detected release tool: {}", diagnosis.release_tool)];
+    rationale.push(format!("default branch: {}", diagnosis.default_branch));
+    rationale.push(format!("tag format: {}", diagnosis.tag_format));
+    if diagnosis.monorepo {
+        rationale.push("monorepo outputs enabled".into());
+    }
+    SetupRecommendation {
+        mode: mode.into(),
+        workflow: workflow.into(),
+        rationale,
+    }
+}
+
+fn setup_workflows(diagnosis: &SetupDiagnosis) -> BTreeMap<String, WorkflowCandidate> {
+    let branch = &diagnosis.default_branch;
+    let mut workflows = BTreeMap::new();
+    for (name, tool, mode, content) in [
+        (
+            "semantic-release",
+            "semantic-release",
+            "full",
+            workflow_semantic_release(branch),
+        ),
+        (
+            "release-please",
+            "release-please",
+            "synthesis-only",
+            workflow_release_please(branch),
+        ),
+        (
+            "changesets",
+            "changesets",
+            "synthesis-only",
+            workflow_changesets(branch, false),
+        ),
+        (
+            "changesets-monorepo",
+            "changesets",
+            "synthesis-only",
+            workflow_changesets(branch, true),
+        ),
+        (
+            "manual-tag",
+            "manual-tag",
+            "synthesis-only",
+            workflow_manual_tag(),
+        ),
+    ] {
+        workflows.insert(
+            name.to_string(),
+            WorkflowCandidate {
+                path: format!(".github/workflows/landfall-{name}.yml"),
+                release_tool: tool.into(),
+                mode: mode.into(),
+                rationale: vec![
+                    "includes Landfall healthcheck before the release attempt".into(),
+                    "declares contents/issues/pull-requests write permissions".into(),
+                ],
+                content,
+            },
+        );
+    }
+    workflows
+}
+
+fn workflow_semantic_release(branch: &str) -> String {
+    format!(
+        r#"name: Release
+
+on:
+  push:
+    branches: [{branch}]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: misty-step/landfall@v1
+        with:
+          mode: full
+          healthcheck: "true"
+          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+"#
+    )
+}
+
+fn workflow_release_please(branch: &str) -> String {
+    format!(
+        r#"name: Release
+
+on:
+  push:
+    branches: [{branch}]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{{{ steps.release.outputs.release_created }}}}
+      tag_name: ${{{{ steps.release.outputs.tag_name }}}}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+  synthesize:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: misty-step/landfall@v1
+        with:
+          mode: synthesis-only
+          healthcheck: "true"
+          release-tag: ${{{{ needs.release-please.outputs.tag_name }}}}
+          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+          changelog-source: release-body
+"#
+    )
+}
+
+fn workflow_changesets(branch: &str, monorepo: bool) -> String {
+    if monorepo {
+        format!(
+            r#"name: Release
+
+on:
+  push:
+    branches: [{branch}]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{{{ steps.changesets.outputs.published }}}}
+      published_packages: ${{{{ steps.changesets.outputs.publishedPackages }}}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: changesets/action@v1
+        id: changesets
+        with:
+          publish: npm run release
+        env:
+          GITHUB_TOKEN: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
+
+  synthesize:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    strategy:
+      matrix:
+        package: ${{{{ fromJson(needs.release.outputs.published_packages) }}}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: misty-step/landfall@v1
+        with:
+          mode: synthesis-only
+          healthcheck: "true"
+          release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
+          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+          changelog-source: release-body
+"#
+        )
+    } else {
+        format!(
+            r#"name: Release
+
+on:
+  push:
+    branches: [{branch}]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{{{ steps.changesets.outputs.published }}}}
+      published_packages: ${{{{ steps.changesets.outputs.publishedPackages }}}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: changesets/action@v1
+        id: changesets
+        with:
+          publish: npm run release
+        env:
+          GITHUB_TOKEN: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
+
+  synthesize:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: misty-step/landfall@v1
+        with:
+          mode: synthesis-only
+          healthcheck: "true"
+          release-tag: v${{{{ fromJson(needs.release.outputs.published_packages)[0].version }}}}
+          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+          changelog-source: release-body
+"#
+        )
+    }
+}
+
+fn workflow_manual_tag() -> String {
+    r#"name: Synthesize Release Notes
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: misty-step/landfall@v1
+        with:
+          mode: synthesis-only
+          healthcheck: "true"
+          release-tag: ${{ github.event.release.tag_name || github.ref_name }}
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          changelog-source: auto
+"#
+    .to_string()
 }
 
 #[derive(Debug)]
@@ -2580,6 +3101,68 @@ mod tests {
         assert_eq!(status["destinations"]["rss"]["failure_stage"], "rss_update");
         assert_eq!(status["destinations"]["webhook"]["succeeded"], true);
         assert_eq!(status["destinations"]["slack"]["succeeded"], false);
+    }
+
+    #[test]
+    fn setup_detects_changesets_monorepo_and_generates_matrix_workflow() {
+        let repo = tempfile::tempdir().unwrap();
+        fs::create_dir(repo.path().join(".changeset")).unwrap();
+        fs::write(
+            repo.path().join("package.json"),
+            r#"{"name":"demo","workspaces":["packages/*"]}"#,
+        )
+        .unwrap();
+        let diagnosis = diagnose_setup(repo.path());
+        assert_eq!(diagnosis.release_tool, "changesets");
+        assert!(diagnosis.monorepo);
+        let recommendation = recommend_setup(&diagnosis);
+        assert_eq!(recommendation.workflow, "changesets-monorepo");
+        let workflows = setup_workflows(&diagnosis);
+        let changesets = &workflows["changesets"].content;
+        assert!(
+            changesets.contains("fromJson(needs.release.outputs.published_packages)[0].version")
+        );
+        assert!(!changesets.contains("${{tag}}"));
+        assert!(!changesets.contains("python3"));
+        let workflow = &workflows["changesets-monorepo"].content;
+        assert!(workflow.contains("strategy:"));
+        assert!(workflow.contains("healthcheck: \"true\""));
+        assert!(workflow.contains("pull-requests: write"));
+        assert!(workflow.contains("NPM_TOKEN"));
+    }
+
+    #[test]
+    fn setup_detects_semantic_release_and_reports_backfill_retired() {
+        let repo = tempfile::tempdir().unwrap();
+        fs::write(
+            repo.path().join("package.json"),
+            r#"{"name":"demo","devDependencies":{"semantic-release":"^24.0.0"}}"#,
+        )
+        .unwrap();
+        let diagnosis = diagnose_setup(repo.path());
+        assert_eq!(diagnosis.release_tool, "semantic-release");
+        assert_eq!(recommend_setup(&diagnosis).mode, "full");
+        let workflow = &setup_workflows(&diagnosis)["semantic-release"].content;
+        assert!(workflow.contains("mode: full"));
+        assert!(workflow.contains("healthcheck: \"true\""));
+        assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    }
+
+    #[test]
+    fn setup_generated_workflows_are_yaml() {
+        let diagnosis = SetupDiagnosis {
+            release_tool: "manual-tag".into(),
+            default_branch: "main".into(),
+            tag_format: "v{version}".into(),
+            conventional_commits: "ready".into(),
+            monorepo: true,
+            packages: vec!["pkg-a".into(), "pkg-b".into()],
+            signals: Vec::new(),
+        };
+        for candidate in setup_workflows(&diagnosis).values() {
+            let parsed: serde_yaml::Value = serde_yaml::from_str(&candidate.content).unwrap();
+            assert!(parsed["jobs"].is_mapping(), "{}", candidate.path);
+        }
     }
 
     #[test]
