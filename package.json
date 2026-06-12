@@ -1,9 +1,4 @@
 {
-  "name": "landfall",
-  "version": "1.17.2",
-  "private": true,
-  "description": "Focused release pipeline action powered by semantic-release.",
-  "license": "MIT",
   "dependencies": {
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^11.1.0",
@@ -12,5 +7,10 @@
     "@semantic-release/github": "^10.3.5",
     "@semantic-release/release-notes-generator": "^12.1.0",
     "semantic-release": "^24.2.0"
-  }
+  },
+  "description": "Focused release pipeline action powered by semantic-release.",
+  "license": "MIT",
+  "name": "landfall",
+  "private": true,
+  "version": "1.18.0"
 }
