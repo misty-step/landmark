@@ -1,3 +1,17 @@
+# [1.18.0](https://github.com/misty-step/landfall/compare/v1.17.2...v1.18.0) (2026-06-12)
+
+### Features
+
+* **runtime:** migrate owned Landfall runtime to Rust (#109) ([3ad9dcb](https://github.com/misty-step/landfall/commit/3ad9dcb25783053a5c7f56c7c2c4c6cf0c2357b8))
+* **notes:** add typed release note artifact plane (#110) ([58c814a](https://github.com/misty-step/landfall/commit/58c814a5db4f7f341097d57c75ada11199878eb8))
+* **setup:** add adoption analyzer and workflow generator (#111) ([2e30c8d](https://github.com/misty-step/landfall/commit/2e30c8dd7da47aae5f8694c2ebad75534cd35741))
+* **release:** add pr-based self-release flow (#112) ([81e9711](https://github.com/misty-step/landfall/commit/81e9711c89fe6e0e1bb683778ddc2299707d846e))
+
+### Bug Fixes
+
+* **healthcheck:** auto-run when synthesis enabled, add OpenRouter-specific 401 message (#99) ([9a1e4c9](https://github.com/misty-step/landfall/commit/9a1e4c9165661e6aa2e6b4a8fe1c645b4fa34879))
+* **ci:** avoid duplicate trufflehog fail flag (#106) ([12441ec](https://github.com/misty-step/landfall/commit/12441ec32afb35156e1c00eb62a3c32514919b8d))
+* **ci:** allow release candidate metadata checks (#114) ([f645ea0](https://github.com/misty-step/landfall/commit/f645ea0e36eeb544ff24da40600b36f21618b7a2))
 ## [1.17.2](https://github.com/misty-step/landfall/compare/v1.17.1...v1.17.2) (2026-02-13)
 
 
