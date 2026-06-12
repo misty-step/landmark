@@ -2735,12 +2735,49 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
         let text = fs::read_to_string(&path)?;
         errors.extend(validate_landfall_usage_inputs(&path, &text, &known));
     }
+    errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     if errors.is_empty() {
         println!("action contract ok");
         Ok(())
     } else {
         Err(errors.join("\n").into())
     }
+}
+
+fn validate_self_release_workflow_contract(repo_root: &Path) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let ci_path = repo_root.join(".github/workflows/ci.yml");
+    let release_path = repo_root.join(".github/workflows/release.yml");
+    let ci = fs::read_to_string(&ci_path)?;
+    let release = fs::read_to_string(&release_path)?;
+
+    let lines: Vec<_> = ci.lines().collect();
+    if let Some(sync_line) = lines
+        .iter()
+        .position(|line| line.contains("cargo run --locked -- check-version-sync"))
+    {
+        let previous = lines[..sync_line]
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .map(|line| line.trim());
+        if previous != Some("git fetch --tags --force origin") {
+            errors.push("CI workflow must fetch tags immediately before version sync".into());
+        }
+    } else {
+        errors.push("CI workflow missing version sync step".into());
+    }
+
+    if let Some(step) = release.find("name: Synthesize landed release notes") {
+        let landed_synthesis = &release[step..];
+        if !landed_synthesis.contains("synthesis-required: \"false\"") {
+            errors.push("self-release landed synthesis must be non-blocking".into());
+        }
+    } else {
+        errors.push("release workflow missing landed synthesis step".into());
+    }
+
+    Ok(errors)
 }
 
 fn validate_landfall_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str>) -> Vec<String> {

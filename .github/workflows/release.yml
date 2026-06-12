@@ -88,6 +88,6 @@ jobs:
           release-tag: ${{ steps.publish.outputs.release_tag }}
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          synthesis-required: "true"
+          synthesis-required: "false"
           floating-tags: "true"
           changelog-source: release-body

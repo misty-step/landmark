@@ -338,7 +338,9 @@ protected `master`. The repository workflow has two phases:
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
   Release only when landed metadata is ahead of the latest semver tag, then
   runs Landfall in `synthesis-only` mode to update the release body and floating
-  major tag.
+  major tag. That synthesis pass is non-blocking because the release has already
+  been published; failed or degraded synthesis is surfaced through Landfall
+  outputs without turning a published release into a failed deployment.
 
 The local replay oracle for this path is:
 

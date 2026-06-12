@@ -67,6 +67,7 @@ jobs:
               candidate_args+=(--allow-release-candidate)
             fi
           fi
+          git fetch --tags --force origin
           cargo run --locked -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
 
       - name: Verify public action contract
