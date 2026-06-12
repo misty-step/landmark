@@ -54,13 +54,20 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          RELEASE_BRANCH: landfall/self-release
         run: |
           set -euo pipefail
           tag_ref="HEAD"
+          candidate_args=()
           if [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
             tag_ref="${PR_BASE_SHA}"
+            if [ "${PR_HEAD_REF}" = "${RELEASE_BRANCH}" ] && [ "${PR_HEAD_REPO}" = "${GITHUB_REPOSITORY}" ]; then
+              candidate_args+=(--allow-release-candidate)
+            fi
           fi
-          cargo run --locked -- check-version-sync --reference "${tag_ref}"
+          cargo run --locked -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
 
       - name: Verify public action contract
         shell: bash
