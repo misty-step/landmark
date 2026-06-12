@@ -1,3 +1,8 @@
+# [1.18.2](https://github.com/misty-step/landfall/compare/v1.18.1...v1.18.2) (2026-06-12)
+
+### Bug Fixes
+
+* **release:** keep self-release binary in sync ([1832326](https://github.com/misty-step/landfall/commit/18323261d0f2631e6ff493196240f72e17117b07))
 # [1.18.1](https://github.com/misty-step/landfall/compare/v1.18.0...v1.18.1) (2026-06-12)
 
 ### Bug Fixes
