@@ -21,9 +21,12 @@ cargo run --locked -- replay-action --evidence-dir .landfall/replay
 if command -v rustup >/dev/null 2>&1; then
   rustup target add x86_64-unknown-linux-musl
 fi
-cargo build --locked --release --target x86_64-unknown-linux-musl
+if [ "$(uname -s)" = "Linux" ]; then
+  bin/build-linux-action --check
+else
+  echo "non-Linux host: byte-for-byte Linux action binary parity is enforced by hosted CI"
+fi
 test -x dist/landfall
-cmp target/x86_64-unknown-linux-musl/release/landfall dist/landfall
 shasum -a 256 -c dist/landfall.sha256
 
 if command -v actionlint >/dev/null 2>&1; then

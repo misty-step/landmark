@@ -333,8 +333,12 @@ protected `master`. The repository workflow has two phases:
 
 - `prepare-release-pr` runs `./dist/landfall prepare-self-release`, updates
   `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, and
-  `Cargo.lock` on `landfall/self-release`, then opens or updates a release PR.
-  That PR must pass the normal `merge-gate` before it can land.
+  `Cargo.lock`, then rebuilds the checked-in Linux action binary and rewrites
+  `dist/landfall.sha256` on `landfall/self-release`. It then opens or updates
+  a release PR, which must pass the normal `merge-gate` before it can land.
+  Hosted Quality Checks rebuild the binary in Ubuntu, upload the fresh binary
+  as evidence, and byte-compare it to `dist/landfall`; that hosted comparison
+  is authoritative for non-Linux developers.
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
   Release only when landed metadata is ahead of the latest semver tag, then
   runs Landfall in `synthesis-only` mode to update the release body and floating
@@ -355,10 +359,13 @@ dist/landfall replay-action \
 This repository keeps `package.json` and the Rust crate version aligned to release tags:
 
 - `prepare-self-release` updates `package.json`,
-  `crates/landfall/Cargo.toml`, and `Cargo.lock` before opening the release PR.
+  `crates/landfall/Cargo.toml`, `Cargo.lock`, `dist/landfall`, and
+  `dist/landfall.sha256` before opening the release PR.
 - `.releaserc.json` still runs `./dist/landfall update-version-metadata` for
   consumers using full semantic-release mode.
-- The release commit includes `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, and `Cargo.lock`.
+- The release commit includes `CHANGELOG.md`, `package.json`,
+  `crates/landfall/Cargo.toml`, `Cargo.lock`, `dist/landfall`, and
+  `dist/landfall.sha256`.
 - CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
 ### Action Contract Validation (Landfall Repo)

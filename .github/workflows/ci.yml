@@ -32,6 +32,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
 
       - name: Install Rust targets
         shell: bash
@@ -82,12 +84,26 @@ jobs:
         shell: bash
         run: cargo test --locked
 
-      - name: Verify checked-in Linux action binary
+      - name: Build checked-in Linux action binary
         shell: bash
         run: |
           set -euo pipefail
           cargo build --locked --release --target x86_64-unknown-linux-musl
+
+      - name: Upload Linux action binary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landfall-linux-action-binary
+          path: target/x86_64-unknown-linux-musl/release/landfall
+          if-no-files-found: ignore
+
+      - name: Verify checked-in Linux action binary
+        shell: bash
+        run: |
+          set -euo pipefail
           test -x dist/landfall
+          cmp target/x86_64-unknown-linux-musl/release/landfall dist/landfall
           shasum -a 256 -c dist/landfall.sha256
           dist/landfall --help >/dev/null
 

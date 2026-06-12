@@ -23,6 +23,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+
+      - name: Install Rust targets
+        shell: bash
+        run: rustup target add x86_64-unknown-linux-musl
+
       - name: Prepare release pull request
         id: prepare
         shell: bash
@@ -47,7 +56,7 @@ jobs:
             Automated Landfall self-release PR.
 
             - Release tag: `${{ steps.prepare.outputs.release_tag }}`
-            - Generated files: `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, `Cargo.lock`
+            - Generated files: `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, `Cargo.lock`, `dist/landfall`, `dist/landfall.sha256`
             - Required pre-merge check: `merge-gate`
 
             The GitHub Release is published only after this PR lands on protected `master`.

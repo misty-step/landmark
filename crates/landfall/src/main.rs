@@ -5,7 +5,7 @@ use pulldown_cmark::{Options, Parser as MarkdownParser, html};
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{Value, json};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::error::Error;
@@ -24,6 +24,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const VALID_NOTES: &str = "## Improvements\n\n- Added a replay harness that checks release behavior in a disposable repo.\n- Captured release body updates, artifacts, tags, and structured logs.\n- Kept the run local so no production secrets or GitHub releases are touched.\n";
 const INVALID_NOTES: &str = "hello, here are the release notes";
+const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 
 #[derive(Parser)]
 #[command(name = "landfall")]
@@ -385,6 +386,8 @@ struct PrepareSelfReleaseArgs {
     repository: String,
     #[arg(long = "release-branch", default_value = "landfall/self-release")]
     release_branch: String,
+    #[arg(long = "dist-target", default_value = LINUX_ACTION_TARGET)]
+    dist_target: String,
     #[arg(long = "github-output", default_value = "")]
     github_output: String,
 }
@@ -1114,6 +1117,7 @@ fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         "landfall",
         &next_version,
     )?;
+    refresh_self_release_dist(&args.repo_root, &args.dist_target)?;
 
     let plan = SelfReleasePlan {
         released: true,
@@ -1129,11 +1133,72 @@ fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             "package.json".into(),
             "crates/landfall/Cargo.toml".into(),
             "Cargo.lock".into(),
+            "dist/landfall".into(),
+            "dist/landfall.sha256".into(),
         ],
         changelog,
         commits,
     };
     emit_self_release_plan(&plan, &args.github_output)
+}
+
+fn refresh_self_release_dist(repo_root: &Path, target: &str) -> Result<()> {
+    validate_nonblank(target, "dist-target")?;
+    let binary = build_action_binary(repo_root, target)?;
+    let dist_dir = repo_root.join("dist");
+    fs::create_dir_all(&dist_dir)?;
+    let dest = dist_dir.join("landfall");
+    let temp = dist_dir.join(format!(
+        ".landfall-{}-{}.tmp",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    fs::copy(&binary, &temp)?;
+    fs::set_permissions(&temp, fs::metadata(&binary)?.permissions())?;
+    fs::rename(&temp, &dest)?;
+
+    let digest = hex::encode(Sha256::digest(fs::read(&dest)?));
+    fs::write(
+        dist_dir.join("landfall.sha256"),
+        format!("{digest}  dist/landfall\n"),
+    )?;
+    Ok(())
+}
+
+fn build_action_binary(repo_root: &Path, target: &str) -> Result<PathBuf> {
+    if target == LINUX_ACTION_TARGET && !rustc_host_target()?.contains("linux") {
+        return Err(
+            "refusing to build checked-in Linux action binary from a non-Linux host; run the release workflow or `bin/build-linux-action --write` so dist/landfall is produced in Linux, or pass --dist-target only for replay fixtures"
+                .to_string()
+        .into());
+    }
+    let output = Command::new("cargo")
+        .args(["build", "--locked", "--release", "--target", target])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|error| {
+            format!("failed to launch cargo for self-release binary build: {error}")
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "failed to build Landfall self-release action binary for {target}; install the Rust target and linker for {target}, then retry: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+    let binary = repo_root
+        .join("target")
+        .join(target)
+        .join("release")
+        .join("landfall");
+    if !binary.is_file() {
+        return Err(format!(
+            "cargo build completed but {} was not created",
+            binary.display()
+        )
+        .into());
+    }
+    Ok(binary)
 }
 
 fn emit_self_release_plan(plan: &SelfReleasePlan, github_output: &str) -> Result<()> {
@@ -3359,6 +3424,7 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     let repo = tmp_root.join("self-release-pr");
     init_self_release_fixture(&repo)?;
     let prepare_output = temp_file("landfall-self-release-prepare")?;
+    let dist_target = rustc_host_target()?;
     let prepare = Command::new(current_exe())
         .args([
             "prepare-self-release",
@@ -3368,6 +3434,8 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
             "owner/repo",
             "--release-branch",
             "landfall/self-release",
+            "--dist-target",
+            &dist_target,
             "--github-output",
         ])
         .arg(&prepare_output)
@@ -3375,6 +3443,7 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     if !prepare.status.success() {
         return Err(String::from_utf8_lossy(&prepare.stderr).to_string().into());
     }
+    let prepare_plan: Value = serde_json::from_slice(&prepare.stdout)?;
     let prepare_outputs = parse_outputs(&prepare_output)?;
     if prepare_outputs.get("released").map(String::as_str) != Some("true") {
         return Err("prepare-self-release did not mark a release PR ready".into());
@@ -3386,6 +3455,27 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     )?;
     assert_file_contains(&repo.join("Cargo.lock"), r#"version = "1.1.0""#)?;
     assert_file_contains(&repo.join("CHANGELOG.md"), "# [1.1.0]")?;
+    let prepared_dist = fs::read(repo.join("dist/landfall"))?;
+    if prepared_dist == b"stale fixture binary\n" {
+        return Err("prepare-self-release did not refresh dist/landfall".into());
+    }
+    assert_file_contains(&repo.join("dist/landfall.sha256"), "  dist/landfall")?;
+    let changed_files = prepare_plan["changed_files"]
+        .as_array()
+        .ok_or("prepare plan missing changed_files")?;
+    for expected in ["dist/landfall", "dist/landfall.sha256"] {
+        if !changed_files
+            .iter()
+            .any(|file| file.as_str() == Some(expected))
+        {
+            return Err(format!("prepare plan missing {expected}").into());
+        }
+    }
+    let dist_sha256 = fs::read_to_string(repo.join("dist/landfall.sha256"))?
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string();
 
     run_ok("git", ["add", "."], &repo)?;
     run_ok(
@@ -3438,6 +3528,11 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
         "release": created,
         "requests": state.requests,
         "target_sha": target_sha,
+        "dist": {
+            "size": prepared_dist.len(),
+            "sha256": dist_sha256,
+            "changed_files": changed_files,
+        },
     }))
 }
 
@@ -3451,7 +3546,8 @@ fn assert_file_contains(path: &Path, needle: &str) -> Result<()> {
 }
 
 fn init_self_release_fixture(path: &Path) -> Result<()> {
-    fs::create_dir_all(path.join("crates/landfall"))?;
+    fs::create_dir_all(path.join("crates/landfall/src"))?;
+    fs::create_dir_all(path.join("dist"))?;
     run_ok("git", ["init", "-q"], path)?;
     run_ok("git", ["config", "user.name", "Landfall Replay"], path)?;
     run_ok(
@@ -3461,6 +3557,10 @@ fn init_self_release_fixture(path: &Path) -> Result<()> {
     )?;
     fs::write(path.join("README.md"), "# Fixture\n")?;
     fs::write(
+        path.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/landfall\"]\nresolver = \"3\"\n",
+    )?;
+    fs::write(
         path.join("package.json"),
         serde_json::to_string_pretty(&json!({"name": "landfall", "version": "1.0.0"}))? + "\n",
     )?;
@@ -3469,8 +3569,17 @@ fn init_self_release_fixture(path: &Path) -> Result<()> {
         "[package]\nname = \"landfall\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
     )?;
     fs::write(
+        path.join("crates/landfall/src/main.rs"),
+        "fn main() { println!(\"landfall fixture {}\", env!(\"CARGO_PKG_VERSION\")); }\n",
+    )?;
+    fs::write(
         path.join("Cargo.lock"),
         "# This file is automatically @generated by Cargo.\nversion = 4\n\n[[package]]\nname = \"landfall\"\nversion = \"1.0.0\"\n",
+    )?;
+    fs::write(path.join("dist/landfall"), "stale fixture binary\n")?;
+    fs::write(
+        path.join("dist/landfall.sha256"),
+        "1c8d630e34f92c015d86aacd405409334e6bf29b853d7af0d1952517cf8bc6cb  dist/landfall\n",
     )?;
     fs::write(
         path.join("CHANGELOG.md"),
@@ -3639,6 +3748,14 @@ fn git_tags(path: &Path) -> Result<Vec<String>> {
 
 fn current_exe() -> PathBuf {
     env::current_exe().expect("current executable")
+}
+
+fn rustc_host_target() -> Result<String> {
+    let version = run_ok("rustc", ["-vV"], Path::new("."))?;
+    version
+        .lines()
+        .find_map(|line| line.strip_prefix("host: ").map(str::to_string))
+        .ok_or_else(|| "rustc -vV did not report a host target".into())
 }
 
 fn temp_file(prefix: &str) -> Result<PathBuf> {
