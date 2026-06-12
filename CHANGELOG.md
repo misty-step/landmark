@@ -1,3 +1,8 @@
+# [1.18.1](https://github.com/misty-step/landfall/compare/v1.18.0...v1.18.1) (2026-06-12)
+
+### Bug Fixes
+
+* **release:** stabilize self-release post-publish gates ([3bb2bdd](https://github.com/misty-step/landfall/commit/3bb2bddf45c3babca63607fb662e7bba497a6bd2))
 # [1.18.0](https://github.com/misty-step/landfall/compare/v1.17.2...v1.18.0) (2026-06-12)
 
 ### Features
