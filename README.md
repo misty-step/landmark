@@ -70,16 +70,63 @@ Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
 Before wiring a release workflow, run Landfall's setup analyzer from a checkout:
 
 ```bash
+dist/landfall init --repo-root . --output .landfall.yml --dry-run
 dist/landfall setup --repo-root . --output-dir .landfall/setup
 ```
 
-The command inspects release-tool signals, default branch, tag format, required
-secrets, permissions, package topology, and recent conventional-commit usage. It
-prints a JSON report with a recommended Landfall mode and writes workflow
-candidates for semantic-release, release-please, changesets, changesets
-monorepos, and manual-tag repositories. Every generated workflow includes
-`healthcheck: "true"`, `GH_RELEASE_TOKEN`, `OPENROUTER_API_KEY`, and the
-`contents`, `issues`, and `pull-requests` permissions Landfall needs.
+`init` infers a first `.landfall.yml` from package metadata, README content,
+release-tool signals, and the repository name. `setup` then inspects
+release-tool signals, default branch, tag format, required secrets,
+permissions, package topology, recent conventional-commit usage, and any
+checked-in `.landfall.yml`. It prints a JSON report with a recommended Landfall
+mode and writes workflow candidates for semantic-release, release-please,
+changesets, changesets monorepos, and manual-tag repositories. Every generated
+workflow includes `healthcheck: "true"`, `GH_RELEASE_TOKEN`,
+`OPENROUTER_API_KEY`, and the `contents`, `issues`, and `pull-requests`
+permissions Landfall needs.
+
+## Product Manifest
+
+Landfall reads `.landfall.yml` from the repository root before synthesis. It
+keeps product context, audience, voice, changelog source, artifact outputs, and
+model policy in the repo instead of requiring every workflow to repeat them.
+Non-empty action inputs still win over manifest values.
+When `model.primary` is omitted, `model.policy` selects Landfall's built-in
+default model tier: `cheap` uses `openai/gpt-4o-mini`, while `balanced` and
+`rich` use `anthropic/claude-sonnet-4`.
+
+```yaml
+product:
+  name: Landfall
+  description: Versioning, changelog, and release-note automation.
+audience: developer # general, developer, end-user, enterprise
+voice: Clear, concrete, and release-operator friendly.
+changelog:
+  source: auto # auto, changelog, release-body, prs
+artifacts:
+  markdown: docs/releases/{version}.md
+  plaintext: docs/releases/{version}.txt
+  html: docs/releases/{version}.html
+  json: docs/releases/releases.json
+  rss: docs/releases/feed.xml
+release:
+  profile: full # full or synthesis-only
+model:
+  policy: balanced # cheap, balanced, rich
+  primary: anthropic/claude-sonnet-4
+  fallbacks:
+    - google/gemini-2.5-flash
+    - openai/gpt-4o-mini
+budget:
+  max_input_tokens: 12000
+  max_output_tokens: 1200
+  max_usd: 0.25
+```
+
+Use `dist/landfall doctor --repo-root .` to validate manifest enums before a
+workflow run. Use `dist/landfall setup --repo-root . --output-dir
+.landfall/setup` after editing the manifest to regenerate workflow candidates
+that reflect the durable defaults.
 
 The old Python backfill script is retired from the maintenance surface; use a
 release re-run or `mode: synthesis-only` for repair runs.
@@ -92,29 +139,29 @@ release re-run or `mode: synthesis-only` for repair runs.
 | `release-tag` | No* | `""` | Release tag to synthesize notes for (required when `mode: synthesis-only`). |
 | `github-token` | Yes | - | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
-| `llm-model` | No | `anthropic/claude-sonnet-4` | Primary model ID for note synthesis. |
-| `llm-fallback-models` | No | `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
+| `llm-model` | No | manifest, then `anthropic/claude-sonnet-4` | Primary model ID for note synthesis. |
+| `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
 | `synthesis-required` | No | `false` | If `true`, fail the action when synthesis/update fails (after failure reporting). |
 | `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |
 | `synthesis-failure-issue` | No | `false` | If `true`, create a GitHub issue in the consuming repository when synthesis/update fails. |
-| `notes-output-file` | No | `""` | Write synthesized notes to this file path. Use `{version}` placeholder for the release tag (e.g., `docs/releases/{version}.md`). |
-| `notes-output-text-file` | No | `""` | Write synthesized notes as plaintext to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.txt`). |
-| `notes-output-html-file` | No | `""` | Write synthesized notes as an HTML fragment to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.html`). |
-| `notes-output-json` | No | `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
+| `notes-output-file` | No | manifest, then `""` | Write synthesized notes to this file path. Use `{version}` placeholder for the release tag (e.g., `docs/releases/{version}.md`). |
+| `notes-output-text-file` | No | manifest, then `""` | Write synthesized notes as plaintext to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.txt`). |
+| `notes-output-html-file` | No | manifest, then `""` | Write synthesized notes as an HTML fragment to this file path. Use `{version}` placeholder (e.g., `docs/releases/{version}.html`). |
+| `notes-output-json` | No | manifest, then `""` | Append a structured release entry to this JSON array file. Creates the file if it does not exist. |
 | `prompt-template-path` | No | `""` | Path to a custom synthesis prompt template relative to repo root. Overrides `audience` and convention-based detection. |
-| `audience` | No | `general` | Built-in prompt variant used when no custom prompt template is found. One of: `general`, `developer`, `end-user`, `enterprise`. |
-| `product-description` | No | `""` | One-line product description injected into the synthesis prompt as `{{PRODUCT_CONTEXT}}`. |
-| `voice-guide` | No | `""` | Tone/style guidance injected into the synthesis prompt as `{{VOICE_GUIDE}}`. |
-| `changelog-source` | No | `auto` | Technical source for synthesis. `auto` tries `CHANGELOG.md`, then release body, then merged PR extraction. Or force: `changelog`, `release-body`, `prs`. |
+| `audience` | No | manifest, then `general` | Built-in prompt variant used when no custom prompt template is found. One of: `general`, `developer`, `end-user`, `enterprise`. |
+| `product-description` | No | manifest, then `""` | One-line product description injected into the synthesis prompt as `{{PRODUCT_CONTEXT}}`. |
+| `voice-guide` | No | manifest, then `""` | Tone/style guidance injected into the synthesis prompt as `{{VOICE_GUIDE}}`. |
+| `changelog-source` | No | manifest, then `auto` | Technical source for synthesis. `auto` tries `CHANGELOG.md`, then release body, then merged PR extraction. Or force: `changelog`, `release-body`, `prs`. |
 | `healthcheck` | No | `false` | Validate LLM API key with a minimal probe request before synthesis. |
 | `floating-tags` | No | `false` | Update floating major version tags (e.g., `v1`) after release. |
 | `webhook-url` | No | `""` | Webhook endpoint URL. On synthesis success, POST a JSON payload with version, notes (markdown/HTML/plaintext), and release URL. |
 | `webhook-secret` | No | `""` | HMAC-SHA256 secret for signing webhook payloads (X-Signature-256 header). Optional. |
 | `slack-webhook-url` | No | `""` | Slack Incoming Webhook URL. On synthesis success, POST a Block Kit message with version, categorized notes, and release link. |
-| `rss-feed-file` | No | `""` | Update this RSS 2.0 feed file with each release (includes synthesized notes as HTML). The feed file is committed back to the repo. |
+| `rss-feed-file` | No | manifest, then `""` | Update this RSS 2.0 feed file with each release (includes synthesized notes as HTML). The feed file is committed back to the repo. |
 | `rss-max-entries` | No | `50` | Maximum number of items retained in `rss-feed-file`. |
 
 \* `llm-api-key` is required when `synthesis: true`.

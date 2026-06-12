@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use hmac::{Hmac, Mac};
 use pulldown_cmark::{Options, Parser as MarkdownParser, html};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,6 +36,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Init(InitArgs),
+    Doctor(DoctorArgs),
+    ManifestDefaults(ManifestDefaultsArgs),
     Healthcheck(HealthcheckArgs),
     PreflightTags,
     FetchReleaseBody(FetchReleaseBodyArgs),
@@ -58,6 +61,30 @@ enum Commands {
     Setup(SetupArgs),
     PrepareSelfRelease(PrepareSelfReleaseArgs),
     PublishSelfRelease(PublishSelfReleaseArgs),
+}
+
+#[derive(Args)]
+struct InitArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+    #[arg(long, default_value = ".landfall.yml")]
+    output: PathBuf,
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+}
+
+#[derive(Args)]
+struct DoctorArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+}
+
+#[derive(Args)]
+struct ManifestDefaultsArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+    #[arg(long = "github-output", default_value = "")]
+    github_output: String,
 }
 
 #[derive(Args)]
@@ -104,22 +131,22 @@ struct ExtractPrsArgs {
 struct SynthesizeArgs {
     #[arg(long = "api-key")]
     api_key: String,
-    #[arg(long)]
+    #[arg(long, default_value = "")]
     model: String,
     #[arg(long = "api-url")]
     api_url: String,
     #[arg(long = "fallback-models", default_value = "")]
     fallback_models: String,
-    #[arg(long = "product-name")]
+    #[arg(long = "product-name", default_value = "")]
     product_name: String,
     #[arg(long = "product-description", default_value = "")]
     product_description: String,
     #[arg(long = "voice-guide", default_value = "")]
     voice_guide: String,
-    #[arg(long, default_value = "general")]
-    audience: String,
-    #[arg(long = "changelog-source", default_value = "auto")]
-    changelog_source: String,
+    #[arg(long)]
+    audience: Option<String>,
+    #[arg(long = "changelog-source")]
+    changelog_source: Option<String>,
     #[arg(long)]
     version: String,
     #[arg(long = "changelog-file")]
@@ -136,6 +163,8 @@ struct SynthesizeArgs {
     attempts_file: PathBuf,
     #[arg(long = "templates-dir", default_value = "templates/prompts")]
     templates_dir: PathBuf,
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
 }
 
 #[derive(Args)]
@@ -453,6 +482,9 @@ fn main() {
 
 fn run() -> Result<()> {
     match Cli::parse().command {
+        Commands::Init(args) => init(args),
+        Commands::Doctor(args) => doctor(args),
+        Commands::ManifestDefaults(args) => manifest_defaults(args),
         Commands::Healthcheck(args) => healthcheck(args),
         Commands::PreflightTags => preflight_tags(),
         Commands::FetchReleaseBody(args) => fetch_release_body(args),
@@ -545,6 +577,450 @@ where
     Ok(String::from_utf8(output.stdout)?)
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct LandfallManifest {
+    product: ProductManifest,
+    audience: Option<String>,
+    voice: Option<String>,
+    changelog: ChangelogManifest,
+    artifacts: ArtifactManifest,
+    release: ReleaseManifest,
+    model: ModelManifest,
+    budget: BudgetManifest,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ProductManifest {
+    name: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ChangelogManifest {
+    source: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ArtifactManifest {
+    markdown: Option<String>,
+    plaintext: Option<String>,
+    html: Option<String>,
+    json: Option<String>,
+    rss: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ReleaseManifest {
+    profile: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ModelManifest {
+    policy: Option<String>,
+    primary: Option<String>,
+    fallbacks: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct BudgetManifest {
+    max_input_tokens: Option<u64>,
+    max_output_tokens: Option<u64>,
+    max_usd: Option<f64>,
+}
+
+#[derive(Clone, Debug)]
+struct EffectiveSynthesisConfig {
+    product_name: String,
+    product_description: String,
+    voice_guide: String,
+    audience: String,
+    changelog_source: String,
+    model: String,
+    fallback_models: String,
+}
+
+fn init(args: InitArgs) -> Result<()> {
+    let manifest = infer_manifest(&args.repo_root);
+    let rendered = render_manifest_yaml(&manifest)?;
+    if args.dry_run {
+        print!("{rendered}");
+        return Ok(());
+    }
+    let output = args.repo_root.join(args.output);
+    ensure_parent(&output)?;
+    fs::write(output, rendered)?;
+    Ok(())
+}
+
+fn doctor(args: DoctorArgs) -> Result<()> {
+    let manifest = load_manifest(&args.repo_root)?.ok_or(".landfall.yml is missing")?;
+    let mut errors = validate_manifest(&manifest);
+    errors.extend(validate_manifest_completeness(&manifest));
+    if errors.is_empty() {
+        println!("manifest ok");
+        Ok(())
+    } else {
+        Err(errors.join("\n").into())
+    }
+}
+
+fn manifest_defaults(args: ManifestDefaultsArgs) -> Result<()> {
+    let manifest = load_manifest(&args.repo_root)?.unwrap_or_default();
+    let mut values: Vec<(&str, String)> = Vec::new();
+    if let Some(value) = manifest.product.name.as_deref().and_then(trimmed_option) {
+        values.push(("product_name", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest
+        .product
+        .description
+        .as_deref()
+        .and_then(trimmed_option)
+    {
+        values.push(("product_description", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.audience.as_deref().and_then(trimmed_option) {
+        values.push(("audience", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.voice.as_deref().and_then(trimmed_option) {
+        values.push(("voice_guide", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest
+        .changelog
+        .source
+        .as_deref()
+        .and_then(trimmed_option)
+    {
+        values.push(("changelog_source", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest
+        .artifacts
+        .markdown
+        .as_deref()
+        .and_then(trimmed_option)
+    {
+        values.push(("notes_output_file", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest
+        .artifacts
+        .plaintext
+        .as_deref()
+        .and_then(trimmed_option)
+    {
+        values.push(("notes_output_text_file", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.artifacts.html.as_deref().and_then(trimmed_option) {
+        values.push(("notes_output_html_file", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.artifacts.json.as_deref().and_then(trimmed_option) {
+        values.push(("notes_output_json", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.artifacts.rss.as_deref().and_then(trimmed_option) {
+        values.push(("rss_feed_file", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest
+        .model
+        .primary
+        .as_deref()
+        .and_then(trimmed_option)
+        .or_else(|| policy_default_model(manifest.model.policy.as_deref()))
+    {
+        values.push(("llm_model", sanitize_text(&value)));
+    }
+    if !manifest.model.fallbacks.is_empty() {
+        values.push((
+            "llm_fallback_models",
+            sanitize_text(&manifest.model.fallbacks.join(",")),
+        ));
+    }
+    if is_requested_path(Path::new(&args.github_output)) {
+        write_outputs(Path::new(&args.github_output), &values)?;
+    } else {
+        let json: BTreeMap<_, _> = values.into_iter().collect();
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    }
+    Ok(())
+}
+
+fn infer_manifest(root: &Path) -> LandfallManifest {
+    let package = read_package_json(root);
+    let package_name = package
+        .as_ref()
+        .and_then(|value| value["name"].as_str())
+        .map(display_name_from_package);
+    let readme_name = readme_title(root);
+    let product_name = readme_name.or(package_name).or_else(|| {
+        root.file_name()
+            .and_then(|name| name.to_str())
+            .map(display_name_from_package)
+    });
+    let description = package
+        .as_ref()
+        .and_then(|value| value["description"].as_str())
+        .and_then(trimmed_option)
+        .or_else(|| readme_description(root));
+    let mut signals = Vec::new();
+    let release_tool = detect_release_tool(root, package.as_ref(), &mut signals);
+    LandfallManifest {
+        product: ProductManifest {
+            name: product_name,
+            description,
+        },
+        audience: Some(infer_audience(root, package.as_ref()).into()),
+        voice: Some("clear, specific, user-facing".into()),
+        changelog: ChangelogManifest {
+            source: Some("auto".into()),
+        },
+        artifacts: ArtifactManifest {
+            markdown: Some("docs/releases/{version}.md".into()),
+            plaintext: None,
+            html: None,
+            json: Some("docs/releases/releases.json".into()),
+            rss: None,
+        },
+        release: ReleaseManifest {
+            profile: Some(if release_tool == "semantic-release" {
+                "full".into()
+            } else {
+                "synthesis-only".into()
+            }),
+        },
+        model: ModelManifest {
+            policy: Some("balanced".into()),
+            primary: None,
+            fallbacks: Vec::new(),
+        },
+        budget: BudgetManifest {
+            max_input_tokens: Some(12000),
+            max_output_tokens: Some(1200),
+            max_usd: None,
+        },
+    }
+}
+
+fn render_manifest_yaml(manifest: &LandfallManifest) -> Result<String> {
+    Ok(serde_yaml::to_string(manifest)?)
+}
+
+fn load_manifest(root: &Path) -> Result<Option<LandfallManifest>> {
+    let path = root.join(".landfall.yml");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let manifest: LandfallManifest = serde_yaml::from_str(&fs::read_to_string(path)?)?;
+    let errors = validate_manifest(&manifest);
+    if errors.is_empty() {
+        Ok(Some(manifest))
+    } else {
+        Err(errors.join("\n").into())
+    }
+}
+
+fn validate_manifest(manifest: &LandfallManifest) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (name, value) in manifest_scalar_fields(manifest) {
+        if value.contains('\n') || value.contains('\r') {
+            errors.push(format!("manifest {name} must be a single-line scalar"));
+        }
+    }
+    if let Some(audience) = manifest.audience.as_deref().and_then(trimmed_option)
+        && !matches!(
+            audience.as_str(),
+            "general" | "developer" | "end-user" | "enterprise"
+        )
+    {
+        errors.push(format!(
+            "manifest audience must be general, developer, end-user, or enterprise; got {audience}"
+        ));
+    }
+    if let Some(source) = manifest
+        .changelog
+        .source
+        .as_deref()
+        .and_then(trimmed_option)
+        && !matches!(
+            source.as_str(),
+            "auto" | "changelog" | "release-body" | "prs"
+        )
+    {
+        errors.push(format!(
+            "manifest changelog.source must be auto, changelog, release-body, or prs; got {source}"
+        ));
+    }
+    if let Some(profile) = manifest.release.profile.as_deref().and_then(trimmed_option)
+        && !matches!(profile.as_str(), "full" | "synthesis-only")
+    {
+        errors.push(format!(
+            "manifest release.profile must be full or synthesis-only; got {profile}"
+        ));
+    }
+    if let Some(policy) = manifest.model.policy.as_deref().and_then(trimmed_option)
+        && !matches!(policy.as_str(), "cheap" | "balanced" | "rich")
+    {
+        errors.push(format!(
+            "manifest model.policy must be cheap, balanced, or rich; got {policy}"
+        ));
+    }
+    errors
+}
+
+fn validate_manifest_completeness(manifest: &LandfallManifest) -> Vec<String> {
+    let mut errors = Vec::new();
+    if manifest
+        .product
+        .name
+        .as_deref()
+        .and_then(trimmed_option)
+        .is_none()
+    {
+        errors.push("manifest product.name is required for a complete Landfall manifest".into());
+    }
+    if manifest
+        .product
+        .description
+        .as_deref()
+        .and_then(trimmed_option)
+        .is_none()
+    {
+        errors.push("manifest product.description is required for contextual release notes".into());
+    }
+    errors
+}
+
+fn manifest_scalar_fields(manifest: &LandfallManifest) -> Vec<(&'static str, &str)> {
+    let mut fields = Vec::new();
+    push_scalar(
+        &mut fields,
+        "product.name",
+        manifest.product.name.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "product.description",
+        manifest.product.description.as_deref(),
+    );
+    push_scalar(&mut fields, "audience", manifest.audience.as_deref());
+    push_scalar(&mut fields, "voice", manifest.voice.as_deref());
+    push_scalar(
+        &mut fields,
+        "changelog.source",
+        manifest.changelog.source.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "artifacts.markdown",
+        manifest.artifacts.markdown.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "artifacts.plaintext",
+        manifest.artifacts.plaintext.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "artifacts.html",
+        manifest.artifacts.html.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "artifacts.json",
+        manifest.artifacts.json.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "artifacts.rss",
+        manifest.artifacts.rss.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "release.profile",
+        manifest.release.profile.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "model.policy",
+        manifest.model.policy.as_deref(),
+    );
+    push_scalar(
+        &mut fields,
+        "model.primary",
+        manifest.model.primary.as_deref(),
+    );
+    for fallback in &manifest.model.fallbacks {
+        fields.push(("model.fallbacks[]", fallback.as_str()));
+    }
+    fields
+}
+
+fn push_scalar<'a>(
+    fields: &mut Vec<(&'static str, &'a str)>,
+    name: &'static str,
+    value: Option<&'a str>,
+) {
+    if let Some(value) = value {
+        fields.push((name, value));
+    }
+}
+
+fn readme_title(root: &Path) -> Option<String> {
+    let readme = fs::read_to_string(root.join("README.md")).ok()?;
+    readme
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("# "))
+        .and_then(trimmed_option)
+}
+
+fn readme_description(root: &Path) -> Option<String> {
+    let readme = fs::read_to_string(root.join("README.md")).ok()?;
+    readme
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .and_then(trimmed_option)
+}
+
+fn display_name_from_package(name: &str) -> String {
+    let name = name.rsplit('/').next().unwrap_or(name);
+    name.split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn infer_audience(root: &Path, package: Option<&Value>) -> &'static str {
+    if root.join("Cargo.toml").is_file()
+        || root.join("pyproject.toml").is_file()
+        || root.join("go.mod").is_file()
+        || package.is_some()
+    {
+        "developer"
+    } else {
+        "general"
+    }
+}
+
+fn trimmed_option(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
 #[derive(Serialize)]
 struct SetupReport {
     diagnosis: SetupDiagnosis,
@@ -552,6 +1028,7 @@ struct SetupReport {
     required_permissions: BTreeMap<String, String>,
     required_secrets: Vec<String>,
     workflows: BTreeMap<String, WorkflowCandidate>,
+    manifest: Option<LandfallManifest>,
     backfill: String,
 }
 
@@ -584,8 +1061,9 @@ struct WorkflowCandidate {
 
 fn setup(args: SetupArgs) -> Result<()> {
     let diagnosis = diagnose_setup(&args.repo_root);
-    let recommendation = recommend_setup(&diagnosis);
-    let workflows = setup_workflows(&diagnosis);
+    let manifest = load_manifest(&args.repo_root)?;
+    let recommendation = recommend_setup(&diagnosis, manifest.as_ref());
+    let workflows = setup_workflows(&diagnosis, manifest.as_ref());
     if !args.output_dir.trim().is_empty() {
         let output_dir = args.repo_root.join(args.output_dir.trim());
         fs::create_dir_all(&output_dir)?;
@@ -606,6 +1084,7 @@ fn setup(args: SetupArgs) -> Result<()> {
         required_permissions,
         required_secrets: vec!["GH_RELEASE_TOKEN".into(), "OPENROUTER_API_KEY".into()],
         workflows,
+        manifest,
         backfill: "retired: use release re-run or synthesis-only mode; no Python backfill script is part of the maintenance surface".into(),
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
@@ -768,7 +1247,10 @@ fn diagnose_conventional_commits(root: &Path) -> String {
     }
 }
 
-fn recommend_setup(diagnosis: &SetupDiagnosis) -> SetupRecommendation {
+fn recommend_setup(
+    diagnosis: &SetupDiagnosis,
+    manifest: Option<&LandfallManifest>,
+) -> SetupRecommendation {
     let workflow = match diagnosis.release_tool.as_str() {
         "semantic-release" => "semantic-release",
         "release-please" => "release-please",
@@ -776,7 +1258,12 @@ fn recommend_setup(diagnosis: &SetupDiagnosis) -> SetupRecommendation {
         "changesets" => "changesets",
         _ => "manual-tag",
     };
-    let mode = if workflow == "semantic-release" {
+    let manifest_profile = manifest
+        .and_then(|manifest| manifest.release.profile.as_deref())
+        .and_then(trimmed_option);
+    let mode = if let Some(profile) = manifest_profile.as_deref() {
+        profile
+    } else if workflow == "semantic-release" {
         "full"
     } else {
         "synthesis-only"
@@ -784,6 +1271,9 @@ fn recommend_setup(diagnosis: &SetupDiagnosis) -> SetupRecommendation {
     let mut rationale = vec![format!("detected release tool: {}", diagnosis.release_tool)];
     rationale.push(format!("default branch: {}", diagnosis.default_branch));
     rationale.push(format!("tag format: {}", diagnosis.tag_format));
+    if let Some(profile) = manifest_profile.as_deref() {
+        rationale.push(format!("manifest release profile: {profile}"));
+    }
     if diagnosis.monorepo {
         rationale.push("monorepo outputs enabled".into());
     }
@@ -794,7 +1284,10 @@ fn recommend_setup(diagnosis: &SetupDiagnosis) -> SetupRecommendation {
     }
 }
 
-fn setup_workflows(diagnosis: &SetupDiagnosis) -> BTreeMap<String, WorkflowCandidate> {
+fn setup_workflows(
+    diagnosis: &SetupDiagnosis,
+    manifest: Option<&LandfallManifest>,
+) -> BTreeMap<String, WorkflowCandidate> {
     let branch = &diagnosis.default_branch;
     let mut workflows = BTreeMap::new();
     for (name, tool, mode, content) in [
@@ -802,31 +1295,31 @@ fn setup_workflows(diagnosis: &SetupDiagnosis) -> BTreeMap<String, WorkflowCandi
             "semantic-release",
             "semantic-release",
             "full",
-            workflow_semantic_release(branch),
+            workflow_semantic_release(branch, manifest),
         ),
         (
             "release-please",
             "release-please",
             "synthesis-only",
-            workflow_release_please(branch),
+            workflow_release_please(branch, manifest),
         ),
         (
             "changesets",
             "changesets",
             "synthesis-only",
-            workflow_changesets(branch, false),
+            workflow_changesets(branch, false, manifest),
         ),
         (
             "changesets-monorepo",
             "changesets",
             "synthesis-only",
-            workflow_changesets(branch, true),
+            workflow_changesets(branch, true, manifest),
         ),
         (
             "manual-tag",
             "manual-tag",
             "synthesis-only",
-            workflow_manual_tag(),
+            workflow_manual_tag(manifest),
         ),
     ] {
         workflows.insert(
@@ -846,7 +1339,8 @@ fn setup_workflows(diagnosis: &SetupDiagnosis) -> BTreeMap<String, WorkflowCandi
     workflows
 }
 
-fn workflow_semantic_release(branch: &str) -> String {
+fn workflow_semantic_release(branch: &str, manifest: Option<&LandfallManifest>) -> String {
+    let manifest_inputs = render_manifest_action_inputs(manifest, 10, None);
     format!(
         r#"name: Release
 
@@ -874,11 +1368,13 @@ jobs:
           healthcheck: "true"
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+{manifest_inputs}
 "#
     )
 }
 
-fn workflow_release_please(branch: &str) -> String {
+fn workflow_release_please(branch: &str, manifest: Option<&LandfallManifest>) -> String {
+    let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     format!(
         r#"name: Release
 
@@ -914,12 +1410,17 @@ jobs:
           release-tag: ${{{{ needs.release-please.outputs.tag_name }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
-          changelog-source: release-body
+{manifest_inputs}
 "#
     )
 }
 
-fn workflow_changesets(branch: &str, monorepo: bool) -> String {
+fn workflow_changesets(
+    branch: &str,
+    monorepo: bool,
+    manifest: Option<&LandfallManifest>,
+) -> String {
+    let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     if monorepo {
         format!(
             r#"name: Release
@@ -969,7 +1470,7 @@ jobs:
           release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
-          changelog-source: release-body
+{manifest_inputs}
 "#
         )
     } else {
@@ -1018,14 +1519,16 @@ jobs:
           release-tag: v${{{{ fromJson(needs.release.outputs.published_packages)[0].version }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
-          changelog-source: release-body
+{manifest_inputs}
 "#
         )
     }
 }
 
-fn workflow_manual_tag() -> String {
-    r#"name: Synthesize Release Notes
+fn workflow_manual_tag(manifest: Option<&LandfallManifest>) -> String {
+    let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("auto"));
+    format!(
+        r#"name: Synthesize Release Notes
 
 on:
   push:
@@ -1048,12 +1551,97 @@ jobs:
         with:
           mode: synthesis-only
           healthcheck: "true"
-          release-tag: ${{ github.event.release.tag_name || github.ref_name }}
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          changelog-source: auto
+          release-tag: ${{{{ github.event.release.tag_name || github.ref_name }}}}
+          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+{manifest_inputs}
 "#
-    .to_string()
+    )
+}
+
+fn render_manifest_action_inputs(
+    manifest: Option<&LandfallManifest>,
+    indent: usize,
+    default_changelog_source: Option<&str>,
+) -> String {
+    let mut lines = Vec::new();
+    if let Some(manifest) = manifest {
+        if let Some(value) = manifest
+            .product
+            .description
+            .as_deref()
+            .and_then(trimmed_option)
+        {
+            lines.push(("product-description", value));
+        }
+        if let Some(value) = manifest.audience.as_deref().and_then(trimmed_option) {
+            lines.push(("audience", value));
+        }
+        if let Some(value) = manifest.voice.as_deref().and_then(trimmed_option) {
+            lines.push(("voice-guide", value));
+        }
+        if let Some(value) = manifest
+            .changelog
+            .source
+            .as_deref()
+            .and_then(trimmed_option)
+            .or_else(|| default_changelog_source.map(str::to_string))
+        {
+            lines.push(("changelog-source", value));
+        }
+        if let Some(value) = manifest
+            .artifacts
+            .markdown
+            .as_deref()
+            .and_then(trimmed_option)
+        {
+            lines.push(("notes-output-file", value));
+        }
+        if let Some(value) = manifest
+            .artifacts
+            .plaintext
+            .as_deref()
+            .and_then(trimmed_option)
+        {
+            lines.push(("notes-output-text-file", value));
+        }
+        if let Some(value) = manifest.artifacts.html.as_deref().and_then(trimmed_option) {
+            lines.push(("notes-output-html-file", value));
+        }
+        if let Some(value) = manifest.artifacts.json.as_deref().and_then(trimmed_option) {
+            lines.push(("notes-output-json", value));
+        }
+        if let Some(value) = manifest.artifacts.rss.as_deref().and_then(trimmed_option) {
+            lines.push(("rss-feed-file", value));
+        }
+        if let Some(value) = manifest.model.primary.as_deref().and_then(trimmed_option) {
+            lines.push(("llm-model", value));
+        }
+        if !manifest.model.fallbacks.is_empty() {
+            lines.push(("llm-fallback-models", manifest.model.fallbacks.join(",")));
+        }
+    } else if let Some(value) = default_changelog_source {
+        lines.push(("changelog-source", value.to_string()));
+    }
+
+    let padding = " ".repeat(indent);
+    lines
+        .into_iter()
+        .map(|(key, value)| format!("{padding}{key}: {}", yaml_scalar(&value)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn yaml_scalar(value: &str) -> String {
+    serde_yaml::to_string(value)
+        .ok()
+        .and_then(|rendered| {
+            rendered
+                .lines()
+                .find(|line| !line.trim().is_empty() && !line.trim().starts_with("---"))
+                .map(|line| line.trim().to_string())
+        })
+        .unwrap_or_else(|| format!("{value:?}"))
 }
 
 fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
@@ -1713,12 +2301,14 @@ fn extract_prs(args: ExtractPrsArgs) -> Result<()> {
 
 fn synthesize(args: SynthesizeArgs) -> Result<()> {
     validate_nonblank(&args.api_key, "api-key")?;
-    validate_nonblank(&args.model, "model")?;
-    let technical = resolve_technical_changelog(&args)?;
-    let prompt = render_prompt(&args, &technical)?;
-    let mut models = vec![args.model.clone()];
+    let config = resolve_synthesis_config(&args)?;
+    validate_nonblank(&config.model, "model")?;
+    let technical = resolve_technical_changelog(&args, &config)?;
+    let prompt = render_prompt(&args, &config, &technical)?;
+    let mut models = vec![config.model.clone()];
     models.extend(
-        args.fallback_models
+        config
+            .fallback_models
             .split(',')
             .map(str::trim)
             .filter(|model| !model.is_empty())
@@ -1770,8 +2360,85 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
     Err(last_error.into())
 }
 
-fn resolve_technical_changelog(args: &SynthesizeArgs) -> Result<String> {
-    let source = args.changelog_source.to_ascii_lowercase();
+fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<EffectiveSynthesisConfig> {
+    let manifest = load_manifest(&args.repo_root)?.unwrap_or_default();
+    let product_name = nonblank_or(
+        &args.product_name,
+        manifest.product.name.as_deref(),
+        "product-name",
+    )?;
+    let product_description = nonblank_or_default(
+        &args.product_description,
+        manifest.product.description.as_deref(),
+    );
+    let voice_guide = nonblank_or_default(&args.voice_guide, manifest.voice.as_deref());
+    let audience = optional_or_default(
+        args.audience.as_deref(),
+        manifest.audience.as_deref(),
+        "general",
+    );
+    let changelog_source = optional_or_default(
+        args.changelog_source.as_deref(),
+        manifest.changelog.source.as_deref(),
+        "auto",
+    );
+    let model = trimmed_option(&args.model)
+        .or_else(|| manifest.model.primary.as_deref().and_then(trimmed_option))
+        .or_else(|| policy_default_model(manifest.model.policy.as_deref()))
+        .unwrap_or_default();
+    let fallback_models = if !args.fallback_models.trim().is_empty() {
+        args.fallback_models.trim().to_string()
+    } else {
+        manifest.model.fallbacks.join(",")
+    };
+    Ok(EffectiveSynthesisConfig {
+        product_name,
+        product_description,
+        voice_guide,
+        audience,
+        changelog_source,
+        model,
+        fallback_models,
+    })
+}
+
+fn nonblank_or(value: &str, manifest: Option<&str>, name: &str) -> Result<String> {
+    if let Some(value) = trimmed_option(value) {
+        return Ok(value);
+    }
+    if let Some(value) = manifest.and_then(trimmed_option) {
+        return Ok(value);
+    }
+    Err(format!("{name} must not be blank").into())
+}
+
+fn nonblank_or_default(value: &str, manifest: Option<&str>) -> String {
+    trimmed_option(value)
+        .or_else(|| manifest.and_then(trimmed_option))
+        .unwrap_or_default()
+}
+
+fn optional_or_default(value: Option<&str>, manifest: Option<&str>, default: &str) -> String {
+    value
+        .and_then(trimmed_option)
+        .or_else(|| manifest.and_then(trimmed_option))
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn policy_default_model(policy: Option<&str>) -> Option<String> {
+    match policy.and_then(trimmed_option).as_deref() {
+        Some("cheap") => Some("openai/gpt-4o-mini".into()),
+        Some("balanced") => Some("anthropic/claude-sonnet-4".into()),
+        Some("rich") => Some("anthropic/claude-sonnet-4".into()),
+        _ => None,
+    }
+}
+
+fn resolve_technical_changelog(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+) -> Result<String> {
+    let source = config.changelog_source.to_ascii_lowercase();
     let from_changelog = if args.changelog_file.is_file() {
         let text = fs::read_to_string(&args.changelog_file)?;
         if text.trim().is_empty() {
@@ -1836,13 +2503,19 @@ fn extract_release_section(text: &str, version: &str) -> String {
     text[first.start()..end].trim().to_string()
 }
 
-fn render_prompt(args: &SynthesizeArgs, technical: &str) -> Result<String> {
+fn render_prompt(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+    technical: &str,
+) -> Result<String> {
     let template = if args.prompt_template.is_file() {
         fs::read_to_string(&args.prompt_template)?
     } else {
-        let filename = match args.audience.as_str() {
-            "developer" | "end-user" | "enterprise" | "general" => format!("{}.md", args.audience),
-            _ => return Err(format!("invalid audience {}", args.audience).into()),
+        let filename = match config.audience.as_str() {
+            "developer" | "end-user" | "enterprise" | "general" => {
+                format!("{}.md", config.audience)
+            }
+            _ => return Err(format!("invalid audience {}", config.audience).into()),
         };
         let path = args.templates_dir.join(filename);
         if path.is_file() {
@@ -1851,18 +2524,18 @@ fn render_prompt(args: &SynthesizeArgs, technical: &str) -> Result<String> {
             fs::read_to_string("templates/synthesis-prompt.md")?
         }
     };
-    let product_context = if args.product_description.trim().is_empty() {
+    let product_context = if config.product_description.trim().is_empty() {
         String::new()
     } else {
-        format!("Product context: {}\n", args.product_description.trim())
+        format!("Product context: {}\n", config.product_description.trim())
     };
-    let voice_guide = if args.voice_guide.trim().is_empty() {
+    let voice_guide = if config.voice_guide.trim().is_empty() {
         String::new()
     } else {
-        format!("Voice guide: {}\n", args.voice_guide.trim())
+        format!("Voice guide: {}\n", config.voice_guide.trim())
     };
     Ok(template
-        .replace("{{PRODUCT_NAME}}", &args.product_name)
+        .replace("{{PRODUCT_NAME}}", &config.product_name)
         .replace("{{VERSION}}", &args.version)
         .replace("{{TECHNICAL_CHANGELOG}}", technical)
         .replace("{{PRODUCT_CONTEXT}}", &product_context)
@@ -2800,6 +3473,10 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
         let text = fs::read_to_string(&path)?;
         errors.extend(validate_landfall_usage_inputs(&path, &text, &known));
     }
+    errors.extend(validate_manifest_schema_contract(&readme));
+    errors.extend(validate_manifest_action_precedence_contract(
+        &fs::read_to_string(&action_path)?,
+    ));
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     if errors.is_empty() {
         println!("action contract ok");
@@ -2843,6 +3520,74 @@ fn validate_self_release_workflow_contract(repo_root: &Path) -> Result<Vec<Strin
     }
 
     Ok(errors)
+}
+
+fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
+    let required = [
+        ".landfall.yml",
+        "product:",
+        "description:",
+        "audience:",
+        "voice:",
+        "changelog:",
+        "source:",
+        "artifacts:",
+        "markdown:",
+        "plaintext:",
+        "html:",
+        "json:",
+        "rss:",
+        "release:",
+        "profile:",
+        "model:",
+        "policy:",
+        "primary:",
+        "fallbacks:",
+        "budget:",
+        "max_input_tokens:",
+        "max_output_tokens:",
+        "max_usd:",
+        "dist/landfall doctor --repo-root .",
+    ];
+    required
+        .iter()
+        .filter(|needle| !readme.contains(**needle))
+        .map(|needle| format!("README missing manifest schema token `{needle}`"))
+        .chain(
+            [
+                "cheap, balanced, rich",
+                "full # full or synthesis-only",
+                "Non-empty action inputs still win over manifest values.",
+                "cheap` uses `openai/gpt-4o-mini`",
+            ]
+            .iter()
+            .filter(|needle| !readme.contains(**needle))
+            .map(|needle| format!("README missing manifest contract text `{needle}`")),
+        )
+        .collect()
+}
+
+fn validate_manifest_action_precedence_contract(action: &str) -> Vec<String> {
+    let required = [
+        "id: manifest_defaults",
+        "manifest-defaults",
+        "inputs.llm-model || steps.manifest_defaults.outputs.llm_model",
+        "inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models",
+        "inputs.audience || steps.manifest_defaults.outputs.audience",
+        "inputs.changelog-source || steps.manifest_defaults.outputs.changelog_source",
+        "inputs.product-description || steps.manifest_defaults.outputs.product_description",
+        "inputs.voice-guide || steps.manifest_defaults.outputs.voice_guide",
+        "inputs.notes-output-file || steps.manifest_defaults.outputs.notes_output_file",
+        "inputs.notes-output-text-file || steps.manifest_defaults.outputs.notes_output_text_file",
+        "inputs.notes-output-html-file || steps.manifest_defaults.outputs.notes_output_html_file",
+        "inputs.notes-output-json || steps.manifest_defaults.outputs.notes_output_json",
+        "inputs.rss-feed-file || steps.manifest_defaults.outputs.rss_feed_file",
+    ];
+    required
+        .iter()
+        .filter(|needle| !action.contains(**needle))
+        .map(|needle| format!("action.yml missing manifest precedence expression `{needle}`"))
+        .collect()
 }
 
 fn validate_landfall_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str>) -> Vec<String> {
@@ -3007,6 +3752,14 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_consumer_synthesis_only_success,
     );
     map.insert(
+        "manifest_defaults_and_overrides".to_string(),
+        scenario_manifest_defaults_and_overrides,
+    );
+    map.insert(
+        "action_manifest_defaults_precedence".to_string(),
+        scenario_action_manifest_defaults_precedence,
+    );
+    map.insert(
         "self_release_pr_path".to_string(),
         scenario_self_release_pr_path,
     );
@@ -3040,9 +3793,11 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
 fn canonical_scenarios() -> Vec<&'static str> {
     vec![
         "action_static_contract",
+        "action_manifest_defaults_precedence",
         "consumer_degraded_required_fails",
         "consumer_floating_tag_behavior",
         "consumer_full_mode_success",
+        "manifest_defaults_and_overrides",
         "consumer_release_update_failure",
         "consumer_synthesis_only_success",
         "self_release_pr_path",
@@ -3063,6 +3818,92 @@ fn scenario_action_static_contract(_: &Path) -> Result<Value> {
         return Err("action.yml does not invoke dist/landfall".into());
     }
     Ok(json!({"checked": ["action.yml"]}))
+}
+
+fn scenario_action_manifest_defaults_precedence(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("action-manifest-defaults");
+    fs::create_dir_all(&repo)?;
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Manifest Product
+  description: Manifest description
+audience: enterprise
+voice: Manifest voice
+changelog:
+  source: prs
+artifacts:
+  markdown: docs/releases/{version}.md
+  plaintext: docs/releases/{version}.txt
+  html: docs/releases/{version}.html
+  json: docs/releases/releases.json
+  rss: docs/releases/feed.xml
+model:
+  policy: cheap
+  fallbacks:
+    - manifest/fallback
+"#,
+    )?;
+    let output = temp_file("landfall-manifest-defaults")?;
+    let result = Command::new(current_exe())
+        .args([
+            "manifest-defaults",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--github-output",
+        ])
+        .arg(&output)
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let defaults = parse_outputs(&output)?;
+    let effective_audience = action_value("", defaults.get("audience"), "general");
+    let explicit_audience = action_value("developer", defaults.get("audience"), "general");
+    let effective_model = action_value("", defaults.get("llm_model"), "anthropic/claude-sonnet-4");
+    let explicit_model = action_value(
+        "explicit/model",
+        defaults.get("llm_model"),
+        "anthropic/claude-sonnet-4",
+    );
+    let effective_markdown = action_value("", defaults.get("notes_output_file"), "");
+    let explicit_markdown = action_value("docs/explicit.md", defaults.get("notes_output_file"), "");
+
+    if effective_audience != "enterprise"
+        || explicit_audience != "developer"
+        || effective_model != "openai/gpt-4o-mini"
+        || explicit_model != "explicit/model"
+        || effective_markdown != "docs/releases/{version}.md"
+        || explicit_markdown != "docs/explicit.md"
+    {
+        return Err("manifest default precedence did not match action semantics".into());
+    }
+
+    Ok(json!({
+        "checked": [
+            "manifest-defaults github output",
+            "empty action input uses manifest default",
+            "explicit action input overrides manifest default",
+            "model.policy cheap selects openai/gpt-4o-mini"
+        ],
+        "defaults": defaults,
+        "effective": {
+            "audience": effective_audience,
+            "llm_model": effective_model,
+            "notes_output_file": effective_markdown,
+        },
+        "explicit": {
+            "audience": explicit_audience,
+            "llm_model": explicit_model,
+            "notes_output_file": explicit_markdown,
+        }
+    }))
+}
+
+fn action_value(input: &str, manifest: Option<&String>, fallback: &str) -> String {
+    trimmed_option(input)
+        .or_else(|| manifest.and_then(|value| trimmed_option(value)))
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn scenario_publication_degraded_required(_: &Path) -> Result<Value> {
@@ -3296,6 +4137,154 @@ fn consumer_success(tmp_root: &Path, name: &str, write_artifact: bool) -> Result
         "artifact": artifact,
         "tags": git_tags(&repo)?,
     }))
+}
+
+fn scenario_manifest_defaults_and_overrides(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("manifest-defaults");
+    init_fixture_repo(&repo, "v1.2.3")?;
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Manifest Product
+  description: Manifest description
+audience: enterprise
+voice: Manifest voice
+changelog:
+  source: release-body
+model:
+  policy: cheap
+  primary: manifest/model
+  fallbacks:
+    - manifest/fallback
+"#,
+    )?;
+    let release_body = repo.join("release-body.md");
+    fs::write(
+        &release_body,
+        "## Manifest Technical\n\n- Manifest source\n",
+    )?;
+    let explicit_changelog = repo.join("CHANGELOG.md");
+    fs::write(&explicit_changelog, "## [1.2.3]\n\n- Explicit source\n")?;
+    let templates_dir = env::current_dir()?.join("templates/prompts");
+    let fake = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.to_string(),
+        update_status: 200,
+        ..Default::default()
+    };
+    let server = start_fake_server(fake)?;
+    let defaults_quality = repo.join("defaults-quality.txt");
+    let defaults = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "test-key",
+            "--api-url",
+            &format!("{}/chat/completions", server.url),
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+        ])
+        .arg(repo.join("missing-changelog.md"))
+        .args(["--release-body-file"])
+        .arg(&release_body)
+        .args(["--templates-dir"])
+        .arg(&templates_dir)
+        .args(["--quality-file"])
+        .arg(&defaults_quality)
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !defaults.status.success() {
+        return Err(String::from_utf8_lossy(&defaults.stderr).to_string().into());
+    }
+
+    let override_quality = repo.join("override-quality.txt");
+    let overrides = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "test-key",
+            "--model",
+            "explicit/model",
+            "--api-url",
+            &format!("{}/chat/completions", server.url),
+            "--product-name",
+            "Explicit Product",
+            "--product-description",
+            "Explicit description",
+            "--voice-guide",
+            "Explicit voice",
+            "--audience",
+            "developer",
+            "--changelog-source",
+            "changelog",
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+        ])
+        .arg(&explicit_changelog)
+        .args(["--templates-dir"])
+        .arg(&templates_dir)
+        .args(["--quality-file"])
+        .arg(&override_quality)
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !overrides.status.success() {
+        return Err(String::from_utf8_lossy(&overrides.stderr)
+            .to_string()
+            .into());
+    }
+
+    let requests = server.state.lock().unwrap().requests.clone();
+    let default_request = request_payload(&requests, 0)?;
+    let override_request = request_payload(&requests, 1)?;
+    let default_prompt = default_request["messages"][1]["content"]
+        .as_str()
+        .unwrap_or_default();
+    let override_prompt = override_request["messages"][1]["content"]
+        .as_str()
+        .unwrap_or_default();
+    if default_request["model"] != "manifest/model"
+        || !default_prompt.contains("Manifest Product")
+        || !default_prompt.contains("Manifest description")
+        || !default_prompt.contains("Manifest voice")
+        || !default_prompt.contains("Manifest source")
+    {
+        return Err("manifest defaults did not reach synthesis prompt".into());
+    }
+    if override_request["model"] != "explicit/model"
+        || !override_prompt.contains("Explicit Product")
+        || !override_prompt.contains("Explicit description")
+        || !override_prompt.contains("Explicit voice")
+        || !override_prompt.contains("Explicit source")
+        || override_prompt.contains("Manifest source")
+    {
+        return Err("explicit synthesis inputs did not override manifest defaults".into());
+    }
+
+    Ok(json!({
+        "default_model": default_request["model"],
+        "override_model": override_request["model"],
+        "default_quality": fs::read_to_string(defaults_quality)?.trim(),
+        "override_quality": fs::read_to_string(override_quality)?.trim(),
+        "checked": [
+            ".landfall.yml",
+            "manifest model/product/audience/voice/changelog defaults",
+            "explicit CLI override precedence"
+        ],
+    }))
+}
+
+fn request_payload(requests: &[Value], index: usize) -> Result<Value> {
+    let body = requests
+        .get(index)
+        .and_then(|request| request["body"].as_str())
+        .ok_or_else(|| format!("missing fake LLM request {index}"))?;
+    Ok(serde_json::from_str(body)?)
 }
 
 fn scenario_consumer_degraded_required_fails(tmp_root: &Path) -> Result<Value> {
@@ -3947,9 +4936,9 @@ mod tests {
         let diagnosis = diagnose_setup(repo.path());
         assert_eq!(diagnosis.release_tool, "changesets");
         assert!(diagnosis.monorepo);
-        let recommendation = recommend_setup(&diagnosis);
+        let recommendation = recommend_setup(&diagnosis, None);
         assert_eq!(recommendation.workflow, "changesets-monorepo");
-        let workflows = setup_workflows(&diagnosis);
+        let workflows = setup_workflows(&diagnosis, None);
         let changesets = &workflows["changesets"].content;
         assert!(
             changesets.contains("fromJson(needs.release.outputs.published_packages)[0].version")
@@ -3973,11 +4962,242 @@ mod tests {
         .unwrap();
         let diagnosis = diagnose_setup(repo.path());
         assert_eq!(diagnosis.release_tool, "semantic-release");
-        assert_eq!(recommend_setup(&diagnosis).mode, "full");
-        let workflow = &setup_workflows(&diagnosis)["semantic-release"].content;
+        assert_eq!(recommend_setup(&diagnosis, None).mode, "full");
+        let workflow = &setup_workflows(&diagnosis, None)["semantic-release"].content;
         assert!(workflow.contains("mode: full"));
         assert!(workflow.contains("healthcheck: \"true\""));
         assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    }
+
+    #[test]
+    fn init_manifest_infers_product_context_from_repo_metadata() {
+        let repo = tempfile::tempdir().unwrap();
+        fs::write(
+            repo.path().join("package.json"),
+            r#"{"name":"@mistystep/atlas","description":"Release operations for app fleets."}"#,
+        )
+        .unwrap();
+        fs::write(
+            repo.path().join("README.md"),
+            "# Atlas\n\nLandfall-managed release automation.\n",
+        )
+        .unwrap();
+
+        let manifest = infer_manifest(repo.path());
+        assert_eq!(manifest.product.name.as_deref(), Some("Atlas"));
+        assert_eq!(
+            manifest.product.description.as_deref(),
+            Some("Release operations for app fleets.")
+        );
+        assert_eq!(manifest.audience.as_deref(), Some("developer"));
+        assert_eq!(manifest.changelog.source.as_deref(), Some("auto"));
+
+        let rendered = render_manifest_yaml(&manifest).unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+        assert_eq!(parsed["product"]["name"], "Atlas");
+        assert_eq!(parsed["model"]["policy"], "balanced");
+    }
+
+    #[test]
+    fn setup_projects_manifest_defaults_into_generated_workflows() {
+        let diagnosis = SetupDiagnosis {
+            release_tool: "semantic-release".into(),
+            default_branch: "master".into(),
+            tag_format: "v{version}".into(),
+            conventional_commits: "ready".into(),
+            monorepo: false,
+            packages: vec!["landfall".into()],
+            signals: Vec::new(),
+        };
+        let manifest = LandfallManifest {
+            product: ProductManifest {
+                name: Some("Landfall".into()),
+                description: Some("Release notes and changelog automation.".into()),
+            },
+            audience: Some("enterprise".into()),
+            voice: Some("plainspoken, specific, operator-facing".into()),
+            changelog: ChangelogManifest {
+                source: Some("release-body".into()),
+            },
+            artifacts: ArtifactManifest {
+                markdown: Some("docs/releases/{version}.md".into()),
+                plaintext: None,
+                html: Some("docs/releases/{version}.html".into()),
+                json: None,
+                rss: Some("docs/releases/feed.xml".into()),
+            },
+            release: ReleaseManifest {
+                profile: Some("full".into()),
+            },
+            model: ModelManifest {
+                policy: Some("cheap".into()),
+                primary: Some("openai/gpt-4o-mini".into()),
+                fallbacks: vec!["google/gemini-2.5-flash".into()],
+            },
+            budget: BudgetManifest {
+                max_input_tokens: Some(8000),
+                max_output_tokens: Some(900),
+                max_usd: Some(0.05),
+            },
+        };
+
+        let workflows = setup_workflows(&diagnosis, Some(&manifest));
+        let workflow = &workflows["semantic-release"].content;
+        assert!(workflow.contains("product-description: Release notes and changelog automation."));
+        assert!(workflow.contains("audience: enterprise"));
+        assert!(workflow.contains("voice-guide: plainspoken, specific, operator-facing"));
+        assert!(workflow.contains("changelog-source: release-body"));
+        assert!(workflow.contains("notes-output-file: docs/releases/{version}.md"));
+        assert!(workflow.contains("notes-output-html-file: docs/releases/{version}.html"));
+        assert!(workflow.contains("rss-feed-file: docs/releases/feed.xml"));
+        assert!(workflow.contains("llm-model: openai/gpt-4o-mini"));
+        assert!(workflow.contains("llm-fallback-models: google/gemini-2.5-flash"));
+        let release_please = &workflows["release-please"].content;
+        assert_eq!(release_please.matches("changelog-source:").count(), 1);
+        assert!(release_please.contains("changelog-source: release-body"));
+
+        let mut synthesis_only_manifest = manifest.clone();
+        synthesis_only_manifest.release.profile = Some("synthesis-only".into());
+        let recommendation = recommend_setup(&diagnosis, Some(&synthesis_only_manifest));
+        assert_eq!(recommendation.mode, "synthesis-only");
+        assert!(
+            recommendation
+                .rationale
+                .contains(&"manifest release profile: synthesis-only".into())
+        );
+    }
+
+    #[test]
+    fn synthesis_manifest_defaults_keep_explicit_cli_precedence() {
+        let repo = tempfile::tempdir().unwrap();
+        fs::write(
+            repo.path().join(".landfall.yml"),
+            r#"product:
+  name: Manifest Product
+  description: Manifest description
+audience: enterprise
+voice: Manifest voice
+changelog:
+  source: release-body
+model:
+  policy: cheap
+  primary: manifest/model
+  fallbacks:
+    - manifest/fallback
+"#,
+        )
+        .unwrap();
+        let mut args = SynthesizeArgs {
+            api_key: "test".into(),
+            model: String::new(),
+            api_url: "http://example.invalid".into(),
+            fallback_models: String::new(),
+            product_name: String::new(),
+            product_description: String::new(),
+            voice_guide: String::new(),
+            audience: None,
+            changelog_source: None,
+            version: "v1.2.3".into(),
+            changelog_file: repo.path().join("CHANGELOG.md"),
+            release_body_file: repo.path().join("release.md"),
+            pr_changelog_file: PathBuf::from("."),
+            prompt_template: PathBuf::from("."),
+            quality_file: repo.path().join("quality.txt"),
+            attempts_file: PathBuf::from("."),
+            templates_dir: PathBuf::from("templates/prompts"),
+            repo_root: repo.path().to_path_buf(),
+        };
+        let defaults = resolve_synthesis_config(&args).unwrap();
+        assert_eq!(defaults.product_name, "Manifest Product");
+        assert_eq!(defaults.product_description, "Manifest description");
+        assert_eq!(defaults.voice_guide, "Manifest voice");
+        assert_eq!(defaults.audience, "enterprise");
+        assert_eq!(defaults.changelog_source, "release-body");
+        assert_eq!(defaults.model, "manifest/model");
+        assert_eq!(defaults.fallback_models, "manifest/fallback");
+
+        args.audience = Some("developer".into());
+        args.changelog_source = Some("prs".into());
+        args.product_description = "Explicit description".into();
+        args.model = "explicit/model".into();
+        let explicit = resolve_synthesis_config(&args).unwrap();
+        assert_eq!(explicit.product_description, "Explicit description");
+        assert_eq!(explicit.audience, "developer");
+        assert_eq!(explicit.changelog_source, "prs");
+        assert_eq!(explicit.model, "explicit/model");
+
+        args.model = String::new();
+        args.audience = None;
+        args.changelog_source = None;
+        let mut manifest: LandfallManifest =
+            serde_yaml::from_str(&fs::read_to_string(repo.path().join(".landfall.yml")).unwrap())
+                .unwrap();
+        manifest.model.primary = None;
+        manifest.model.policy = Some("rich".into());
+        fs::write(
+            repo.path().join(".landfall.yml"),
+            render_manifest_yaml(&manifest).unwrap(),
+        )
+        .unwrap();
+        let policy_default = resolve_synthesis_config(&args).unwrap();
+        assert_eq!(policy_default.model, "anthropic/claude-sonnet-4");
+    }
+
+    #[test]
+    fn manifest_validation_rejects_multiline_action_scalars() {
+        let manifest = LandfallManifest {
+            product: ProductManifest {
+                name: Some("Demo".into()),
+                description: Some("first line\nsecond line".into()),
+            },
+            audience: Some("developer".into()),
+            voice: Some("clear".into()),
+            changelog: ChangelogManifest {
+                source: Some("auto".into()),
+            },
+            artifacts: ArtifactManifest::default(),
+            release: ReleaseManifest::default(),
+            model: ModelManifest::default(),
+            budget: BudgetManifest::default(),
+        };
+        let errors = validate_manifest(&manifest);
+        assert!(errors.iter().any(|error| error.contains("single-line")));
+    }
+
+    #[test]
+    fn manifest_validation_rejects_unsupported_policy_and_profile() {
+        let manifest = LandfallManifest {
+            product: ProductManifest {
+                name: Some("Demo".into()),
+                description: Some("Demo app".into()),
+            },
+            audience: Some("developer".into()),
+            voice: Some("clear".into()),
+            changelog: ChangelogManifest {
+                source: Some("auto".into()),
+            },
+            artifacts: ArtifactManifest::default(),
+            release: ReleaseManifest {
+                profile: Some("banana".into()),
+            },
+            model: ModelManifest {
+                policy: Some("off".into()),
+                primary: None,
+                fallbacks: Vec::new(),
+            },
+            budget: BudgetManifest::default(),
+        };
+        let errors = validate_manifest(&manifest);
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("release.profile must be full or synthesis-only"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("model.policy must be cheap, balanced, or rich"))
+        );
     }
 
     #[test]
@@ -3991,10 +5211,13 @@ mod tests {
             packages: vec!["pkg-a".into(), "pkg-b".into()],
             signals: Vec::new(),
         };
-        for candidate in setup_workflows(&diagnosis).values() {
+        for candidate in setup_workflows(&diagnosis, None).values() {
             let parsed: serde_yaml::Value = serde_yaml::from_str(&candidate.content).unwrap();
             assert!(parsed["jobs"].is_mapping(), "{}", candidate.path);
         }
+        let manual = &setup_workflows(&diagnosis, None)["manual-tag"].content;
+        assert!(manual.contains("${{ github.event.release.tag_name || github.ref_name }}"));
+        assert!(manual.contains("${{ secrets.GH_RELEASE_TOKEN }}"));
     }
 
     #[test]

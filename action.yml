@@ -18,11 +18,11 @@ inputs:
     required: false
   llm-model:
     description: Primary model ID for synthesis (e.g., 'anthropic/claude-sonnet-4', 'openai/gpt-4o-mini').
-    default: anthropic/claude-sonnet-4
+    default: ""
     required: false
   llm-fallback-models:
     description: Comma-separated fallback model IDs tried in order if primary fails.
-    default: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+    default: ""
     required: false
   llm-api-url:
     description: Chat completions endpoint URL (OpenAI-compatible).
@@ -70,7 +70,7 @@ inputs:
     required: false
   audience:
     description: Built-in synthesis prompt variant used when no custom prompt template is found. One of general, developer, end-user, enterprise.
-    default: "general"
+    default: ""
     required: false
   product-description:
     description: One-line product description injected into the synthesis prompt as {{PRODUCT_CONTEXT}}.
@@ -82,7 +82,7 @@ inputs:
     required: false
   changelog-source:
     description: Technical source for synthesis. One of auto (CHANGELOG.md > release body > PRs), changelog, release-body, prs.
-    default: "auto"
+    default: ""
     required: false
   healthcheck:
     description: Validate LLM API key with a minimal probe request before synthesis. Catches stale or revoked keys early.
@@ -159,12 +159,21 @@ runs:
         set -euo pipefail
         npm ci --no-fund --no-audit
 
+    - name: Resolve manifest defaults
+      id: manifest_defaults
+      shell: bash
+      run: |
+        set -euo pipefail
+        "${GITHUB_ACTION_PATH}/dist/landfall" manifest-defaults \
+          --repo-root "${GITHUB_WORKSPACE}" \
+          --github-output "${GITHUB_OUTPUT}"
+
     - name: Validate LLM API key
       if: (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
       shell: bash
       env:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
-        LLM_MODEL: ${{ inputs.llm-model }}
+        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || 'anthropic/claude-sonnet-4' }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
       run: |
@@ -260,15 +269,16 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         LLM_API_KEY: ${{ inputs.llm-api-key }}
-        LLM_MODEL: ${{ inputs.llm-model }}
+        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || 'anthropic/claude-sonnet-4' }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
-        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models }}
+        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models || 'google/gemini-2.5-flash,openai/gpt-4o-mini' }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}
-        AUDIENCE: ${{ inputs.audience }}
-        CHANGELOG_SOURCE: ${{ inputs.changelog-source }}
-        PRODUCT_DESCRIPTION: ${{ inputs.product-description }}
-        VOICE_GUIDE: ${{ inputs.voice-guide }}
+        PRODUCT_NAME: ${{ steps.manifest_defaults.outputs.product_name }}
+        AUDIENCE: ${{ inputs.audience || steps.manifest_defaults.outputs.audience }}
+        CHANGELOG_SOURCE: ${{ inputs.changelog-source || steps.manifest_defaults.outputs.changelog_source }}
+        PRODUCT_DESCRIPTION: ${{ inputs.product-description || steps.manifest_defaults.outputs.product_description }}
+        VOICE_GUIDE: ${{ inputs.voice-guide || steps.manifest_defaults.outputs.voice_guide }}
       run: |
         set -euo pipefail
 
@@ -283,7 +293,10 @@ runs:
         }
 
         notes_file="${RUNNER_TEMP}/landfall-whats-new.md"
-        product_name="${GITHUB_REPOSITORY#*/}"
+        product_name="${PRODUCT_NAME}"
+        if [ -z "${product_name}" ]; then
+          product_name="${GITHUB_REPOSITORY#*/}"
+        fi
         api_key="${LLM_API_KEY}"
         product_description="${PRODUCT_DESCRIPTION}"
         voice_guide="${VOICE_GUIDE}"
@@ -301,7 +314,8 @@ runs:
           exit 0
         fi
 
-        changelog_source="$(printf '%s' "${CHANGELOG_SOURCE}" | tr '[:upper:]' '[:lower:]')"
+        changelog_source="$(printf '%s' "${CHANGELOG_SOURCE:-auto}" | tr '[:upper:]' '[:lower:]')"
+        audience="${AUDIENCE:-general}"
         case "${changelog_source}" in
           auto|changelog|release-body|prs) ;;
           *)
@@ -413,7 +427,7 @@ runs:
           prompt_template="${GITHUB_WORKSPACE}/.landfall/synthesis-prompt.md"
           echo "::notice::Using repo prompt template: .landfall/synthesis-prompt.md"
         else
-          echo "::notice::Using built-in prompt template audience: ${AUDIENCE}"
+          echo "::notice::Using built-in prompt template audience: ${audience}"
         fi
 
         quality_file="${RUNNER_TEMP}/landfall-synthesis-quality.txt"
@@ -438,10 +452,11 @@ runs:
           --product-name "${product_name}" \
           --product-description "${product_description}" \
           --voice-guide "${voice_guide}" \
-          --audience "${AUDIENCE}" \
+          --audience "${audience}" \
           --changelog-source "${changelog_source}" \
           --version "${release_tag}" \
           --changelog-file "${changelog_file}" \
+          --repo-root "${GITHUB_WORKSPACE}" \
           "${synth_source_args[@]}" \
           --templates-dir "${GITHUB_ACTION_PATH}/templates/prompts" \
           --quality-file "${quality_file}" \
@@ -569,10 +584,10 @@ runs:
       env:
         NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
-        OUTPUT_FILE: ${{ inputs.notes-output-file }}
-        OUTPUT_TEXT_FILE: ${{ inputs.notes-output-text-file }}
-        OUTPUT_HTML_FILE: ${{ inputs.notes-output-html-file }}
-        OUTPUT_JSON: ${{ inputs.notes-output-json }}
+        OUTPUT_FILE: ${{ inputs.notes-output-file || steps.manifest_defaults.outputs.notes_output_file }}
+        OUTPUT_TEXT_FILE: ${{ inputs.notes-output-text-file || steps.manifest_defaults.outputs.notes_output_text_file }}
+        OUTPUT_HTML_FILE: ${{ inputs.notes-output-html-file || steps.manifest_defaults.outputs.notes_output_html_file }}
+        OUTPUT_JSON: ${{ inputs.notes-output-json || steps.manifest_defaults.outputs.notes_output_json }}
       run: |
         set -euo pipefail
 
@@ -635,11 +650,11 @@ runs:
 
     - name: Update RSS feed file
       id: update_rss
-      if: inputs.rss-feed-file != '' && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
+      if: (inputs.rss-feed-file != '' || steps.manifest_defaults.outputs.rss_feed_file != '') && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        RSS_FEED_FILE: ${{ inputs.rss-feed-file }}
+        RSS_FEED_FILE: ${{ inputs.rss-feed-file || steps.manifest_defaults.outputs.rss_feed_file }}
         RSS_MAX_ENTRIES: ${{ inputs.rss-max-entries }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
@@ -812,7 +827,7 @@ runs:
         ARTIFACT_STEP_SUCCEEDED: ${{ steps.write_artifacts.outputs.succeeded }}
         ARTIFACT_FAILURE_STAGE: ${{ steps.write_artifacts.outputs.failure_stage }}
         ARTIFACT_FAILURE_MESSAGE: ${{ steps.write_artifacts.outputs.failure_message }}
-        RSS_ENABLED: ${{ inputs.rss-feed-file != '' }}
+        RSS_ENABLED: ${{ inputs.rss-feed-file != '' || steps.manifest_defaults.outputs.rss_feed_file != '' }}
         RSS_STEP_SUCCEEDED: ${{ steps.update_rss.outputs.succeeded }}
         RSS_FAILURE_STAGE: ${{ steps.update_rss.outputs.failure_stage }}
         RSS_FAILURE_MESSAGE: ${{ steps.update_rss.outputs.failure_message }}
