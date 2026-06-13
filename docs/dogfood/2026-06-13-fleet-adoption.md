@@ -22,8 +22,24 @@ target/debug/landfall fleet open-prs --dry-run --plan-dir .landfall/dogfood/flee
 - Blocked by missing required secrets: 73 repositories.
 - Missing `GH_RELEASE_TOKEN`: 73 repositories.
 - Missing `OPENROUTER_API_KEY`: 61 repositories.
-- `phrazzld/glance` already invokes Landfall in `.github/workflows/release.yml`; after the scanner fix it is classified as `manifest-only`.
-- `misty-step/bitterblossom` has Landfall-style release bodies but no repo workflow or manifest detected; it remains a real adoption candidate.
+- `misty-step/bitterblossom` adopted Landfall in synthesis-only mode in PR
+  [#853](https://github.com/misty-step/bitterblossom/pull/853), merged as
+  `175c9dfd83c015f41c09994b5218fc36860e842e`.
+- `phrazzld/glance` added a Landfall manifest and kept its full release
+  workflow in PR [#73](https://github.com/phrazzld/glance/pull/73), merged as
+  `abdaa93ad4c0a86696b6021ff7f556598c9995b6`.
+- Glance dogfood exposed a Landfall no-release summary bug. Landfall fixed it
+  in PR [#131](https://github.com/misty-step/landfall/pull/131), released it
+  as [v1.23.1](https://github.com/misty-step/landfall/releases/tag/v1.23.1)
+  via PR [#132](https://github.com/misty-step/landfall/pull/132), then Glance
+  updated to the fixed action pin in PR
+  [#74](https://github.com/phrazzld/glance/pull/74), merged as
+  `b74081d12772301cfdbe3c82da0d1e549ea7d676`.
+- Post-merge verification passed for Landfall v1.23.1 and the Glance release
+  workflow. Glance Release run
+  [27481472455](https://github.com/phrazzld/glance/actions/runs/27481472455)
+  replayed the exact no-release path that previously failed and completed
+  successfully.
 
 ## Findings
 
@@ -76,16 +92,49 @@ Evidence: `bin/build-linux-action --write` on macOS stayed in the final Landfall
 Impact: local Rust changes to the action runtime still need hosted Linux artifact recovery unless the Docker path is made faster or more observable.
 Action: use hosted CI artifact upload as the fallback binary builder for this PR; product follow-up should improve local build progress and timeout behavior.
 
+### LF-DOGFOOD-008: downstream clones inside a Rust workspace broke Cargo
+Severity: medium
+Category: verification
+Evidence: cloning downstream repositories under `.landfall/dogfood/...` inside the Landfall checkout caused Cargo to report that the downstream package believed it was in a workspace when it was not.
+Impact: dogfood verification can fail for consumer repos for reasons created by Landfall's evidence directory layout.
+Action: run downstream clones outside the Landfall repo, such as `/tmp/landfall-dogfood-downstream`; product follow-up should default fleet workdirs outside the producer repo or generate a `.cargo/config.toml`/workspace boundary when nested clones are unavoidable.
+
+### LF-DOGFOOD-009: no-release full-mode run failed final summary
+Severity: critical
+Category: release-path
+Evidence: Glance Release run [27481025693](https://github.com/phrazzld/glance/actions/runs/27481025693) found no semantic-release-worthy commits, then failed in `release-policy summary` because `--attempts-file` and `--context-metadata-file` were passed empty values.
+Impact: a healthy no-op release could fail the release workflow after semantic-release correctly decided not to publish a new version.
+Action: fixed in Landfall PR [#131](https://github.com/misty-step/landfall/pull/131), released as [v1.23.1](https://github.com/misty-step/landfall/releases/tag/v1.23.1), and verified in Glance Release run [27481472455](https://github.com/phrazzld/glance/actions/runs/27481472455).
+
+### LF-DOGFOOD-010: manual-tag adoption can double-trigger synthesis
+Severity: high
+Category: generated-diff
+Evidence: the generated manual-tag workflow shape included both tag push and `release.published` triggers; Bitterblossom was manually narrowed to `release.published` only before merge.
+Impact: generated adoption PRs can spend LLM budget twice and race two release-note synthesis jobs for the same human-created release.
+Action: keep Bitterblossom on the single `release.published` trigger; product follow-up should make manual-tag/synthesis-only setup pick exactly one trigger by default.
+
+### LF-DOGFOOD-011: Node 20 action warnings are now time-bound
+Severity: medium
+Category: verification
+Evidence: hosted Landfall and Glance workflows warn that Node 20 JavaScript actions will run on Node 24 by default starting 2026-06-16, three days after this report, and Node 20 will be removed on 2026-09-16.
+Impact: Landfall adopters will see noisy warnings now, and untested action dependencies may break as GitHub changes the runtime default.
+Action: add a hardening ticket to test Landfall and generated workflows with `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`, then document or update pins before the default changes.
+
 ## What Worked Well
 
 - `fleet scan` and `fleet plan` were fast enough across 75 active repos.
 - Secret metadata never printed values in scan artifacts.
 - The dry-run PR artifact is easy to inspect and can be handed to downstream repo work.
 - Replay coverage made it cheap to lock product fixes to the dogfood failure modes.
+- SHA-pinned downstream rollout is practical when the generated diff is small:
+  Glance moved from v1.23.0 to v1.23.1 with a one-line workflow change.
+- The healthcheck/no-release/full-mode path now has real downstream evidence,
+  not just local unit coverage.
 
 ## Next Rollout Steps
 
-1. Provision `GH_RELEASE_TOKEN` and `OPENROUTER_API_KEY` only after narrowing the target set to real applications.
-2. Open a manifest-only PR to `phrazzld/glance` after reviewing whether its pinned Landfall workflow should also move to `@v1`.
-3. Open an adoption PR to `misty-step/bitterblossom` with manifest plus synthesis-only workflow.
-4. Add fleet app classification before attempting bulk adoption across the remaining 73 repositories.
+1. Add Node 24 workflow-runtime verification before GitHub switches hosted actions to Node 24 by default on 2026-06-16.
+2. Add a Landfall fix so synthesis-only/manual-tag setup generates exactly one trigger, avoiding duplicate LLM spend.
+3. Add fleet app classification before attempting bulk adoption across the remaining 73 repositories.
+4. Provision `GH_RELEASE_TOKEN` and `OPENROUTER_API_KEY` only after narrowing the target set to real applications.
+5. Keep using real downstream release runs as the acceptance oracle for Landfall action changes; local CLI tests are necessary but not sufficient.
