@@ -249,9 +249,9 @@ struct SummaryArgs {
     #[arg(long = "github-output")]
     github_output: PathBuf,
     #[arg(long = "attempts-file", default_value = ".")]
-    attempts_file: PathBuf,
+    attempts_file: String,
     #[arg(long = "context-metadata-file", default_value = ".")]
-    context_metadata_file: PathBuf,
+    context_metadata_file: String,
 }
 
 #[derive(Args)]
@@ -4185,8 +4185,8 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
         quality: quality.clone(),
         failure_stage: sanitize_text(failure_stage),
         failure_message: sanitize_text(failure_message),
-        model_attempts: read_json_array_if_requested(&args.attempts_file)?,
-        context: read_json_value_if_requested(&args.context_metadata_file)?,
+        model_attempts: read_json_array_if_requested(Path::new(&args.attempts_file))?,
+        context: read_json_value_if_requested(Path::new(&args.context_metadata_file))?,
         destinations,
     };
     write_outputs(
@@ -7950,8 +7950,8 @@ mod tests {
             slack_enabled: "true".into(),
             slack_sent: "false".into(),
             github_output: output.clone(),
-            attempts_file: attempts,
-            context_metadata_file: PathBuf::from("."),
+            attempts_file: attempts.to_string_lossy().into_owned(),
+            context_metadata_file: ".".into(),
         };
         summary_policy(args).unwrap();
         let outputs = parse_outputs(&output).unwrap();
@@ -7962,6 +7962,47 @@ mod tests {
         assert_eq!(status["destinations"]["rss"]["failure_stage"], "rss_update");
         assert_eq!(status["destinations"]["webhook"]["succeeded"], true);
         assert_eq!(status["destinations"]["slack"]["succeeded"], false);
+    }
+
+    #[test]
+    fn summary_no_release_accepts_empty_artifact_paths() {
+        let output = temp_file("summary-no-release").unwrap();
+        let cli = Cli::try_parse_from([
+            "landfall",
+            "release-policy",
+            "summary",
+            "--synthesis-enabled",
+            "true",
+            "--released",
+            "false",
+            "--synth-succeeded",
+            "",
+            "--update-succeeded",
+            "",
+            "--github-output",
+            output.to_str().unwrap(),
+            "--attempts-file",
+            "",
+            "--context-metadata-file",
+            "",
+        ])
+        .unwrap();
+        let Commands::ReleasePolicy(ReleasePolicyArgs {
+            command: ReleasePolicyCommand::Summary(args),
+        }) = cli.command
+        else {
+            panic!("expected release-policy summary command");
+        };
+
+        summary_policy(*args).unwrap();
+
+        let outputs = parse_outputs(&output).unwrap();
+        assert_eq!(outputs["succeeded"], "true");
+        assert_eq!(outputs["failure_stage"], "");
+        let status: Value = serde_json::from_str(&outputs["status_json"]).unwrap();
+        assert_eq!(status["released"], false);
+        assert_eq!(status["model_attempts"].as_array().unwrap().len(), 0);
+        assert_eq!(status["context"], json!({}));
     }
 
     #[test]
