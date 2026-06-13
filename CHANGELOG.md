@@ -1,3 +1,8 @@
+# [1.19.0](https://github.com/misty-step/landfall/compare/v1.18.2...v1.19.0) (2026-06-13)
+
+### Features
+
+* **manifest:** add Landfall product manifest ([c15887e](https://github.com/misty-step/landfall/commit/c15887ea6c7b455b0117b232c3bfd96e7189d741))
 # [1.18.2](https://github.com/misty-step/landfall/compare/v1.18.1...v1.18.2) (2026-06-12)
 
 ### Bug Fixes
