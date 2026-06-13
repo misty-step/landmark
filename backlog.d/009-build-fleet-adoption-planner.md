@@ -6,11 +6,11 @@ Priority: P0 · Status: done · Estimate: XL
 Let Landfall scan personal and Mistystep GitHub repositories, classify adoption readiness, and open safe per-repo installation pull requests with minimal manual setup.
 
 ## Oracle
-- [ ] `dist/landfall fleet scan --owner phrazzld --owner misty-step --output .landfall/fleet.json` lists repositories, activity, release tooling, default branch, tag format, package topology, existing workflows, and required secret status without mutating remote state.
-- [ ] `dist/landfall fleet plan --input .landfall/fleet.json --output-dir .landfall/fleet-plan` emits a ranked adoption plan with skip reasons, risk flags, and recommended Landfall mode for each active repo.
-- [ ] `dist/landfall fleet open-prs --dry-run` renders per-repo workflow and manifest diffs without pushing branches.
-- [ ] A replay or fixture test covers at least semantic-release, release-please, changesets, manual-tag, no-release-tool, archived, private, and branch-protected repository cases.
-- [ ] The command never prints secret values and clearly reports missing token scopes or unavailable secret metadata.
+- [x] `dist/landfall fleet scan --owner phrazzld --owner misty-step --output .landfall/fleet.json` lists repositories, activity, release tooling, default branch, tag format, package topology, existing workflows, and required secret status without mutating remote state.
+- [x] `dist/landfall fleet plan --input .landfall/fleet.json --output-dir .landfall/fleet-plan` emits a ranked adoption plan with skip reasons, risk flags, and recommended Landfall mode for each active repo.
+- [x] `dist/landfall fleet open-prs --dry-run` renders per-repo workflow and manifest diffs without pushing branches.
+- [x] A replay or fixture test covers at least semantic-release, release-please, changesets, manual-tag, no-release-tool, archived, private, and branch-protected repository cases.
+- [x] The command never prints secret values and clearly reports missing token scopes or unavailable secret metadata.
 
 ## Children
 1. Add read-only GitHub inventory for repo metadata, recent activity, default branch, release files, tags, workflows, and package signals.
