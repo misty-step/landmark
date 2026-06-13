@@ -1,3 +1,8 @@
+# [1.23.1](https://github.com/misty-step/landfall/compare/v1.23.0...v1.23.1) (2026-06-13)
+
+### Bug Fixes
+
+* **action:** tolerate no-release summary artifacts (#131) ([7b1bf02](https://github.com/misty-step/landfall/commit/7b1bf02472d6636f921408322b23a1c3a31bc781))
 # [1.23.0](https://github.com/misty-step/landfall/compare/v1.22.0...v1.23.0) (2026-06-13)
 
 ### Features
