@@ -1,3 +1,9 @@
+# [1.22.0](https://github.com/misty-step/landfall/compare/v1.21.0...v1.22.0) (2026-06-13)
+
+### Features
+
+* **backfill:** restore release history migration ([3f0fb5c](https://github.com/misty-step/landfall/commit/3f0fb5cea945a0e223d469bd319849a915cc6769))
+
 # [1.21.0](https://github.com/misty-step/landfall/compare/v1.20.0...v1.21.0) (2026-06-13)
 
 ### Features
