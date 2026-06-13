@@ -27,7 +27,7 @@ const INVALID_NOTES: &str = "hello, here are the release notes";
 const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 
 #[derive(Parser)]
-#[command(name = "landfall")]
+#[command(name = "landfall", version)]
 #[command(about = "Rust runtime for the Landfall release action")]
 struct Cli {
     #[command(subcommand)]
@@ -414,7 +414,11 @@ struct BackfillArgs {
     dry_run: bool,
     #[arg(long = "repository", default_value = "")]
     repository: String,
-    #[arg(long = "github-token", default_value = "")]
+    #[arg(
+        long = "github-token",
+        default_value = "",
+        help = "GitHub token; defaults to GITHUB_TOKEN when omitted"
+    )]
     github_token: String,
     #[arg(long = "api-base-url", default_value = "https://api.github.com")]
     api_base_url: String,
@@ -469,6 +473,9 @@ enum FleetCommand {
 }
 
 #[derive(Args)]
+#[command(
+    after_help = "Token note: if --github-token is omitted, Landfall reads GITHUB_TOKEN from the environment. Prefer the environment to avoid token-bearing argv."
+)]
 struct FleetScanArgs {
     #[arg(long)]
     owner: Vec<String>,
@@ -1474,24 +1481,33 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         }
         opened += 1;
         let manifest = render_manifest_yaml(&repo.manifest)?;
-        let workflow = fleet_workflow_for_plan(repo);
-        fs::create_dir_all(repo_dir.join(".github/workflows"))?;
         fs::write(repo_dir.join(".landfall.yml"), &manifest)?;
-        fs::write(
-            repo_dir.join(".github/workflows/landfall-release.yml"),
-            &workflow,
-        )?;
-        let diff = render_fleet_pr_diff(repo, &manifest, &workflow);
+        let workflow = if repo.recommended_mode == "manifest-only" {
+            None
+        } else {
+            let workflow = fleet_workflow_for_plan(repo);
+            fs::create_dir_all(repo_dir.join(".github/workflows"))?;
+            fs::write(
+                repo_dir.join(".github/workflows/landfall-release.yml"),
+                &workflow,
+            )?;
+            Some(workflow)
+        };
+        let diff = render_fleet_pr_diff(repo, &manifest, workflow.as_deref());
         fs::write(repo_dir.join("diff.md"), diff)?;
+        let mut files = vec![".landfall.yml".into(), "diff.md".into()];
+        if workflow.is_some() {
+            files.insert(1, ".github/workflows/landfall-release.yml".into());
+        }
         rendered.push(FleetRepositoryPrPlan {
             repository: repo.repository.clone(),
             branch: format!("landfall/adopt-{}", repo.repository.replace('/', "-")),
-            title: "chore(release): adopt Landfall".into(),
-            files: vec![
-                ".landfall.yml".into(),
-                ".github/workflows/landfall-release.yml".into(),
-                "diff.md".into(),
-            ],
+            title: if repo.recommended_mode == "manifest-only" {
+                "chore(release): configure Landfall manifest".into()
+            } else {
+                "chore(release): adopt Landfall".into()
+            },
+            files,
             skipped: false,
             reason: String::new(),
         });
@@ -1628,6 +1644,8 @@ fn scan_fleet_repository(
         .filter(|name| name.ends_with(".yml") || name.ends_with(".yaml"))
         .map(str::to_string)
         .collect::<Vec<_>>();
+    let workflow_texts =
+        github_workflow_texts(&name_with_owner, &default_branch, &workflows, token);
     let mut release_files = Vec::new();
     let mut package_topology = Vec::new();
     let mut signals = Vec::new();
@@ -1659,11 +1677,19 @@ fn scan_fleet_repository(
     }
     let tags = github_tags(&name_with_owner, token)?;
     let tag_format = fleet_tag_format(&tags, &package_topology);
-    let release_tool = fleet_release_tool(&release_files, &workflows, &tags);
+    let release_tool = fleet_release_tool(&release_files, &workflows, &workflow_texts, &tags);
     let existing_landfall = release_files.iter().any(|file| file == ".landfall.yml")
         || workflows
             .iter()
-            .any(|workflow| workflow.to_ascii_lowercase().contains("landfall"));
+            .any(|workflow| workflow.to_ascii_lowercase().contains("landfall"))
+        || workflow_texts
+            .iter()
+            .any(|(_, text)| workflow_invokes_landfall(text));
+    for (workflow, text) in &workflow_texts {
+        if workflow_invokes_landfall(text) {
+            signals.push(format!("{workflow} invokes misty-step/landfall"));
+        }
+    }
     let branch_protected = if deep_checks {
         github_branch_protection(&name_with_owner, &default_branch, api_base_url, token)
     } else {
@@ -1729,6 +1755,34 @@ fn github_tags(repository: &str, token: Option<&str>) -> Result<Vec<String>> {
         token,
     )?;
     Ok(serde_json::from_str(&output)?)
+}
+
+fn github_workflow_texts(
+    repository: &str,
+    branch: &str,
+    workflows: &[String],
+    token: Option<&str>,
+) -> Vec<(String, String)> {
+    workflows
+        .iter()
+        .filter_map(|workflow| {
+            let output = run_gh_ok(
+                vec![
+                    "api".into(),
+                    format!(
+                        "repos/{repository}/contents/.github/workflows/{}?ref={}",
+                        urlencoding::encode(workflow),
+                        urlencoding::encode(branch)
+                    ),
+                    "--header".into(),
+                    "Accept: application/vnd.github.raw".into(),
+                ],
+                token,
+            )
+            .ok()?;
+            Some((workflow.clone(), output))
+        })
+        .collect()
 }
 
 fn run_gh_ok(args: Vec<String>, token: Option<&str>) -> Result<String> {
@@ -1840,11 +1894,22 @@ fn unavailable_secret_statuses(required: &[&str], detail: &str) -> Vec<FleetSecr
         .collect()
 }
 
-fn fleet_release_tool(files: &[String], workflows: &[String], tags: &[String]) -> String {
+fn workflow_invokes_landfall(text: &str) -> bool {
+    text.to_ascii_lowercase().contains("misty-step/landfall")
+}
+
+fn fleet_release_tool(
+    files: &[String],
+    workflows: &[String],
+    workflow_texts: &[(String, String)],
+    tags: &[String],
+) -> String {
     let haystack = files
         .iter()
         .chain(workflows)
-        .map(|value| value.to_ascii_lowercase())
+        .map(|value| value.as_str())
+        .chain(workflow_texts.iter().map(|(_, text)| text.as_str()))
+        .map(str::to_ascii_lowercase)
         .collect::<Vec<_>>()
         .join("\n");
     if haystack.contains("release-please") {
@@ -2088,19 +2153,32 @@ fn fleet_workflow_for_plan(repo: &FleetRepositoryPlan) -> String {
         .unwrap_or_else(|| workflow_manual_tag(Some(&repo.manifest)))
 }
 
-fn render_fleet_pr_diff(repo: &FleetRepositoryPlan, manifest: &str, workflow: &str) -> String {
-    format!(
-        "# {}\n\nDry-run branch: `landfall/adopt-{}`\n\n## Files\n\n### .landfall.yml\n\n```yaml\n{}\n```\n\n### .github/workflows/landfall-release.yml\n\n```yaml\n{}\n```\n\n## Notes\n\n{}\n",
+fn render_fleet_pr_diff(
+    repo: &FleetRepositoryPlan,
+    manifest: &str,
+    workflow: Option<&str>,
+) -> String {
+    let mut out = format!(
+        "# {}\n\nDry-run branch: `landfall/adopt-{}`\n\n## Files\n\n### .landfall.yml\n\n```yaml\n{}\n```\n\n",
         repo.repository,
         repo.repository.replace('/', "-"),
-        manifest,
-        workflow,
+        manifest
+    );
+    if let Some(workflow) = workflow {
+        out.push_str(&format!(
+            "### .github/workflows/landfall-release.yml\n\n```yaml\n{}\n```\n\n",
+            workflow
+        ));
+    }
+    out.push_str(&format!(
+        "## Notes\n\n{}\n",
         repo.migration_notes
             .iter()
             .map(|note| format!("- {note}"))
             .collect::<Vec<_>>()
             .join("\n")
-    )
+    ));
+    out
 }
 
 fn diagnose_setup(root: &Path) -> SetupDiagnosis {
@@ -2415,6 +2493,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
@@ -2475,6 +2555,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
@@ -2524,6 +2606,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
@@ -2559,6 +2643,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
@@ -7408,6 +7494,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
                 &["GH_RELEASE_TOKEN"],
             ),
             fleet_existing_landfall_fixture(),
+            fleet_existing_landfall_workflow_fixture(),
         ],
     };
     fs::write(&fixture, serde_json::to_string_pretty(&scan)? + "\n")?;
@@ -7476,6 +7563,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         ("phrazzld/no-release-app", "backfill-first"),
         ("misty-step/archived-app", "skipped"),
         ("misty-step/existing-landfall-app", "manifest-only"),
+        ("phrazzld/existing-landfall-workflow", "manifest-only"),
     ] {
         if modes.get(repo).map(String::as_str) != Some(expected) {
             return Err(format!("{repo} expected mode {expected}").into());
@@ -7507,6 +7595,25 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     let dry_diff = pr_dir.join("phrazzld__semantic-app").join("diff.md");
     if !dry_diff.is_file() {
         return Err("dry-run PR diff missing for semantic fixture".into());
+    }
+    let manifest_only = pr_plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "phrazzld/existing-landfall-workflow")
+        .ok_or("existing Landfall workflow dry-run missing")?;
+    if manifest_only
+        .files
+        .iter()
+        .any(|file| file.contains("landfall-release.yml"))
+    {
+        return Err("manifest-only dry-run should not add a duplicate workflow".into());
+    }
+    if pr_dir
+        .join("phrazzld__existing-landfall-workflow")
+        .join(".github/workflows/landfall-release.yml")
+        .exists()
+    {
+        return Err("manifest-only dry-run wrote a duplicate workflow file".into());
     }
     let scan_text = fs::read_to_string(&scan_output)?;
     if scan_text.contains("super-secret") || scan_text.contains("ghp_") {
@@ -7609,6 +7716,23 @@ fn fleet_existing_landfall_fixture() -> FleetRepository {
     repo.release_files.push(".landfall.yml".into());
     repo.workflows.push("landfall-release.yml".into());
     repo.signals.push(".landfall.yml present".into());
+    repo
+}
+
+fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
+    let mut repo = fleet_fixture_repo(
+        "phrazzld/existing-landfall-workflow",
+        "manual-tag",
+        false,
+        false,
+        "unprotected-or-unavailable",
+        &[],
+        &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+    );
+    repo.existing_landfall = true;
+    repo.workflows = vec!["release.yml".into()];
+    repo.signals
+        .push("release.yml invokes misty-step/landfall".into());
     repo
 }
 
@@ -7883,6 +8007,25 @@ mod tests {
         assert!(workflow.contains("mode: full"));
         assert!(workflow.contains("healthcheck: \"true\""));
         assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    }
+
+    #[test]
+    fn fleet_detects_landfall_in_generic_release_workflow_content() {
+        let workflow_texts = vec![(
+            "release.yml".to_string(),
+            "steps:\n  - uses: misty-step/landfall@v1\n".to_string(),
+        )];
+
+        assert!(workflow_invokes_landfall(&workflow_texts[0].1));
+        assert_eq!(
+            fleet_release_tool(
+                &[],
+                &["release.yml".into()],
+                &workflow_texts,
+                &["v1.2.3".into()]
+            ),
+            "manual-tag"
+        );
     }
 
     #[test]
