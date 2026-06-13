@@ -1,3 +1,8 @@
+# [1.23.0](https://github.com/misty-step/landfall/compare/v1.22.0...v1.23.0) (2026-06-13)
+
+### Features
+
+* **fleet:** harden Landfall dogfood adoption (#129) ([52a7ba8](https://github.com/misty-step/landfall/commit/52a7ba866be433483e20e15162db4e637c5c705b))
 # [1.22.0](https://github.com/misty-step/landfall/compare/v1.21.0...v1.22.0) (2026-06-13)
 
 ### Features
