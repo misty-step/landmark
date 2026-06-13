@@ -1,3 +1,8 @@
+# [1.20.0](https://github.com/misty-step/landfall/compare/v1.19.0...v1.20.0) (2026-06-13)
+
+### Features
+
+* **fleet:** build Landfall adoption planner ([0dbcfeb](https://github.com/misty-step/landfall/commit/0dbcfeb0083e0a173cf65fbca3db3f0a544cf076))
 # [1.19.0](https://github.com/misty-step/landfall/compare/v1.18.2...v1.19.0) (2026-06-13)
 
 ### Features
