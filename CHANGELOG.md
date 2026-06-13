@@ -1,3 +1,8 @@
+# [1.21.0](https://github.com/misty-step/landfall/compare/v1.20.0...v1.21.0) (2026-06-13)
+
+### Features
+
+* **synthesis:** add cost-aware contextual policy ([8a891ef](https://github.com/misty-step/landfall/commit/8a891efc73e58f07221cfd533ef0bb17714a8ab6))
 # [1.20.0](https://github.com/misty-step/landfall/compare/v1.19.0...v1.20.0) (2026-06-13)
 
 ### Features
