@@ -181,8 +181,8 @@ classification, and the final context sources included in the prompt. In
 releases are skipped; breaking, security, and migration-heavy releases
 escalate to the rich tier.
 
-The old Python backfill script is retired from the maintenance surface; use a
-release re-run or `mode: synthesis-only` for repair runs.
+Use `dist/landfall backfill --repo-root . --since <tag> --dry-run` to preview
+historical artifact migration for repositories that already have release tags.
 
 ## Inputs
 
@@ -317,20 +317,38 @@ Copy the relevant example to `.github/workflows/` in your repository and update 
 
 ### Backfill Existing Releases
 
-Backfill is no longer part of the core action surface. To repair an already-published release, rerun Landfall in `synthesis-only` mode for the target tag so the same Rust runtime path updates the GitHub Release body.
+Backfill is a Rust-owned CLI path for mature repositories that already have tags, GitHub Releases, or a `CHANGELOG.md`. It plans historical release-note artifacts without calling the LLM, then can write the same markdown, plaintext, HTML, JSON, and RSS-compatible artifact formats used by normal synthesis.
 
-Single release tag:
+Preview the migration from an existing tag:
 
-```yaml
-- uses: misty-step/landfall@v1
-  with:
-    mode: synthesis-only
-    release-tag: v1.12.0
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-    llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+```bash
+dist/landfall backfill --repo-root . --since v1.0.0 --dry-run
 ```
 
-For multiple historical tags, dispatch one synthesis-only run per tag. This keeps repair behavior identical to normal release-note synthesis.
+Write portable artifacts only, which is the default safe migration mode:
+
+```bash
+dist/landfall backfill \
+  --repo-root . \
+  --since v1.0.0 \
+  --mode artifacts-only \
+  --repository owner/repo \
+  --github-token "$GH_RELEASE_TOKEN"
+```
+
+Preview GitHub Release body updates before considering mutation:
+
+```bash
+dist/landfall backfill \
+  --repo-root . \
+  --since v1.0.0 \
+  --mode release-body \
+  --dry-run \
+  --repository owner/repo \
+  --github-token "$GH_RELEASE_TOKEN"
+```
+
+`release-body` writes are refused unless the run is a dry-run or the operator passes `--confirm-release-body`. The output manifest lists processed tags, skipped tags, remaining tags, artifact paths, preview hashes, and the estimated cost. Artifact backfill does not call the LLM; use the manifest to batch later synthesis if you want enhanced historical notes.
 
 ## Portable Release Notes (Private Repos)
 

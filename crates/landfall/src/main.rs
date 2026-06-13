@@ -15,7 +15,7 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 use tiny_http::{Header, Method, Response, Server};
@@ -404,8 +404,47 @@ struct ReplayArgs {
 
 #[derive(Args)]
 struct BackfillArgs {
-    #[arg(long)]
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+    #[arg(long, default_value = "")]
+    since: String,
+    #[arg(long, default_value = "artifacts-only")]
+    mode: String,
+    #[arg(long = "dry-run")]
     dry_run: bool,
+    #[arg(long = "repository", default_value = "")]
+    repository: String,
+    #[arg(long = "github-token", default_value = "")]
+    github_token: String,
+    #[arg(long = "api-base-url", default_value = "https://api.github.com")]
+    api_base_url: String,
+    #[arg(long = "confirm-release-body")]
+    confirm_release_body: bool,
+    #[arg(long = "max-tags", default_value_t = 0)]
+    max_tags: usize,
+    #[arg(long = "output-file", default_value = "docs/releases/{version}.md")]
+    output_file: String,
+    #[arg(
+        long = "output-text-file",
+        default_value = "docs/releases/{version}.txt"
+    )]
+    output_text_file: String,
+    #[arg(
+        long = "output-html-file",
+        default_value = "docs/releases/{version}.html"
+    )]
+    output_html_file: String,
+    #[arg(long = "output-json", default_value = "docs/releases/releases.json")]
+    output_json: String,
+    #[arg(long = "rss-feed-file", default_value = "docs/releases/feed.xml")]
+    rss_feed_file: String,
+    #[arg(long = "rss-max-entries", default_value_t = 50)]
+    rss_max_entries: usize,
+    #[arg(
+        long = "resume-file",
+        default_value = ".landfall/backfill-manifest.json"
+    )]
+    resume_file: PathBuf,
 }
 
 #[derive(Args)]
@@ -572,12 +611,7 @@ fn run() -> Result<()> {
         Commands::CheckVersionSync(args) => check_version_sync(args),
         Commands::CheckActionContract(args) => check_action_contract(args),
         Commands::ReplayAction(args) => replay_action(args),
-        Commands::Backfill(_) => {
-            eprintln!(
-                "backfill is retired from the core action surface; use release re-run or synthesis-only mode"
-            );
-            Ok(())
-        }
+        Commands::Backfill(args) => backfill(args),
         Commands::Setup(args) => setup(args),
         Commands::Fleet(args) => fleet(args),
         Commands::PrepareSelfRelease(args) => prepare_self_release(args),
@@ -1287,7 +1321,7 @@ fn setup(args: SetupArgs) -> Result<()> {
         required_secrets: vec!["GH_RELEASE_TOKEN".into(), "OPENROUTER_API_KEY".into()],
         workflows,
         manifest,
-        backfill: "retired: use release re-run or synthesis-only mode; no Python backfill script is part of the maintenance surface".into(),
+        backfill: "available: run `landfall backfill --repo-root . --since <tag> --dry-run` to plan historical artifacts; use `--mode artifacts-only` for safe migration output and preview `--mode release-body --dry-run` before any release-body update".into(),
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
@@ -1925,6 +1959,10 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     if repo.release_tool == "no-release-tool" {
         migration_notes
             .push("Choose release semantics before installing Landfall automation".into());
+    } else if !repo.existing_landfall && repo.release_tool != "unknown" {
+        migration_notes.push(
+            "Preview historical migration with `landfall backfill --repo-root . --since <oldest-managed-tag> --dry-run`; write artifacts before considering release-body updates".into(),
+        );
     }
     if repo.package_topology.len() > 1 {
         risk_flags.push("multi-package repository; validate tag format and artifact paths".into());
@@ -4276,6 +4314,664 @@ fn write_artifacts(args: WriteArtifactsArgs) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct BackfillManifest {
+    generated_at: String,
+    mode: String,
+    dry_run: bool,
+    repo_root: String,
+    repository: String,
+    since: String,
+    processed_tags: Vec<BackfillTagRecord>,
+    skipped_tags: Vec<BackfillSkipRecord>,
+    remaining_tags: Vec<String>,
+    estimated_cost: BackfillCostEstimate,
+    artifacts: Vec<BackfillArtifactRecord>,
+    release_body_updates: Vec<BackfillReleaseBodyUpdate>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackfillTagRecord {
+    tag: String,
+    version: String,
+    package: String,
+    source: String,
+    release_status: String,
+    notes_sha256: String,
+    estimated_prompt_tokens: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackfillSkipRecord {
+    tag: String,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackfillCostEstimate {
+    llm_calls: usize,
+    estimated_prompt_tokens: usize,
+    estimated_usd: f64,
+    policy: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackfillArtifactRecord {
+    tag: String,
+    markdown: String,
+    plaintext: String,
+    html: String,
+    json: String,
+    rss: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BackfillReleaseBodyUpdate {
+    tag: String,
+    release_id: i64,
+    dry_run: bool,
+    updated: bool,
+    preview_sha256: String,
+}
+
+#[derive(Clone, Debug)]
+struct BackfillTag {
+    tag: String,
+    version: String,
+    key: (u64, u64, u64),
+    package: String,
+    prerelease: bool,
+}
+
+#[derive(Clone, Debug)]
+struct BackfillReleaseLookup {
+    status: String,
+    id: Option<i64>,
+    body: String,
+}
+
+#[derive(Clone, Debug)]
+struct BackfillSource {
+    source: String,
+    notes: String,
+    duplicate_changelog: bool,
+}
+
+fn backfill(args: BackfillArgs) -> Result<()> {
+    let mode = args.mode.trim();
+    if mode != "artifacts-only" && mode != "release-body" {
+        return Err("backfill --mode must be artifacts-only or release-body".into());
+    }
+    if args.rss_max_entries == 0 {
+        return Err("--rss-max-entries must be positive".into());
+    }
+    let repository = if args.repository.trim().is_empty() {
+        env::var("GITHUB_REPOSITORY").unwrap_or_default()
+    } else {
+        args.repository.trim().to_string()
+    };
+    if !repository.is_empty() {
+        validate_repo(&repository)?;
+    }
+    if mode == "release-body" && !args.dry_run && !args.confirm_release_body {
+        return Err(
+            "backfill --mode release-body requires --dry-run or --confirm-release-body".into(),
+        );
+    }
+
+    let all_tags = backfill_tags(&args.repo_root)?;
+    let since = args.since.trim().to_string();
+    let since_index = if since.is_empty() {
+        None
+    } else {
+        all_tags.iter().position(|tag| tag.tag == since)
+    };
+    let mut skipped_tags = Vec::new();
+    if !since.is_empty() && since_index.is_none() {
+        skipped_tags.push(BackfillSkipRecord {
+            tag: since.clone(),
+            reason: "since tag not found".into(),
+        });
+    }
+
+    let candidate_tags: Vec<_> = if since.is_empty() {
+        all_tags.clone()
+    } else if let Some(index) = since_index {
+        all_tags.iter().skip(index + 1).cloned().collect()
+    } else {
+        Vec::new()
+    };
+    let mut selected_tags = Vec::new();
+    let mut remaining_tags = Vec::new();
+    for tag in candidate_tags {
+        if args.max_tags > 0 && selected_tags.len() >= args.max_tags {
+            remaining_tags.push(tag.tag);
+        } else {
+            selected_tags.push(tag);
+        }
+    }
+
+    let mut processed_tags = Vec::new();
+    let mut artifacts = Vec::new();
+    let mut release_body_updates = Vec::new();
+    let mut feed_items = if mode == "artifacts-only" && !args.dry_run {
+        parse_existing_feed_items(
+            &fs::read_to_string(args.repo_root.join(&args.rss_feed_file)).unwrap_or_default(),
+        )
+    } else {
+        Vec::new()
+    };
+    let mut total_prompt_tokens = 0usize;
+    let token = trimmed_option(&args.github_token);
+
+    for tag in selected_tags {
+        if tag.prerelease {
+            skipped_tags.push(BackfillSkipRecord {
+                tag: tag.tag,
+                reason: "prerelease tags are skipped by default".into(),
+            });
+            continue;
+        }
+        let release =
+            backfill_release_lookup(&args.api_base_url, &repository, &tag.tag, token.as_deref())?;
+        if release.body.contains("## What's New") {
+            skipped_tags.push(BackfillSkipRecord {
+                tag: tag.tag,
+                reason: "release body already contains Landfall notes".into(),
+            });
+            continue;
+        }
+        let source = backfill_source(&args.repo_root, &tag, release.body.as_str(), &all_tags)?;
+        if mode == "release-body" && source.source == "github_release" {
+            skipped_tags.push(BackfillSkipRecord {
+                tag: tag.tag,
+                reason: "existing GitHub Release body is the source; refusing to duplicate it in release-body mode".into(),
+            });
+            continue;
+        }
+        if source.duplicate_changelog {
+            skipped_tags.push(BackfillSkipRecord {
+                tag: tag.tag,
+                reason: "duplicate changelog sections make release mapping ambiguous".into(),
+            });
+            continue;
+        }
+        let prompt_tokens = estimate_prompt_tokens(&source.notes);
+        total_prompt_tokens += prompt_tokens;
+        let record = BackfillTagRecord {
+            tag: tag.tag.clone(),
+            version: tag.version.clone(),
+            package: tag.package.clone(),
+            source: source.source.clone(),
+            release_status: release.status.clone(),
+            notes_sha256: sha256_hex(source.notes.as_bytes()),
+            estimated_prompt_tokens: prompt_tokens,
+        };
+
+        if mode == "artifacts-only" {
+            if args.dry_run {
+                artifacts.push(backfill_plan_artifacts(&args, &tag));
+            } else {
+                artifacts.push(backfill_write_artifacts(
+                    &args,
+                    &repository,
+                    &tag,
+                    &source.notes,
+                    &mut feed_items,
+                )?);
+            }
+        } else if let Some(id) = release.id {
+            let updated_body = compose_release_body(&source.notes, &release.body);
+            let preview_sha256 = sha256_hex(updated_body.as_bytes());
+            if !args.dry_run {
+                backfill_update_release_body(&args, &repository, id, &updated_body)?;
+            }
+            release_body_updates.push(BackfillReleaseBodyUpdate {
+                tag: tag.tag.clone(),
+                release_id: id,
+                dry_run: args.dry_run,
+                updated: !args.dry_run,
+                preview_sha256,
+            });
+        } else {
+            skipped_tags.push(BackfillSkipRecord {
+                tag: tag.tag.clone(),
+                reason: format!(
+                    "release-body mode requires an existing GitHub Release ({})",
+                    release.status
+                ),
+            });
+            continue;
+        }
+
+        processed_tags.push(record);
+    }
+
+    if mode == "artifacts-only" && !args.dry_run {
+        backfill_write_feed(&args, &repository, feed_items)?;
+    }
+
+    let manifest = BackfillManifest {
+        generated_at: Utc::now().to_rfc3339(),
+        mode: mode.into(),
+        dry_run: args.dry_run,
+        repo_root: args.repo_root.display().to_string(),
+        repository,
+        since,
+        processed_tags,
+        skipped_tags,
+        remaining_tags,
+        estimated_cost: BackfillCostEstimate {
+            llm_calls: 0,
+            estimated_prompt_tokens: total_prompt_tokens,
+            estimated_usd: 0.0,
+            policy:
+                "artifact backfill does not call the LLM; use the manifest to batch later synthesis"
+                    .into(),
+        },
+        artifacts,
+        release_body_updates,
+    };
+    println!("{}", serde_json::to_string_pretty(&manifest)?);
+    if !args.dry_run {
+        let resume_path = args.repo_root.join(&args.resume_file);
+        ensure_parent(&resume_path)?;
+        fs::write(resume_path, serde_json::to_string_pretty(&manifest)? + "\n")?;
+    }
+    Ok(())
+}
+
+fn backfill_tags(repo_root: &Path) -> Result<Vec<BackfillTag>> {
+    let mut tags = git_tags(repo_root)?
+        .into_iter()
+        .filter_map(|tag| backfill_parse_tag(&tag))
+        .collect::<Vec<_>>();
+    tags.sort_by(|left, right| {
+        left.key
+            .cmp(&right.key)
+            .then_with(|| left.package.cmp(&right.package))
+            .then_with(|| left.tag.cmp(&right.tag))
+    });
+    Ok(tags)
+}
+
+fn backfill_parse_tag(tag: &str) -> Option<BackfillTag> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(
+            r"^(?:(?P<package>[A-Za-z0-9_.-]+)@)?v?(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)(?P<pre>-[A-Za-z0-9][A-Za-z0-9.-]*)?$",
+        )
+        .unwrap()
+    });
+    let caps = re.captures(tag.trim())?;
+    let major = caps.name("major")?.as_str().parse().ok()?;
+    let minor = caps.name("minor")?.as_str().parse().ok()?;
+    let patch = caps.name("patch")?.as_str().parse().ok()?;
+    let package = caps
+        .name("package")
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default();
+    Some(BackfillTag {
+        tag: tag.trim().to_string(),
+        version: format!("{major}.{minor}.{patch}"),
+        key: (major, minor, patch),
+        package,
+        prerelease: caps.name("pre").is_some(),
+    })
+}
+
+fn backfill_release_lookup(
+    api_base_url: &str,
+    repository: &str,
+    tag: &str,
+    github_token: Option<&str>,
+) -> Result<BackfillReleaseLookup> {
+    if repository.is_empty() {
+        return Ok(BackfillReleaseLookup {
+            status: "unavailable: repository not configured".into(),
+            id: None,
+            body: String::new(),
+        });
+    }
+    if github_token.is_none() {
+        return Ok(BackfillReleaseLookup {
+            status: "unavailable: github token not configured".into(),
+            id: None,
+            body: String::new(),
+        });
+    }
+    let response = curl_json(
+        "GET",
+        &github_release_url(api_base_url, repository, tag),
+        github_token,
+        None,
+    )?;
+    if (200..300).contains(&response.status) {
+        let value: Value = serde_json::from_str(&response.body)?;
+        Ok(BackfillReleaseLookup {
+            status: "found".into(),
+            id: value["id"].as_i64(),
+            body: value["body"].as_str().unwrap_or("").to_string(),
+        })
+    } else if response.status == 404 {
+        Ok(BackfillReleaseLookup {
+            status: "missing".into(),
+            id: None,
+            body: String::new(),
+        })
+    } else {
+        Ok(BackfillReleaseLookup {
+            status: format!("unavailable: GitHub returned HTTP {}", response.status),
+            id: None,
+            body: String::new(),
+        })
+    }
+}
+
+fn backfill_source(
+    repo_root: &Path,
+    tag: &BackfillTag,
+    release_body: &str,
+    all_tags: &[BackfillTag],
+) -> Result<BackfillSource> {
+    if !release_body.trim().is_empty() {
+        return Ok(BackfillSource {
+            source: "github_release".into(),
+            notes: release_body.trim().to_string(),
+            duplicate_changelog: false,
+        });
+    }
+    let changelog_path = repo_root.join("CHANGELOG.md");
+    let changelog = changelog_sections(&changelog_path, &tag.version)?;
+    if !changelog.sections.is_empty() {
+        return Ok(BackfillSource {
+            source: "changelog".into(),
+            notes: changelog.sections[0].clone(),
+            duplicate_changelog: changelog.duplicate,
+        });
+    }
+    let git_notes = backfill_git_range_notes(repo_root, tag, all_tags)?;
+    if !git_notes.trim().is_empty() {
+        return Ok(BackfillSource {
+            source: "git_range".into(),
+            notes: git_notes,
+            duplicate_changelog: false,
+        });
+    }
+    let manifest = load_manifest(repo_root)?.unwrap_or_else(|| infer_manifest(repo_root));
+    let product_name = manifest.product.name.as_deref().unwrap_or("the repository");
+    Ok(BackfillSource {
+        source: "manifest_context".into(),
+        notes: format!(
+            "## Historical Release {}\n\n- Historical notes were unavailable in GitHub Releases, CHANGELOG.md, and the tag range.\n- Product context: {}.\n",
+            tag.tag, product_name
+        ),
+        duplicate_changelog: false,
+    })
+}
+
+struct ChangelogSections {
+    sections: Vec<String>,
+    duplicate: bool,
+}
+
+fn changelog_sections(path: &Path, version: &str) -> Result<ChangelogSections> {
+    if !path.is_file() {
+        return Ok(ChangelogSections {
+            sections: Vec::new(),
+            duplicate: false,
+        });
+    }
+    let text = fs::read_to_string(path)?;
+    let marker = format!("[{version}]");
+    let bare_marker = format!(" {version}");
+    let mut sections = Vec::new();
+    let mut current = Vec::new();
+    let mut started = false;
+    for line in text.lines() {
+        let heading = line.starts_with('#');
+        if heading
+            && (line.contains(&marker)
+                || line.trim_end() == format!("## {version}")
+                || line.contains(&bare_marker))
+        {
+            if started && !current.is_empty() {
+                sections.push(current.join("\n").trim().to_string());
+                current.clear();
+            }
+            started = true;
+            current.push(line.to_string());
+            continue;
+        }
+        if started && heading && (line.starts_with("# ") || line.starts_with("## ")) {
+            sections.push(current.join("\n").trim().to_string());
+            current.clear();
+            started = false;
+            continue;
+        }
+        if started {
+            current.push(line.to_string());
+        }
+    }
+    if started && !current.is_empty() {
+        sections.push(current.join("\n").trim().to_string());
+    }
+    sections.retain(|section| !section.trim().is_empty());
+    Ok(ChangelogSections {
+        duplicate: sections.len() > 1,
+        sections,
+    })
+}
+
+fn backfill_git_range_notes(
+    repo_root: &Path,
+    tag: &BackfillTag,
+    all_tags: &[BackfillTag],
+) -> Result<String> {
+    let previous = previous_backfill_tag(all_tags, tag);
+    let range = previous
+        .map(|prev| format!("{prev}..{}", tag.tag))
+        .unwrap_or_else(|| tag.tag.clone());
+    let log = run_ok(
+        "git",
+        ["log", "--reverse", "--format=%s (%h)", range.as_str()],
+        repo_root,
+    )?;
+    if log.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let mut notes = format!("## Historical Release {}\n\n", tag.tag);
+    for line in log.lines().filter(|line| !line.trim().is_empty()) {
+        notes.push_str("- ");
+        notes.push_str(line.trim());
+        notes.push('\n');
+    }
+    Ok(notes)
+}
+
+fn previous_backfill_tag(all_tags: &[BackfillTag], current: &BackfillTag) -> Option<String> {
+    let mut previous = None;
+    for tag in all_tags {
+        if tag.package == current.package && tag.key < current.key && !tag.prerelease {
+            previous = Some(tag.tag.clone());
+        }
+    }
+    previous
+}
+
+fn backfill_write_artifacts(
+    args: &BackfillArgs,
+    repository: &str,
+    tag: &BackfillTag,
+    notes: &str,
+    feed_items: &mut Vec<FeedItem>,
+) -> Result<BackfillArtifactRecord> {
+    let artifact = ReleaseNoteArtifact::from_markdown(&tag.tag, notes);
+    let markdown = backfill_write_template_if_requested(
+        &args.repo_root,
+        &args.output_file,
+        &tag.tag,
+        &artifact.notes,
+    )?;
+    let plaintext = backfill_write_template_if_requested(
+        &args.repo_root,
+        &args.output_text_file,
+        &tag.tag,
+        &artifact.plaintext,
+    )?;
+    let html = backfill_write_template_if_requested(
+        &args.repo_root,
+        &args.output_html_file,
+        &tag.tag,
+        &artifact.html,
+    )?;
+    let json_path = if args.output_json.trim().is_empty() {
+        PathBuf::new()
+    } else {
+        backfill_append_json(&args.repo_root, &args.output_json, &artifact)?
+    };
+    let release_url = if repository.is_empty() {
+        String::new()
+    } else {
+        format!("https://github.com/{repository}/releases/tag/{}", tag.tag)
+    };
+    if !args.rss_feed_file.trim().is_empty() {
+        feed_items.retain(|item| item.guid != tag.tag);
+        feed_items.insert(
+            0,
+            FeedItem {
+                title: if repository.is_empty() {
+                    tag.tag.clone()
+                } else {
+                    format!("{repository} {}", tag.tag)
+                },
+                link: release_url,
+                guid: tag.tag.clone(),
+                description: artifact.html,
+                pub_date: Utc::now().to_rfc2822(),
+            },
+        );
+        feed_items.truncate(args.rss_max_entries);
+    }
+    Ok(BackfillArtifactRecord {
+        tag: tag.tag.clone(),
+        markdown: markdown.display().to_string(),
+        plaintext: plaintext.display().to_string(),
+        html: html.display().to_string(),
+        json: json_path.display().to_string(),
+        rss: backfill_output_path(&args.repo_root, &args.rss_feed_file, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+    })
+}
+
+fn backfill_plan_artifacts(args: &BackfillArgs, tag: &BackfillTag) -> BackfillArtifactRecord {
+    BackfillArtifactRecord {
+        tag: tag.tag.clone(),
+        markdown: backfill_output_path(&args.repo_root, &args.output_file, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        plaintext: backfill_output_path(&args.repo_root, &args.output_text_file, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        html: backfill_output_path(&args.repo_root, &args.output_html_file, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        json: backfill_output_path(&args.repo_root, &args.output_json, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        rss: backfill_output_path(&args.repo_root, &args.rss_feed_file, &tag.tag)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+    }
+}
+
+fn backfill_write_template_if_requested(
+    repo_root: &Path,
+    template: &str,
+    tag: &str,
+    content: &str,
+) -> Result<PathBuf> {
+    let Some(path) = backfill_output_path(repo_root, template, tag) else {
+        return Ok(PathBuf::new());
+    };
+    ensure_parent(&path)?;
+    fs::write(&path, content)?;
+    Ok(path)
+}
+
+fn backfill_output_path(repo_root: &Path, template: &str, tag: &str) -> Option<PathBuf> {
+    trimmed_option(template).map(|value| repo_root.join(value.replace("{version}", tag)))
+}
+
+fn backfill_append_json(
+    repo_root: &Path,
+    template: &str,
+    artifact: &ReleaseNoteArtifact,
+) -> Result<PathBuf> {
+    let path = repo_root.join(template.replace("{version}", &artifact.tag));
+    let mut entries = if path.is_file() {
+        serde_json::from_str::<Vec<Value>>(&fs::read_to_string(&path)?)?
+    } else {
+        Vec::new()
+    };
+    entries.retain(|entry| {
+        entry["tag"].as_str() != Some(&artifact.tag)
+            && entry["version"].as_str() != Some(&artifact.version)
+    });
+    entries.insert(0, artifact.json_entry());
+    ensure_parent(&path)?;
+    fs::write(&path, serde_json::to_string_pretty(&entries)? + "\n")?;
+    Ok(path)
+}
+
+fn backfill_write_feed(args: &BackfillArgs, repository: &str, items: Vec<FeedItem>) -> Result<()> {
+    if args.rss_feed_file.trim().is_empty() {
+        return Ok(());
+    }
+    let path = args.repo_root.join(&args.rss_feed_file);
+    ensure_parent(&path)?;
+    fs::write(path, render_feed(repository, &items))?;
+    Ok(())
+}
+
+fn backfill_update_release_body(
+    args: &BackfillArgs,
+    repository: &str,
+    release_id: i64,
+    body: &str,
+) -> Result<()> {
+    let url = format!(
+        "{}/repos/{}/releases/{}",
+        args.api_base_url.trim_end_matches('/'),
+        repository,
+        release_id
+    );
+    let response = curl_json(
+        "PATCH",
+        &url,
+        trimmed_option(&args.github_token).as_deref(),
+        Some(&json!({ "body": body })),
+    )?;
+    if (200..300).contains(&response.status) {
+        Ok(())
+    } else {
+        Err(format!(
+            "GitHub release backfill update failed with HTTP {}",
+            response.status
+        )
+        .into())
+    }
+}
+
+fn estimate_prompt_tokens(text: &str) -> usize {
+    text.split_whitespace().count().max(1) * 4 / 3 + 64
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 fn write_notes_file(content: &str, template: &str, version: &str) -> Result<PathBuf> {
     let path = PathBuf::from(template.replace("{version}", version));
     ensure_parent(&path)?;
@@ -5101,6 +5797,10 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_synthesis_cost_policy,
     );
     map.insert(
+        "backfill_release_history".to_string(),
+        scenario_backfill_release_history,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -5140,12 +5840,371 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "consumer_synthesis_only_success",
         "self_release_pr_path",
         "synthesis_cost_policy",
+        "backfill_release_history",
         "publication_degraded_optional",
         "publication_degraded_required",
         "summary_artifact_failed",
         "summary_release_update_failed",
         "summary_rss_failed",
     ]
+}
+
+fn scenario_backfill_release_history(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("backfill-release-history");
+    init_fixture_repo(&repo, "v1.0.0")?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.4.0]\n\n- feat(pkg-a): package artifact history\n\n## [1.3.0]\n\n- feat: first duplicate section\n\n## [1.3.0]\n\n- fix: second duplicate section\n\n## [1.1.0]\n\n- feat: historical changelog entry\n\n## [1.0.0]\n\n- feat: initial release\n",
+    )?;
+    run_ok("git", ["add", "CHANGELOG.md"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "docs: expand historical changelog"],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "v1.1.0"], &repo)?;
+    fs::write(repo.join("beta.txt"), "beta\n")?;
+    run_ok("git", ["add", "beta.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: prerelease beta"],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "v1.2.0-beta.1"], &repo)?;
+    fs::write(repo.join("managed.txt"), "managed\n")?;
+    run_ok("git", ["add", "managed.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: already managed release"],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "v1.2.0"], &repo)?;
+    fs::write(repo.join("duplicate.txt"), "duplicate\n")?;
+    run_ok("git", ["add", "duplicate.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: duplicate changelog release"],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "v1.3.0"], &repo)?;
+    fs::create_dir_all(repo.join("packages/pkg-a"))?;
+    fs::write(repo.join("packages/pkg-a/README.md"), "# pkg-a\n")?;
+    run_ok("git", ["add", "packages/pkg-a/README.md"], &repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(pkg-a): monorepo package release",
+        ],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "pkg-a@v1.4.0"], &repo)?;
+    fs::write(repo.join("existing-body.txt"), "existing body\n")?;
+    run_ok("git", ["add", "existing-body.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: existing release body source"],
+        &repo,
+    )?;
+    run_ok("git", ["tag", "v1.5.0"], &repo)?;
+
+    let mut fake = FakeState {
+        update_status: 200,
+        ..Default::default()
+    };
+    fake.releases.insert("v1.2.0".to_string(), json!({"id": 2, "tag_name": "v1.2.0", "body": "## What's New\n\n- Managed already\n\n## Technical\n\n- Existing", "html_url": "https://example.invalid/releases/v1.2.0"}));
+    fake.releases.insert("v1.3.0".to_string(), json!({"id": 3, "tag_name": "v1.3.0", "body": "", "html_url": "https://example.invalid/releases/v1.3.0"}));
+    fake.releases.insert("pkg-a@v1.4.0".to_string(), json!({"id": 4, "tag_name": "pkg-a@v1.4.0", "body": "", "html_url": "https://example.invalid/releases/pkg-a@v1.4.0"}));
+    fake.releases.insert("v1.5.0".to_string(), json!({"id": 5, "tag_name": "v1.5.0", "body": "## Technical\n\n- Existing release-body source", "html_url": "https://example.invalid/releases/v1.5.0"}));
+    let server = start_fake_server(fake)?;
+
+    let dry_run = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.0.0",
+            "--dry-run",
+            "--repository",
+            "owner/repo",
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+        ])
+        .output()?;
+    if !dry_run.status.success() {
+        return Err(String::from_utf8_lossy(&dry_run.stderr).to_string().into());
+    }
+    let dry_manifest: Value = serde_json::from_slice(&dry_run.stdout)?;
+    let skipped = dry_manifest["skipped_tags"].as_array().unwrap();
+    if !skipped.iter().any(|entry| entry["tag"] == "v1.2.0-beta.1")
+        || !skipped.iter().any(|entry| entry["tag"] == "v1.2.0")
+    {
+        return Err("dry-run did not report prerelease and already-managed skips".into());
+    }
+    if !dry_manifest["processed_tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["tag"] == "pkg-a@v1.4.0")
+    {
+        return Err("dry-run did not include monorepo package tag".into());
+    }
+    if dry_manifest["estimated_cost"]["llm_calls"] != 0 {
+        return Err("backfill dry-run should not schedule LLM calls".into());
+    }
+    if !dry_manifest["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| {
+            entry["tag"] == "v1.1.0"
+                && entry["markdown"]
+                    .as_str()
+                    .unwrap_or("")
+                    .ends_with("docs/releases/v1.1.0.md")
+        })
+    {
+        return Err("dry-run did not include artifact path plan".into());
+    }
+    if !dry_manifest["processed_tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["tag"] == "v1.1.0" && entry["release_status"] == "missing")
+    {
+        return Err("dry-run did not preserve missing release status".into());
+    }
+
+    let artifact_run = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.0.0",
+            "--mode",
+            "artifacts-only",
+            "--repository",
+            "owner/repo",
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+        ])
+        .output()?;
+    if !artifact_run.status.success() {
+        return Err(String::from_utf8_lossy(&artifact_run.stderr)
+            .to_string()
+            .into());
+    }
+    if !repo.join("docs/releases/v1.1.0.md").is_file()
+        || !repo.join("docs/releases/v1.1.0.txt").is_file()
+        || !repo.join("docs/releases/v1.1.0.html").is_file()
+        || repo.join("docs/releases/v1.3.0.md").is_file()
+        || !repo.join("docs/releases/releases.json").is_file()
+        || !repo.join("docs/releases/feed.xml").is_file()
+        || !repo.join(".landfall/backfill-manifest.json").is_file()
+    {
+        return Err("artifact-only backfill did not write the expected artifact set or wrote an ambiguous duplicate".into());
+    }
+
+    let release_body_preview = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.2.0",
+            "--mode",
+            "release-body",
+            "--dry-run",
+            "--repository",
+            "owner/repo",
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+        ])
+        .output()?;
+    if !release_body_preview.status.success() {
+        return Err(String::from_utf8_lossy(&release_body_preview.stderr)
+            .to_string()
+            .into());
+    }
+    let release_manifest: Value = serde_json::from_slice(&release_body_preview.stdout)?;
+    if !release_manifest["skipped_tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| {
+            entry["tag"] == "v1.3.0"
+                && entry["reason"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("duplicate changelog")
+        })
+    {
+        return Err("release-body dry-run did not refuse duplicate changelog mapping".into());
+    }
+    if !release_manifest["skipped_tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| {
+            entry["tag"] == "v1.5.0"
+                && entry["reason"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("refusing to duplicate")
+        })
+    {
+        return Err("release-body dry-run did not refuse existing-body source duplication".into());
+    }
+    if !release_manifest["release_body_updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["tag"] == "pkg-a@v1.4.0" && entry["dry_run"] == true)
+    {
+        return Err("release-body dry-run did not preview package tag update".into());
+    }
+
+    let confirmed_update = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.3.0",
+            "--mode",
+            "release-body",
+            "--confirm-release-body",
+            "--repository",
+            "owner/repo",
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+        ])
+        .output()?;
+    if !confirmed_update.status.success() {
+        return Err(String::from_utf8_lossy(&confirmed_update.stderr)
+            .to_string()
+            .into());
+    }
+    let updated_body = server
+        .state
+        .lock()
+        .unwrap()
+        .releases
+        .get("pkg-a@v1.4.0")
+        .and_then(|release| release["body"].as_str())
+        .unwrap_or("")
+        .to_string();
+    if !updated_body.contains("## What's New") || !updated_body.contains("package artifact history")
+    {
+        return Err("confirmed release-body update did not patch fake GitHub release".into());
+    }
+
+    let empty_template_preview = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.3.0",
+            "--dry-run",
+            "--output-text-file",
+            "",
+            "--output-html-file",
+            "",
+            "--output-json",
+            "",
+            "--rss-feed-file",
+            "",
+        ])
+        .output()?;
+    if !empty_template_preview.status.success() {
+        return Err(String::from_utf8_lossy(&empty_template_preview.stderr)
+            .to_string()
+            .into());
+    }
+    let empty_template_manifest: Value = serde_json::from_slice(&empty_template_preview.stdout)?;
+    if !empty_template_manifest["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| {
+            entry["tag"] == "pkg-a@v1.4.0"
+                && entry["plaintext"] == ""
+                && entry["html"] == ""
+                && entry["json"] == ""
+                && entry["rss"] == ""
+        })
+    {
+        return Err("empty artifact templates were not treated as disabled outputs".into());
+    }
+
+    let missing_since = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v9.9.9",
+            "--dry-run",
+        ])
+        .output()?;
+    if !missing_since.status.success() {
+        return Err(String::from_utf8_lossy(&missing_since.stderr)
+            .to_string()
+            .into());
+    }
+    let missing_manifest: Value = serde_json::from_slice(&missing_since.stdout)?;
+    if missing_manifest["skipped_tags"][0]["reason"] != "since tag not found" {
+        return Err("missing since tag was not reported as a skip reason".into());
+    }
+
+    let private_preview = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--since",
+            "v1.3.0",
+            "--dry-run",
+            "--repository",
+            "owner/private",
+        ])
+        .output()?;
+    if !private_preview.status.success() {
+        return Err(String::from_utf8_lossy(&private_preview.stderr)
+            .to_string()
+            .into());
+    }
+    let private_manifest: Value = serde_json::from_slice(&private_preview.stdout)?;
+    if private_manifest["processed_tags"][0]["release_status"]
+        .as_str()
+        .unwrap_or("")
+        .contains("github token not configured")
+    {
+        Ok(json!({
+            "dry_run": dry_manifest,
+            "artifact_manifest": serde_json::from_slice::<Value>(&artifact_run.stdout)?,
+            "release_body_preview": release_manifest,
+            "confirmed_update": serde_json::from_slice::<Value>(&confirmed_update.stdout)?,
+            "empty_template_preview": empty_template_manifest,
+            "missing_since": missing_manifest,
+            "private_preview": private_manifest,
+        }))
+    } else {
+        Err("private/no-token release lookup was not reported".into())
+    }
 }
 
 fn scenario_action_static_contract(_: &Path) -> Result<Value> {
@@ -6810,7 +7869,7 @@ mod tests {
     }
 
     #[test]
-    fn setup_detects_semantic_release_and_reports_backfill_retired() {
+    fn setup_detects_semantic_release_and_reports_backfill_available() {
         let repo = tempfile::tempdir().unwrap();
         fs::write(
             repo.path().join("package.json"),
