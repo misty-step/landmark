@@ -134,6 +134,8 @@ struct SynthesizeArgs {
     api_key: String,
     #[arg(long, default_value = "")]
     model: String,
+    #[arg(long = "model-policy", default_value = "")]
+    model_policy: String,
     #[arg(long = "api-url")]
     api_url: String,
     #[arg(long = "fallback-models", default_value = "")]
@@ -166,6 +168,10 @@ struct SynthesizeArgs {
     templates_dir: PathBuf,
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
+    #[arg(long = "dry-run-cost")]
+    dry_run_cost: bool,
+    #[arg(long = "context-metadata-file", default_value = ".")]
+    context_metadata_file: PathBuf,
 }
 
 #[derive(Args)]
@@ -244,6 +250,8 @@ struct SummaryArgs {
     github_output: PathBuf,
     #[arg(long = "attempts-file", default_value = ".")]
     attempts_file: PathBuf,
+    #[arg(long = "context-metadata-file", default_value = ".")]
+    context_metadata_file: PathBuf,
 }
 
 #[derive(Args)]
@@ -699,8 +707,66 @@ struct EffectiveSynthesisConfig {
     voice_guide: String,
     audience: String,
     changelog_source: String,
+    model_policy: String,
     model: String,
     fallback_models: String,
+    max_input_tokens: Option<u64>,
+    max_output_tokens: Option<u64>,
+    max_usd: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SynthesisContextPacket {
+    product: ContextProduct,
+    release: ContextRelease,
+    sources: Vec<ContextSource>,
+    classification: ReleaseClassification,
+    cost: CostEstimate,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ContextProduct {
+    name: String,
+    audience: String,
+    description: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ContextRelease {
+    version: String,
+    changelog_source: String,
+    model_policy: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ContextSource {
+    name: String,
+    kind: String,
+    bytes: usize,
+    estimated_tokens: u64,
+    included: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReleaseClassification {
+    categories: Vec<String>,
+    significance: String,
+    user_visible: bool,
+    breaking: bool,
+    security: bool,
+    migration_heavy: bool,
+    reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CostEstimate {
+    input_tokens: u64,
+    output_tokens: u64,
+    model_tier: String,
+    model: String,
+    estimated_usd: f64,
+    skip: bool,
+    skip_reason: String,
 }
 
 fn init(args: InitArgs) -> Result<()> {
@@ -780,6 +846,9 @@ fn manifest_defaults(args: ManifestDefaultsArgs) -> Result<()> {
     }
     if let Some(value) = manifest.artifacts.rss.as_deref().and_then(trimmed_option) {
         values.push(("rss_feed_file", sanitize_text(&value)));
+    }
+    if let Some(value) = manifest.model.policy.as_deref().and_then(trimmed_option) {
+        values.push(("model_policy", sanitize_text(&value)));
     }
     if let Some(value) = manifest
         .model
@@ -918,10 +987,10 @@ fn validate_manifest(manifest: &LandfallManifest) -> Vec<String> {
         ));
     }
     if let Some(policy) = manifest.model.policy.as_deref().and_then(trimmed_option)
-        && !matches!(policy.as_str(), "cheap" | "balanced" | "rich")
+        && !matches!(policy.as_str(), "cheap" | "balanced" | "rich" | "off")
     {
         errors.push(format!(
-            "manifest model.policy must be cheap, balanced, or rich; got {policy}"
+            "manifest model.policy must be cheap, balanced, rich, or off; got {policy}"
         ));
     }
     errors
@@ -3205,12 +3274,34 @@ fn extract_prs(args: ExtractPrsArgs) -> Result<()> {
 }
 
 fn synthesize(args: SynthesizeArgs) -> Result<()> {
-    validate_nonblank(&args.api_key, "api-key")?;
     let config = resolve_synthesis_config(&args)?;
-    validate_nonblank(&config.model, "model")?;
     let technical = resolve_technical_changelog(&args, &config)?;
     let prompt = render_prompt(&args, &config, &technical)?;
-    let mut models = vec![config.model.clone()];
+    let context = synthesis_context_packet(&args, &config, &technical, &prompt);
+    write_json_if_requested(&args.context_metadata_file, &context)?;
+    if args.dry_run_cost {
+        println!("{}", serde_json::to_string_pretty(&context)?);
+        return Ok(());
+    }
+    if context.cost.skip {
+        write_json_if_requested(
+            &args.attempts_file,
+            &vec![json!({
+                "model": context.cost.model,
+                "succeeded": false,
+                "quality": "skipped",
+                "message": context.cost.skip_reason,
+                "cost": context.cost.clone(),
+                "classification": context.classification.clone(),
+            })],
+        )?;
+        ensure_parent(&args.quality_file)?;
+        fs::write(&args.quality_file, "skipped")?;
+        return Ok(());
+    }
+    validate_nonblank(&args.api_key, "api-key")?;
+    validate_nonblank(&context.cost.model, "model")?;
+    let mut models = vec![context.cost.model.clone()];
     models.extend(
         config
             .fallback_models
@@ -3234,6 +3325,8 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
                     "succeeded": true,
                     "quality": quality,
                     "message": "",
+                    "cost": context.cost.clone(),
+                    "classification": context.classification.clone(),
                 }));
                 write_json_if_requested(&args.attempts_file, &attempts)?;
                 ensure_parent(&args.quality_file)?;
@@ -3248,6 +3341,8 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
                     "succeeded": false,
                     "quality": "failed",
                     "message": last_error,
+                    "cost": context.cost.clone(),
+                    "classification": context.classification.clone(),
                 }));
             }
             Err(error) => {
@@ -3257,6 +3352,8 @@ fn synthesize(args: SynthesizeArgs) -> Result<()> {
                     "succeeded": false,
                     "quality": "failed",
                     "message": last_error,
+                    "cost": context.cost.clone(),
+                    "classification": context.classification.clone(),
                 }));
             }
         }
@@ -3287,9 +3384,14 @@ fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<EffectiveSynthesisC
         manifest.changelog.source.as_deref(),
         "auto",
     );
+    let model_policy = optional_or_default(
+        Some(args.model_policy.as_str()),
+        manifest.model.policy.as_deref(),
+        "balanced",
+    );
     let model = trimmed_option(&args.model)
         .or_else(|| manifest.model.primary.as_deref().and_then(trimmed_option))
-        .or_else(|| policy_default_model(manifest.model.policy.as_deref()))
+        .or_else(|| policy_default_model(Some(&model_policy)))
         .unwrap_or_default();
     let fallback_models = if !args.fallback_models.trim().is_empty() {
         args.fallback_models.trim().to_string()
@@ -3302,8 +3404,12 @@ fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<EffectiveSynthesisC
         voice_guide,
         audience,
         changelog_source,
+        model_policy,
         model,
         fallback_models,
+        max_input_tokens: manifest.budget.max_input_tokens,
+        max_output_tokens: manifest.budget.max_output_tokens,
+        max_usd: manifest.budget.max_usd,
     })
 }
 
@@ -3332,10 +3438,11 @@ fn optional_or_default(value: Option<&str>, manifest: Option<&str>, default: &st
 
 fn policy_default_model(policy: Option<&str>) -> Option<String> {
     match policy.and_then(trimmed_option).as_deref() {
+        Some("off") => Some("off".into()),
         Some("cheap") => Some("openai/gpt-4o-mini".into()),
         Some("balanced") => Some("anthropic/claude-sonnet-4".into()),
         Some("rich") => Some("anthropic/claude-sonnet-4".into()),
-        _ => None,
+        _ => Some("anthropic/claude-sonnet-4".into()),
     }
 }
 
@@ -3449,6 +3556,297 @@ fn render_prompt(
         .replace("{{BREAKING_CHANGES}}", &render_breaking_changes(technical)))
 }
 
+fn synthesis_context_packet(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+    technical: &str,
+    prompt: &str,
+) -> SynthesisContextPacket {
+    let sources = synthesis_context_sources(args, config, technical, prompt);
+    let classification = classify_release_context(technical, &sources);
+    let cost = estimate_synthesis_cost(config, prompt, &classification, &sources);
+    SynthesisContextPacket {
+        product: ContextProduct {
+            name: config.product_name.clone(),
+            audience: config.audience.clone(),
+            description: config.product_description.clone(),
+        },
+        release: ContextRelease {
+            version: args.version.clone(),
+            changelog_source: config.changelog_source.clone(),
+            model_policy: config.model_policy.clone(),
+        },
+        sources,
+        classification,
+        cost,
+    }
+}
+
+fn synthesis_context_sources(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+    technical: &str,
+    prompt: &str,
+) -> Vec<ContextSource> {
+    let mut sources = vec![
+        context_source("prompt_template", "prompt", prompt),
+        context_source("technical_changelog", &config.changelog_source, technical),
+    ];
+    if !config.product_description.trim().is_empty() {
+        sources.push(context_source(
+            "product_manifest",
+            "manifest",
+            &config.product_description,
+        ));
+    }
+    if !config.voice_guide.trim().is_empty() {
+        sources.push(context_source(
+            "voice_guide",
+            "manifest",
+            &config.voice_guide,
+        ));
+    }
+    if let Ok(Some(body)) = read_optional_file(&args.release_body_file) {
+        sources.push(context_source("release_body", "release-body", &body));
+    }
+    if let Ok(Some(prs)) = read_optional_file(&args.pr_changelog_file) {
+        sources.push(context_source("pull_requests", "prs", &prs));
+    }
+    sources
+}
+
+fn context_source(name: &str, kind: &str, text: &str) -> ContextSource {
+    ContextSource {
+        name: name.to_string(),
+        kind: kind.to_string(),
+        bytes: text.len(),
+        estimated_tokens: estimate_tokens(text),
+        included: !text.trim().is_empty(),
+    }
+}
+
+fn estimate_tokens(text: &str) -> u64 {
+    let chars = text.chars().count() as u64;
+    chars.div_ceil(4).max(1)
+}
+
+fn classify_release_context(technical: &str, sources: &[ContextSource]) -> ReleaseClassification {
+    let lower = technical.to_ascii_lowercase();
+    let mut categories = BTreeSet::new();
+    let mut reasons = Vec::new();
+    let docs = lower.contains("docs:")
+        || lower.contains("documentation")
+        || lower.contains("readme")
+        || lower.contains(".md");
+    let chore = lower.contains("chore:")
+        || lower.contains("ci:")
+        || lower.contains("build:")
+        || lower.contains("test:")
+        || lower.contains("refactor:");
+    let dependencies = lower.contains("dependabot")
+        || lower.contains("dependency")
+        || lower.contains("dependencies")
+        || lower.contains("package-lock")
+        || lower.contains("cargo.lock");
+    let internal = lower.contains("workflow")
+        || lower.contains(".github/")
+        || lower.contains("script")
+        || lower.contains("harness")
+        || lower.contains("replay");
+    let mut user_visible = lower.contains("feat:")
+        || lower.contains("fix:")
+        || lower.contains("user")
+        || lower.contains("public")
+        || lower.contains("cli")
+        || lower.contains("action input")
+        || lower.contains("release notes");
+    let breaking = lower.contains("breaking change")
+        || Regex::new(r"(?m)^[*-]?\s*[a-z]+(\([^)]*\))?!:")
+            .unwrap()
+            .is_match(technical);
+    let security = lower.contains("security")
+        || lower.contains("vulnerability")
+        || lower.contains("cve-")
+        || lower.contains("secret");
+    let migration_heavy = lower.contains("migration")
+        || lower.contains("migrate")
+        || lower.contains("deprecat")
+        || lower.contains("manifest")
+        || lower.contains("configuration");
+
+    if docs {
+        categories.insert("docs-only");
+        reasons.push("documentation signals detected".to_string());
+    }
+    if chore {
+        categories.insert("chore-only");
+        reasons.push("chore/build/test/refactor signals detected".to_string());
+    }
+    if dependencies {
+        categories.insert("dependency-only");
+        reasons.push("dependency update signals detected".to_string());
+    }
+    if internal {
+        categories.insert("internal-tooling");
+        reasons.push("internal tooling or workflow signals detected".to_string());
+    }
+    if user_visible {
+        categories.insert("user-visible");
+        reasons.push("feature, fix, CLI, or public-surface signals detected".to_string());
+    }
+    if breaking {
+        categories.insert("breaking");
+        reasons.push("breaking-change signals detected".to_string());
+    }
+    if security {
+        categories.insert("security");
+        reasons.push("security-sensitive signals detected".to_string());
+    }
+    if migration_heavy {
+        categories.insert("migration-heavy");
+        reasons.push("migration or configuration signals detected".to_string());
+    }
+    if sources
+        .iter()
+        .any(|source| source.name == "pull_requests" && source.included)
+    {
+        reasons.push("PR metadata contributed to context".to_string());
+    }
+    if categories.is_empty() {
+        categories.insert("user-visible");
+        user_visible = true;
+        reasons.push("no low-value-only signals found; defaulting to user-visible".to_string());
+    }
+
+    let low_value_only = !user_visible && !breaking && !security && !migration_heavy;
+    let significance = if breaking || security || migration_heavy {
+        "high"
+    } else if low_value_only {
+        "low"
+    } else {
+        "medium"
+    }
+    .to_string();
+
+    ReleaseClassification {
+        categories: categories.into_iter().map(str::to_string).collect(),
+        significance,
+        user_visible,
+        breaking,
+        security,
+        migration_heavy,
+        reasons,
+    }
+}
+
+fn estimate_synthesis_cost(
+    config: &EffectiveSynthesisConfig,
+    prompt: &str,
+    classification: &ReleaseClassification,
+    _sources: &[ContextSource],
+) -> CostEstimate {
+    let policy = config.model_policy.trim().to_ascii_lowercase();
+    let (model_tier, model, mut skip, mut skip_reason) =
+        selected_model_plan(config, classification);
+    let input_tokens = estimate_tokens(prompt);
+    let output_tokens = config
+        .max_output_tokens
+        .unwrap_or(match model_tier.as_str() {
+            "cheap" => 700,
+            "rich" => 1400,
+            _ => 1000,
+        });
+    if !skip
+        && let Some(max_input) = config.max_input_tokens
+        && input_tokens > max_input
+    {
+        skip = true;
+        skip_reason =
+            format!("estimated input tokens {input_tokens} exceed manifest budget {max_input}");
+    }
+    let estimated_usd = estimate_model_cost_usd(&model_tier, input_tokens, output_tokens);
+    if !skip
+        && let Some(max_usd) = config.max_usd
+        && estimated_usd > max_usd
+    {
+        skip = true;
+        skip_reason = format!(
+            "estimated synthesis cost ${estimated_usd:.4} exceeds manifest budget ${max_usd:.4}"
+        );
+    }
+    if policy == "off" {
+        skip = true;
+        skip_reason = "model.policy=off disables LLM synthesis".into();
+    }
+    CostEstimate {
+        input_tokens,
+        output_tokens,
+        model_tier,
+        model,
+        estimated_usd,
+        skip,
+        skip_reason,
+    }
+}
+
+fn selected_model_plan(
+    config: &EffectiveSynthesisConfig,
+    classification: &ReleaseClassification,
+) -> (String, String, bool, String) {
+    match config.model_policy.trim().to_ascii_lowercase().as_str() {
+        "off" => (
+            "off".into(),
+            "off".into(),
+            true,
+            "model.policy=off disables LLM synthesis".into(),
+        ),
+        "cheap" => ("cheap".into(), cheap_model(config), false, String::new()),
+        "rich" => ("rich".into(), rich_model(config), false, String::new()),
+        _ if classification.significance == "low" => (
+            "off".into(),
+            "off".into(),
+            true,
+            "low-significance docs/chore/dependency release skipped by balanced policy".into(),
+        ),
+        _ if classification.significance == "high" => {
+            ("rich".into(), rich_model(config), false, String::new())
+        }
+        _ => (
+            "balanced".into(),
+            config.model.clone(),
+            false,
+            String::new(),
+        ),
+    }
+}
+
+fn cheap_model(config: &EffectiveSynthesisConfig) -> String {
+    if config.model != "off" && !config.model.trim().is_empty() {
+        config.model.clone()
+    } else {
+        "openai/gpt-4o-mini".into()
+    }
+}
+
+fn rich_model(config: &EffectiveSynthesisConfig) -> String {
+    if config.model != "off" && !config.model.trim().is_empty() {
+        config.model.clone()
+    } else {
+        "anthropic/claude-sonnet-4".into()
+    }
+}
+
+fn estimate_model_cost_usd(tier: &str, input_tokens: u64, output_tokens: u64) -> f64 {
+    let (input_per_million, output_per_million) = match tier {
+        "cheap" => (0.15, 0.60),
+        "rich" => (3.00, 15.00),
+        "off" => (0.0, 0.0),
+        _ => (1.00, 5.00),
+    };
+    ((input_tokens as f64 / 1_000_000.0) * input_per_million)
+        + ((output_tokens as f64 / 1_000_000.0) * output_per_million)
+}
+
 fn render_breaking_changes(technical: &str) -> String {
     let mut changes = BTreeSet::new();
     let breaking_commit = Regex::new(r"^[a-z]+(\([^)]*\))?!:").unwrap();
@@ -3515,13 +3913,20 @@ fn publication_policy(args: PublicationArgs) -> Result<()> {
     let mut failure_stage = args.synth_failure_stage.clone();
     let mut failure_message = args.synth_failure_message.clone();
     let mut exit_failure = false;
-    if succeeded && quality == "degraded" && required {
+    let policy_succeeded = if quality == "skipped" || failure_stage == "skipped" {
+        can_update_release = false;
+        can_publish_artifacts = false;
+        true
+    } else {
+        succeeded
+    };
+    if policy_succeeded && quality == "degraded" && required {
         can_update_release = false;
         can_publish_artifacts = false;
         failure_stage = "validation".to_string();
         failure_message = "Synthesis quality is degraded and synthesis is required.".to_string();
         exit_failure = true;
-    } else if !succeeded && required {
+    } else if !policy_succeeded && required {
         can_update_release = false;
         can_publish_artifacts = false;
         if failure_stage.is_empty() {
@@ -3535,7 +3940,7 @@ fn publication_policy(args: PublicationArgs) -> Result<()> {
     write_outputs(
         &args.github_output,
         &[
-            ("succeeded", succeeded.to_string()),
+            ("succeeded", policy_succeeded.to_string()),
             ("quality", quality),
             ("can_update_release", can_update_release.to_string()),
             ("can_publish_artifacts", can_publish_artifacts.to_string()),
@@ -3563,8 +3968,15 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
     let slack_enabled = parse_bool(&args.slack_enabled);
     let slack_sent = parse_bool(&args.slack_sent);
     let quality = normalize_quality(&args.synth_quality);
+    let synthesis_skipped = quality == "skipped" || args.synth_failure_stage == "skipped";
     let (succeeded, failure_stage, failure_message) = if !synthesis_enabled || !released {
         (true, "", "")
+    } else if synthesis_skipped {
+        (
+            true,
+            args.synth_failure_stage.as_str(),
+            args.synth_failure_message.as_str(),
+        )
     } else if !synth_succeeded {
         (
             false,
@@ -3596,7 +4008,7 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
     destinations.insert(
         "release_body".to_string(),
         DestinationStatus {
-            enabled: synthesis_enabled && released && synth_succeeded,
+            enabled: synthesis_enabled && released && synth_succeeded && !synthesis_skipped,
             succeeded: update_succeeded,
             failure_stage: sanitize_text(&args.update_failure_stage),
             failure_message: sanitize_text(&args.update_failure_message),
@@ -3605,7 +4017,11 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
     destinations.insert(
         "artifacts".to_string(),
         DestinationStatus {
-            enabled: synthesis_enabled && released && synth_succeeded && update_succeeded,
+            enabled: synthesis_enabled
+                && released
+                && synth_succeeded
+                && update_succeeded
+                && !synthesis_skipped,
             succeeded: artifact_succeeded,
             failure_stage: sanitize_text(&args.artifact_failure_stage),
             failure_message: sanitize_text(&args.artifact_failure_message),
@@ -3646,6 +4062,7 @@ fn summary_policy(args: SummaryArgs) -> Result<()> {
         failure_stage: sanitize_text(failure_stage),
         failure_message: sanitize_text(failure_message),
         model_attempts: read_json_array_if_requested(&args.attempts_file)?,
+        context: read_json_value_if_requested(&args.context_metadata_file)?,
         destinations,
     };
     write_outputs(
@@ -3664,6 +4081,7 @@ fn normalize_quality(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "valid" => "valid".to_string(),
         "degraded" => "degraded".to_string(),
+        "skipped" => "skipped".to_string(),
         "failed" => "failed".to_string(),
         _ => "failed".to_string(),
     }
@@ -3827,6 +4245,7 @@ struct SynthesisStatus {
     failure_stage: String,
     failure_message: String,
     model_attempts: Vec<Value>,
+    context: Value,
     destinations: BTreeMap<String, DestinationStatus>,
 }
 
@@ -4460,10 +4879,11 @@ fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
         .map(|needle| format!("README missing manifest schema token `{needle}`"))
         .chain(
             [
-                "cheap, balanced, rich",
+                "cheap, balanced, rich, off",
                 "full # full or synthesis-only",
                 "Non-empty action inputs still win over manifest values.",
                 "cheap` uses `openai/gpt-4o-mini`",
+                "synthesize --dry-run-cost",
             ]
             .iter()
             .filter(|needle| !readme.contains(**needle))
@@ -4477,6 +4897,9 @@ fn validate_manifest_action_precedence_contract(action: &str) -> Vec<String> {
         "id: manifest_defaults",
         "manifest-defaults",
         "inputs.llm-model || steps.manifest_defaults.outputs.llm_model",
+        "steps.manifest_defaults.outputs.model_policy",
+        "MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}",
+        "Landfall LLM healthcheck skipped because model.policy=off disables synthesis.",
         "inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models",
         "inputs.audience || steps.manifest_defaults.outputs.audience",
         "inputs.changelog-source || steps.manifest_defaults.outputs.changelog_source",
@@ -4487,6 +4910,7 @@ fn validate_manifest_action_precedence_contract(action: &str) -> Vec<String> {
         "inputs.notes-output-html-file || steps.manifest_defaults.outputs.notes_output_html_file",
         "inputs.notes-output-json || steps.manifest_defaults.outputs.notes_output_json",
         "inputs.rss-feed-file || steps.manifest_defaults.outputs.rss_feed_file",
+        "--context-metadata-file",
     ];
     required
         .iter()
@@ -4673,6 +5097,10 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_self_release_pr_path,
     );
     map.insert(
+        "synthesis_cost_policy".to_string(),
+        scenario_synthesis_cost_policy,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -4711,6 +5139,7 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "consumer_release_update_failure",
         "consumer_synthesis_only_success",
         "self_release_pr_path",
+        "synthesis_cost_policy",
         "publication_degraded_optional",
         "publication_degraded_required",
         "summary_artifact_failed",
@@ -4948,6 +5377,7 @@ fn scenario_summary_failure(stage: &str, message: &str) -> Result<Value> {
 struct FakeState {
     llm_status: u16,
     llm_notes: String,
+    llm_responses: VecDeque<(u16, String)>,
     update_status: u16,
     releases: BTreeMap<String, Value>,
     requests: Vec<Value>,
@@ -5186,6 +5616,230 @@ model:
             "manifest model/product/audience/voice/changelog defaults",
             "explicit CLI override precedence"
         ],
+    }))
+}
+
+fn scenario_synthesis_cost_policy(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("synthesis-cost-policy");
+    init_fixture_repo(&repo, "v1.2.3")?;
+    let templates_dir = env::current_dir()?.join("templates/prompts");
+
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Cost Policy Demo
+  description: Demo release automation.
+model:
+  policy: balanced
+"#,
+    )?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.2.3]\n\n- docs: update README.md\n",
+    )?;
+    let dry_run = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "",
+            "--api-url",
+            "http://127.0.0.1:1/chat/completions",
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+            "CHANGELOG.md",
+            "--templates-dir",
+        ])
+        .arg(&templates_dir)
+        .args(["--quality-file", "quality-dry.txt", "--dry-run-cost"])
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !dry_run.status.success() {
+        return Err(String::from_utf8_lossy(&dry_run.stderr).to_string().into());
+    }
+    let dry_context: Value = serde_json::from_slice(&dry_run.stdout)?;
+    if dry_context["cost"]["skip"] != true
+        || dry_context["cost"]["model_tier"] != "off"
+        || dry_context["classification"]["categories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|category| category != "docs-only")
+    {
+        return Err("dry-run cost policy did not skip docs-only release".into());
+    }
+
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Cost Policy Demo
+  description: Demo release automation.
+model:
+  policy: cheap
+"#,
+    )?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.2.3]\n\n- feat(cli): add a fleet command\n",
+    )?;
+    let cheap_context_file = repo.join("cheap-context.json");
+    let cheap_attempts = repo.join("cheap-attempts.json");
+    let cheap_quality = repo.join("cheap-quality.txt");
+    let fake = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.to_string(),
+        update_status: 200,
+        ..Default::default()
+    };
+    let server = start_fake_server(fake)?;
+    let cheap = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "test-key",
+            "--api-url",
+            &format!("{}/chat/completions", server.url),
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+            "CHANGELOG.md",
+            "--templates-dir",
+        ])
+        .arg(&templates_dir)
+        .args(["--quality-file"])
+        .arg(&cheap_quality)
+        .args(["--attempts-file"])
+        .arg(&cheap_attempts)
+        .args(["--context-metadata-file"])
+        .arg(&cheap_context_file)
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !cheap.status.success() {
+        return Err(String::from_utf8_lossy(&cheap.stderr).to_string().into());
+    }
+    let cheap_requests = server.state.lock().unwrap().requests.clone();
+    let cheap_request = request_payload(&cheap_requests, 0)?;
+    let cheap_context: Value = serde_json::from_str(&fs::read_to_string(&cheap_context_file)?)?;
+    if cheap_request["model"] != "openai/gpt-4o-mini"
+        || cheap_context["cost"]["model_tier"] != "cheap"
+        || cheap_context["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|source| source["name"] != "technical_changelog")
+    {
+        return Err("cheap policy did not use cheap model with context metadata".into());
+    }
+
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Cost Policy Demo
+  description: Demo release automation.
+model:
+  policy: balanced
+  primary: primary/model
+  fallbacks:
+    - fallback/model
+"#,
+    )?;
+    let mut fallback_fake = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.to_string(),
+        update_status: 200,
+        ..Default::default()
+    };
+    fallback_fake.llm_responses.push_back((500, String::new()));
+    fallback_fake
+        .llm_responses
+        .push_back((200, VALID_NOTES.to_string()));
+    let fallback_server = start_fake_server(fallback_fake)?;
+    let fallback_attempts = repo.join("fallback-attempts.json");
+    let fallback = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "test-key",
+            "--api-url",
+            &format!("{}/chat/completions", fallback_server.url),
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+            "CHANGELOG.md",
+            "--templates-dir",
+        ])
+        .arg(&templates_dir)
+        .args(["--quality-file", "fallback-quality.txt"])
+        .args(["--attempts-file"])
+        .arg(&fallback_attempts)
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !fallback.status.success() {
+        return Err(String::from_utf8_lossy(&fallback.stderr).to_string().into());
+    }
+    let attempts: Value = serde_json::from_str(&fs::read_to_string(&fallback_attempts)?)?;
+    if attempts.as_array().unwrap().len() != 2
+        || attempts[0]["succeeded"] != false
+        || attempts[1]["model"] != "fallback/model"
+        || attempts[1]["succeeded"] != true
+    {
+        return Err("fallback attempt sequence was not recorded".into());
+    }
+
+    fs::write(
+        repo.join(".landfall.yml"),
+        r#"product:
+  name: Cost Policy Demo
+  description: Demo release automation.
+model:
+  policy: balanced
+"#,
+    )?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.2.3]\n\n- feat(api)!: rotate security-sensitive release token configuration\n\nBREAKING CHANGE: tokens moved to a new manifest field.\n",
+    )?;
+    let rich = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "",
+            "--api-url",
+            "http://127.0.0.1:1/chat/completions",
+            "--version",
+            "v1.2.3",
+            "--changelog-file",
+            "CHANGELOG.md",
+            "--templates-dir",
+        ])
+        .arg(&templates_dir)
+        .args(["--quality-file", "rich-quality.txt", "--dry-run-cost"])
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !rich.status.success() {
+        return Err(String::from_utf8_lossy(&rich.stderr).to_string().into());
+    }
+    let rich_context: Value = serde_json::from_slice(&rich.stdout)?;
+    if rich_context["cost"]["model_tier"] != "rich"
+        || rich_context["classification"]["security"] != true
+        || rich_context["classification"]["breaking"] != true
+    {
+        return Err("balanced policy did not escalate high-significance release".into());
+    }
+
+    Ok(json!({
+        "dry_run_skip": dry_context["cost"],
+        "cheap_model": cheap_request["model"],
+        "fallback_attempts": attempts,
+        "rich_cost": rich_context["cost"],
     }))
 }
 
@@ -5531,16 +6185,14 @@ fn start_fake_server(mut state: FakeState) -> Result<FakeServer> {
                 .push(json!({"method": method.as_str(), "path": path, "body": body}));
             let response = match (method, request.url()) {
                 (Method::Post, "/chat/completions") => {
-                    if state.llm_status >= 400 {
-                        json_response(
-                            state.llm_status,
-                            json!({"error": {"message": "fake LLM failure"}}),
-                        )
+                    let (status, notes) = state
+                        .llm_responses
+                        .pop_front()
+                        .unwrap_or_else(|| (state.llm_status, state.llm_notes.clone()));
+                    if status >= 400 {
+                        json_response(status, json!({"error": {"message": "fake LLM failure"}}))
                     } else {
-                        json_response(
-                            200,
-                            json!({"choices": [{"message": {"content": state.llm_notes}}]}),
-                        )
+                        json_response(200, json!({"choices": [{"message": {"content": notes}}]}))
                     }
                 }
                 (Method::Get, url) if url.contains("/releases/tags/") => {
@@ -5989,6 +6641,13 @@ fn read_json_array_if_requested(path: &Path) -> Result<Vec<Value>> {
     Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
 }
 
+fn read_json_value_if_requested(path: &Path) -> Result<Value> {
+    if !is_requested_path(path) || !path.is_file() {
+        return Ok(json!({}));
+    }
+    Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
+}
+
 fn is_requested_path(path: &Path) -> bool {
     !path.as_os_str().is_empty() && path != Path::new(".")
 }
@@ -6109,6 +6768,7 @@ mod tests {
             slack_sent: "false".into(),
             github_output: output.clone(),
             attempts_file: attempts,
+            context_metadata_file: PathBuf::from("."),
         };
         summary_policy(args).unwrap();
         let outputs = parse_outputs(&output).unwrap();
@@ -6287,6 +6947,7 @@ model:
         let mut args = SynthesizeArgs {
             api_key: "test".into(),
             model: String::new(),
+            model_policy: String::new(),
             api_url: "http://example.invalid".into(),
             fallback_models: String::new(),
             product_name: String::new(),
@@ -6303,6 +6964,8 @@ model:
             attempts_file: PathBuf::from("."),
             templates_dir: PathBuf::from("templates/prompts"),
             repo_root: repo.path().to_path_buf(),
+            dry_run_cost: false,
+            context_metadata_file: PathBuf::from("."),
         };
         let defaults = resolve_synthesis_config(&args).unwrap();
         assert_eq!(defaults.product_name, "Manifest Product");
@@ -6338,6 +7001,50 @@ model:
         .unwrap();
         let policy_default = resolve_synthesis_config(&args).unwrap();
         assert_eq!(policy_default.model, "anthropic/claude-sonnet-4");
+    }
+
+    #[test]
+    fn release_classifier_defaults_unknown_context_to_user_visible_medium() {
+        let classification = classify_release_context("## [1.2.3]\n\n- improve output\n", &[]);
+
+        assert!(classification.user_visible);
+        assert_eq!(classification.significance, "medium");
+        assert!(
+            classification
+                .categories
+                .iter()
+                .any(|category| category == "user-visible")
+        );
+    }
+
+    #[test]
+    fn synthesis_budget_preserves_existing_policy_skip_reason() {
+        let config = test_synthesis_config("off", Some(1), Some(0.0));
+        let classification = test_release_classification("medium");
+        let cost = estimate_synthesis_cost(&config, "a long enough prompt", &classification, &[]);
+
+        assert!(cost.skip);
+        assert_eq!(cost.skip_reason, "model.policy=off disables LLM synthesis");
+    }
+
+    #[test]
+    fn synthesis_budget_counts_rendered_prompt_once() {
+        let prompt = "abcd".repeat(100);
+        let max_input_tokens = estimate_tokens(&prompt);
+        let config = test_synthesis_config("balanced", Some(max_input_tokens), None);
+        let classification = test_release_classification("medium");
+        let prompt_source = ContextSource {
+            name: "prompt_template".into(),
+            kind: "prompt".into(),
+            bytes: prompt.len(),
+            estimated_tokens: max_input_tokens,
+            included: true,
+        };
+
+        let cost = estimate_synthesis_cost(&config, &prompt, &classification, &[prompt_source]);
+
+        assert!(!cost.skip, "{:?}", cost);
+        assert_eq!(cost.input_tokens, max_input_tokens);
     }
 
     #[test]
@@ -6378,7 +7085,7 @@ model:
                 profile: Some("banana".into()),
             },
             model: ModelManifest {
-                policy: Some("off".into()),
+                policy: Some("banana".into()),
                 primary: None,
                 fallbacks: Vec::new(),
             },
@@ -6393,8 +7100,40 @@ model:
         assert!(
             errors
                 .iter()
-                .any(|error| error.contains("model.policy must be cheap, balanced, or rich"))
+                .any(|error| error.contains("model.policy must be cheap, balanced, rich, or off"))
         );
+    }
+
+    fn test_synthesis_config(
+        model_policy: &str,
+        max_input_tokens: Option<u64>,
+        max_usd: Option<f64>,
+    ) -> EffectiveSynthesisConfig {
+        EffectiveSynthesisConfig {
+            product_name: "Demo".into(),
+            product_description: "Demo release automation.".into(),
+            voice_guide: String::new(),
+            audience: "developer".into(),
+            changelog_source: "auto".into(),
+            model_policy: model_policy.into(),
+            model: "primary/model".into(),
+            fallback_models: String::new(),
+            max_input_tokens,
+            max_output_tokens: None,
+            max_usd,
+        }
+    }
+
+    fn test_release_classification(significance: &str) -> ReleaseClassification {
+        ReleaseClassification {
+            categories: vec!["user-visible".into()],
+            significance: significance.into(),
+            user_visible: true,
+            breaking: false,
+            security: false,
+            migration_heavy: false,
+            reasons: Vec::new(),
+        }
     }
 
     #[test]
