@@ -137,7 +137,8 @@ model policy in the repo instead of requiring every workflow to repeat them.
 Non-empty action inputs still win over manifest values.
 When `model.primary` is omitted, `model.policy` selects Landfall's built-in
 default model tier: `cheap` uses `openai/gpt-4o-mini`, while `balanced` and
-`rich` use `anthropic/claude-sonnet-4`.
+`rich` use `anthropic/claude-sonnet-4`. `off` disables LLM synthesis while
+still publishing the technical release.
 
 ```yaml
 product:
@@ -156,7 +157,7 @@ artifacts:
 release:
   profile: full # full or synthesis-only
 model:
-  policy: balanced # cheap, balanced, rich
+  policy: balanced # cheap, balanced, rich, off
   primary: anthropic/claude-sonnet-4
   fallbacks:
     - google/gemini-2.5-flash
@@ -172,6 +173,14 @@ workflow run. Use `dist/landfall setup --repo-root . --output-dir
 .landfall/setup` after editing the manifest to regenerate workflow candidates
 that reflect the durable defaults.
 
+Use `dist/landfall synthesize --dry-run-cost ...` to inspect the synthesis plan
+without calling an LLM. The dry run reports estimated input/output tokens,
+model tier, selected model, skip decision, cost estimate, deterministic release
+classification, and the final context sources included in the prompt. In
+`balanced` mode, docs-only, chore-only, dependency-only, and internal-tooling
+releases are skipped; breaking, security, and migration-heavy releases
+escalate to the rich tier.
+
 The old Python backfill script is retired from the maintenance surface; use a
 release re-run or `mode: synthesis-only` for repair runs.
 
@@ -183,7 +192,7 @@ release re-run or `mode: synthesis-only` for repair runs.
 | `release-tag` | No* | `""` | Release tag to synthesize notes for (required when `mode: synthesis-only`). |
 | `github-token` | Yes | - | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
-| `llm-model` | No | manifest, then `anthropic/claude-sonnet-4` | Primary model ID for note synthesis. |
+| `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
 | `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
@@ -208,7 +217,8 @@ release re-run or `mode: synthesis-only` for repair runs.
 | `rss-feed-file` | No | manifest, then `""` | Update this RSS 2.0 feed file with each release (includes synthesized notes as HTML). The feed file is committed back to the repo. |
 | `rss-max-entries` | No | `50` | Maximum number of items retained in `rss-feed-file`. |
 
-\* `llm-api-key` is required when `synthesis: true`.
+\* `llm-api-key` is required when `synthesis: true` and the model policy does
+not skip the LLM call.
 
 ## Outputs
 
@@ -216,9 +226,9 @@ release re-run or `mode: synthesis-only` for repair runs.
 | --- | --- |
 | `released` | `true` if a new release/tag was created, otherwise `false`. |
 | `release-tag` | Tag created by `semantic-release` (empty if no release). |
-| `synthesis-succeeded` | `true` only when synthesis and release-body update both succeed for the released tag. |
-| `synthesis-quality` | `valid`, `degraded`, or `failed`. |
-| `synthesis-status` | Compact JSON status with quality, failure stage/message, model attempts, and publication destination outcomes. |
+| `synthesis-succeeded` | `true` when synthesis/update succeeds or when policy intentionally skips LLM synthesis for the released tag. |
+| `synthesis-quality` | `valid`, `degraded`, `skipped`, or `failed`. |
+| `synthesis-status` | Compact JSON status with quality, failure stage/message, model attempts, context sources, cost estimate, release classification, and publication destination outcomes. |
 | `release-notes` | Synthesized user-facing release notes markdown. Empty if synthesis was skipped or failed. |
 | `webhook-sent` | `true` when the generic webhook notification was sent successfully. |
 | `slack-sent` | `true` when the Slack notification was sent successfully. |
@@ -235,6 +245,10 @@ distribution steps:
   failures are reported through `synthesis-succeeded: false` and protected
   outputs such as floating tags do not move unless synthesis and release-body
   update both succeed.
+- Intentional synthesis skips from `model.policy: off`, low-significance
+  balanced policy, or manifest budget limits are treated as successful policy
+  outcomes. Release-body mutation and artifact writes are skipped, while
+  `synthesis-status.context.cost` records the reason.
 - External GitHub and LLM calls made by the Rust runtime use bounded
   timeouts and retry policy.
 - Generated `release-notes` output uses a collision-resistant GitHub output
@@ -378,9 +392,47 @@ The `synthesis-status` output is a compact JSON object for automation:
       "model": "anthropic/claude-sonnet-4",
       "succeeded": true,
       "quality": "valid",
-      "message": ""
+      "message": "",
+      "cost": {
+        "input_tokens": 1800,
+        "output_tokens": 1000,
+        "model_tier": "balanced",
+        "model": "anthropic/claude-sonnet-4",
+        "estimated_usd": 0.0068,
+        "skip": false,
+        "skip_reason": ""
+      }
     }
   ],
+  "context": {
+    "release": {
+      "version": "v1.2.0",
+      "changelog_source": "auto",
+      "model_policy": "balanced"
+    },
+    "sources": [
+      { "name": "prompt_template", "kind": "prompt", "estimated_tokens": 700, "included": true },
+      { "name": "technical_changelog", "kind": "auto", "estimated_tokens": 900, "included": true },
+      { "name": "product_manifest", "kind": "manifest", "estimated_tokens": 40, "included": true }
+    ],
+    "classification": {
+      "categories": ["user-visible"],
+      "significance": "medium",
+      "user_visible": true,
+      "breaking": false,
+      "security": false,
+      "migration_heavy": false
+    },
+    "cost": {
+      "input_tokens": 1800,
+      "output_tokens": 1000,
+      "model_tier": "balanced",
+      "model": "anthropic/claude-sonnet-4",
+      "estimated_usd": 0.0068,
+      "skip": false,
+      "skip_reason": ""
+    }
+  },
   "destinations": {
     "release_body": { "enabled": true, "succeeded": true, "failure_stage": "", "failure_message": "" },
     "artifacts": { "enabled": true, "succeeded": true, "failure_stage": "", "failure_message": "" },

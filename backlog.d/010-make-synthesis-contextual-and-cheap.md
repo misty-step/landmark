@@ -1,17 +1,17 @@
 # Make synthesis contextual and cheap
 
-Priority: P1 · Status: pending · Estimate: XL
+Priority: P1 · Status: done · Estimate: XL
 
 ## Goal
 Generate richer public release notes without making every release pay for large diff context or a frontier model call.
 
 ## Oracle
-- [ ] `dist/landfall synthesize --dry-run-cost ...` reports estimated input tokens, output tokens, model tier, skip decision, and cost before any LLM call.
-- [ ] A deterministic release classifier identifies docs-only, chore-only, dependency-only, internal tooling, user-visible, breaking, security, and migration-heavy releases from commits, PRs, labels, paths, and manifest policy.
-- [ ] Model selection supports `cheap`, `balanced`, `rich`, and `off` policies with replay coverage for skip, cheap model, fallback, and rich escalation paths.
-- [ ] `changelog-source: prs` is evaluated against real or fixture PR metadata before any durable per-PR cache is introduced.
-- [ ] The `synthesis-status` output includes cost metadata and the final context sources used.
-- [ ] `bin/gate` proves cost policy without network calls through fake LLM and fake GitHub endpoints.
+- [x] `dist/landfall synthesize --dry-run-cost ...` reports estimated input tokens, output tokens, model tier, skip decision, and cost before any LLM call.
+- [x] A deterministic release classifier identifies docs-only, chore-only, dependency-only, internal tooling, user-visible, breaking, security, and migration-heavy releases from commits, PRs, labels, paths, and manifest policy.
+- [x] Model selection supports `cheap`, `balanced`, `rich`, and `off` policies with replay coverage for skip, cheap model, fallback, and rich escalation paths.
+- [x] `changelog-source: prs` is evaluated against real or fixture PR metadata before any durable per-PR cache is introduced.
+- [x] The `synthesis-status` output includes cost metadata and the final context sources used.
+- [x] `bin/gate` proves cost policy without network calls through fake LLM and fake GitHub endpoints.
 
 ## Children
 1. Add token and cost estimation for changelog, release-body, PR metadata, manifest context, and prompt template inputs.
