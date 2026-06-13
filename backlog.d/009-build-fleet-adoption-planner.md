@@ -1,6 +1,6 @@
 # Build a fleet adoption planner
 
-Priority: P0 · Status: pending · Estimate: XL
+Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
 Let Landfall scan personal and Mistystep GitHub repositories, classify adoption readiness, and open safe per-repo installation pull requests with minimal manual setup.
@@ -24,3 +24,11 @@ Let Landfall scan personal and Mistystep GitHub repositories, classify adoption 
 - Evidence: `gh repo list phrazzld --limit 200` returned 153 repositories and `gh repo list misty-step --limit 200` returned 73, making manual adoption too expensive and error-prone.
 - Evidence: current `landfall setup` can analyze one checkout and emit candidate workflows, but there is no cross-repo inventory, PR generation, or secret readiness loop.
 - Why: the adoption critic ranked org-scale rollout highest because it creates real-world usage data and makes every later synthesis/cost feature more grounded.
+
+## Closure
+- Delivered `fleet scan`, `fleet plan`, and dry-run `fleet open-prs` as Rust CLI subcommands.
+- `fleet scan` is read-only and records repository activity, default branch, release tooling, tag format, package topology, workflow names, branch-protection availability, and required secret metadata without printing secret values.
+- Default scans use bounded concurrency and shallow metadata so the 226-repo personal + Mistystep fleet is tractable; `--deep-checks` opts into branch-protection and Actions secret-name probes for smaller batches.
+- `fleet plan` ranks repositories into `full`, `synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, and `skipped` adoption lanes with risk flags, missing secrets, unavailable metadata, skip reasons, migration notes, and a generated manifest. Missing or unavailable required secret metadata blocks rollout readiness.
+- `fleet open-prs --dry-run` renders per-repo `.landfall.yml`, workflow, and `diff.md` artifacts under `.landfall/fleet-plan/prs/`; non-dry-run mutation is intentionally refused until a later PR-opening slice adds hosted safeguards.
+- Replay evidence: `cargo run --locked -- replay-action --evidence-dir .landfall/replay-009-fleet --scenario fleet_adoption_planner` wrote `.landfall/replay-009-fleet/replay-result.json` with semantic-release, release-please, changesets, manual-tag, no-release-tool, archived, private, and branch-protected fixture coverage.

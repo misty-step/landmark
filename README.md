@@ -85,6 +85,50 @@ workflow includes `healthcheck: "true"`, `GH_RELEASE_TOKEN`,
 `OPENROUTER_API_KEY`, and the `contents`, `issues`, and `pull-requests`
 permissions Landfall needs.
 
+## Fleet Adoption
+
+Landfall can plan adoption across many GitHub repositories before opening any
+branches:
+
+```bash
+dist/landfall fleet scan \
+  --owner phrazzld \
+  --owner misty-step \
+  --output .landfall/fleet.json
+
+dist/landfall fleet plan \
+  --input .landfall/fleet.json \
+  --output-dir .landfall/fleet-plan
+
+dist/landfall fleet open-prs \
+  --dry-run \
+  --plan-dir .landfall/fleet-plan \
+  --output-dir .landfall/fleet-plan/prs
+```
+
+`fleet scan` is read-only. It lists repository activity, default branch,
+archive/private state, detected release tooling, tag format, package topology,
+workflow files, Landfall presence, branch-protection availability, and required
+secret metadata. Secret values are never requested or printed. If GitHub hides
+secret or branch-protection metadata for a repository, the scan records
+`unavailable` with the missing scope or access boundary instead of guessing.
+The default scan uses bounded concurrency and avoids expensive per-repo secret
+and branch-protection probes; pass `--deep-checks` for a smaller owner slice
+when you want GitHub to verify branch protection and Actions secret names.
+
+`fleet plan` ranks each repository into an adoption lane: `full`,
+`synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, or `skipped`.
+It writes `.landfall/fleet-plan/plan.json` and a Markdown operator dashboard
+with risk flags, missing secrets, skip reasons, and migration notes. Missing
+required secrets or unavailable required secret metadata block rollout readiness
+until the operator verifies the repository can run Landfall safely.
+
+`fleet open-prs --dry-run` renders the exact `.landfall.yml` and
+`.github/workflows/landfall-release.yml` files Landfall would propose for each
+eligible repository under `.landfall/fleet-plan/prs/`. It refuses to mutate
+remote repositories unless a future implementation explicitly adds a non-dry-run
+path.
+
 ## Product Manifest
 
 Landfall reads `.landfall.yml` from the repository root before synthesis. It

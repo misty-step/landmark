@@ -6,7 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -59,6 +59,7 @@ enum Commands {
     ReplayAction(ReplayArgs),
     Backfill(BackfillArgs),
     Setup(SetupArgs),
+    Fleet(FleetArgs),
     PrepareSelfRelease(PrepareSelfReleaseArgs),
     PublishSelfRelease(PublishSelfReleaseArgs),
 }
@@ -408,6 +409,61 @@ struct SetupArgs {
 }
 
 #[derive(Args)]
+struct FleetArgs {
+    #[command(subcommand)]
+    command: FleetCommand,
+}
+
+#[derive(Subcommand)]
+enum FleetCommand {
+    Scan(FleetScanArgs),
+    Plan(FleetPlanArgs),
+    OpenPrs(FleetOpenPrsArgs),
+}
+
+#[derive(Args)]
+struct FleetScanArgs {
+    #[arg(long)]
+    owner: Vec<String>,
+    #[arg(long, default_value = ".landfall/fleet.json")]
+    output: PathBuf,
+    #[arg(long = "max-repos", default_value_t = 0)]
+    max_repos: usize,
+    #[arg(long = "active-only")]
+    active_only: bool,
+    #[arg(long = "concurrency", default_value_t = 4)]
+    concurrency: usize,
+    #[arg(long = "deep-checks")]
+    deep_checks: bool,
+    #[arg(long = "api-base-url", default_value = "https://api.github.com")]
+    api_base_url: String,
+    #[arg(long = "github-token", default_value = "")]
+    github_token: String,
+    #[arg(long = "fixture", hide = true, default_value = "")]
+    fixture: String,
+}
+
+#[derive(Args)]
+struct FleetPlanArgs {
+    #[arg(long, default_value = ".landfall/fleet.json")]
+    input: PathBuf,
+    #[arg(long = "output-dir", default_value = ".landfall/fleet-plan")]
+    output_dir: PathBuf,
+}
+
+#[derive(Args)]
+struct FleetOpenPrsArgs {
+    #[arg(long = "plan-dir", default_value = ".landfall/fleet-plan")]
+    plan_dir: PathBuf,
+    #[arg(long = "output-dir", default_value = ".landfall/fleet-plan/prs")]
+    output_dir: PathBuf,
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+    #[arg(long = "max-prs", default_value_t = 0)]
+    max_prs: usize,
+}
+
+#[derive(Args)]
 struct PrepareSelfReleaseArgs {
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
@@ -515,6 +571,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         Commands::Setup(args) => setup(args),
+        Commands::Fleet(args) => fleet(args),
         Commands::PrepareSelfRelease(args) => prepare_self_release(args),
         Commands::PublishSelfRelease(args) => publish_self_release(args),
     }
@@ -1059,6 +1116,82 @@ struct WorkflowCandidate {
     content: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetScan {
+    generated_at: String,
+    owners: Vec<String>,
+    repositories: Vec<FleetRepository>,
+    warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetRepository {
+    owner: String,
+    name: String,
+    name_with_owner: String,
+    private: bool,
+    archived: bool,
+    pushed_at: String,
+    default_branch: String,
+    branch_protected: String,
+    release_tool: String,
+    tag_format: String,
+    package_topology: Vec<String>,
+    release_files: Vec<String>,
+    workflows: Vec<String>,
+    existing_landfall: bool,
+    required_secrets: Vec<FleetSecretStatus>,
+    signals: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetSecretStatus {
+    name: String,
+    status: String,
+    detail: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetPlan {
+    generated_at: String,
+    source: String,
+    summary: BTreeMap<String, usize>,
+    repositories: Vec<FleetRepositoryPlan>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetRepositoryPlan {
+    repository: String,
+    rank: u64,
+    default_branch: String,
+    recommended_mode: String,
+    workflow: String,
+    status: String,
+    skip_reason: String,
+    risk_flags: Vec<String>,
+    missing_secrets: Vec<String>,
+    unavailable_secret_metadata: Vec<String>,
+    migration_notes: Vec<String>,
+    manifest: LandfallManifest,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetPrPlan {
+    generated_at: String,
+    dry_run: bool,
+    repositories: Vec<FleetRepositoryPrPlan>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FleetRepositoryPrPlan {
+    repository: String,
+    branch: String,
+    title: String,
+    files: Vec<String>,
+    skipped: bool,
+    reason: String,
+}
+
 fn setup(args: SetupArgs) -> Result<()> {
     let diagnosis = diagnose_setup(&args.repo_root);
     let manifest = load_manifest(&args.repo_root)?;
@@ -1089,6 +1222,778 @@ fn setup(args: SetupArgs) -> Result<()> {
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
+}
+
+fn fleet(args: FleetArgs) -> Result<()> {
+    match args.command {
+        FleetCommand::Scan(args) => fleet_scan(args),
+        FleetCommand::Plan(args) => fleet_plan(args),
+        FleetCommand::OpenPrs(args) => fleet_open_prs(args),
+    }
+}
+
+fn fleet_scan(args: FleetScanArgs) -> Result<()> {
+    if !args.fixture.trim().is_empty() {
+        let scan: FleetScan = serde_json::from_str(&fs::read_to_string(&args.fixture)?)?;
+        write_json_if_requested(&args.output, &scan)?;
+        print_fleet_scan_result(&args.output, &scan)?;
+        return Ok(());
+    }
+    if args.owner.is_empty() {
+        return Err("fleet scan requires at least one --owner".into());
+    }
+    let mut warnings = Vec::new();
+    let token = trimmed_option(&args.github_token)
+        .or_else(|| {
+            env::var("GITHUB_TOKEN")
+                .ok()
+                .and_then(|value| trimmed_option(&value))
+        })
+        .or_else(|| {
+            env::var("GH_TOKEN")
+                .ok()
+                .and_then(|value| trimmed_option(&value))
+        });
+
+    let mut repo_values = Vec::new();
+    for owner in &args.owner {
+        let repos = match gh_repo_list(owner, args.max_repos, token.as_deref()) {
+            Ok(repos) => repos,
+            Err(error) => {
+                warnings.push(format!(
+                    "owner {owner}: repository list unavailable: {error}"
+                ));
+                continue;
+            }
+        };
+        for repo in repos {
+            if args.active_only && repo["isArchived"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            repo_values.push(repo);
+        }
+    }
+    let (mut repositories, scan_warnings) = scan_fleet_repositories_bounded(
+        repo_values,
+        &args.api_base_url,
+        token.as_deref(),
+        args.deep_checks,
+        args.concurrency,
+    );
+    warnings.extend(scan_warnings);
+
+    repositories.sort_by(|left, right| left.name_with_owner.cmp(&right.name_with_owner));
+    let scan = FleetScan {
+        generated_at: Utc::now().to_rfc3339(),
+        owners: args.owner,
+        repositories,
+        warnings,
+    };
+    write_json_if_requested(&args.output, &scan)?;
+    print_fleet_scan_result(&args.output, &scan)?;
+    Ok(())
+}
+
+fn fleet_plan(args: FleetPlanArgs) -> Result<()> {
+    let scan: FleetScan = serde_json::from_str(&fs::read_to_string(&args.input)?)?;
+    fs::create_dir_all(&args.output_dir)?;
+    let mut repositories: Vec<_> = scan
+        .repositories
+        .iter()
+        .map(plan_fleet_repository)
+        .collect();
+    repositories.sort_by(|left, right| {
+        right
+            .rank
+            .cmp(&left.rank)
+            .then_with(|| left.repository.cmp(&right.repository))
+    });
+    let mut summary = BTreeMap::new();
+    for repo in &repositories {
+        *summary.entry(repo.status.clone()).or_insert(0) += 1;
+    }
+    let plan = FleetPlan {
+        generated_at: Utc::now().to_rfc3339(),
+        source: args.input.display().to_string(),
+        summary,
+        repositories,
+    };
+    let plan_path = args.output_dir.join("plan.json");
+    fs::write(&plan_path, serde_json::to_string_pretty(&plan)? + "\n")?;
+    fs::write(
+        args.output_dir.join("README.md"),
+        render_fleet_plan_markdown(&plan),
+    )?;
+    println!(
+        "fleet plan wrote {} and {} ({} repositories)",
+        plan_path.display(),
+        args.output_dir.join("README.md").display(),
+        plan.repositories.len()
+    );
+    Ok(())
+}
+
+fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
+    if !args.dry_run {
+        return Err(
+            "fleet open-prs currently requires --dry-run; refusing to mutate remote repositories"
+                .into(),
+        );
+    }
+    let plan_path = args.plan_dir.join("plan.json");
+    let plan: FleetPlan = serde_json::from_str(&fs::read_to_string(&plan_path)?)?;
+    fs::create_dir_all(&args.output_dir)?;
+    let mut rendered = Vec::new();
+    let mut opened = 0usize;
+    for repo in &plan.repositories {
+        if args.max_prs > 0 && opened >= args.max_prs {
+            break;
+        }
+        let slug = repo.repository.replace('/', "__");
+        let repo_dir = args.output_dir.join(&slug);
+        fs::create_dir_all(&repo_dir)?;
+        if repo.status == "skipped" || repo.status == "blocked" {
+            let reason = if repo.skip_reason.is_empty() {
+                repo.status.clone()
+            } else {
+                repo.skip_reason.clone()
+            };
+            fs::write(repo_dir.join("SKIPPED.md"), format!("{reason}\n"))?;
+            rendered.push(FleetRepositoryPrPlan {
+                repository: repo.repository.clone(),
+                branch: String::new(),
+                title: String::new(),
+                files: vec!["SKIPPED.md".into()],
+                skipped: true,
+                reason,
+            });
+            continue;
+        }
+        opened += 1;
+        let manifest = render_manifest_yaml(&repo.manifest)?;
+        let workflow = fleet_workflow_for_plan(repo);
+        fs::create_dir_all(repo_dir.join(".github/workflows"))?;
+        fs::write(repo_dir.join(".landfall.yml"), &manifest)?;
+        fs::write(
+            repo_dir.join(".github/workflows/landfall-release.yml"),
+            &workflow,
+        )?;
+        let diff = render_fleet_pr_diff(repo, &manifest, &workflow);
+        fs::write(repo_dir.join("diff.md"), diff)?;
+        rendered.push(FleetRepositoryPrPlan {
+            repository: repo.repository.clone(),
+            branch: format!("landfall/adopt-{}", repo.repository.replace('/', "-")),
+            title: "chore(release): adopt Landfall".into(),
+            files: vec![
+                ".landfall.yml".into(),
+                ".github/workflows/landfall-release.yml".into(),
+                "diff.md".into(),
+            ],
+            skipped: false,
+            reason: String::new(),
+        });
+    }
+    let pr_plan = FleetPrPlan {
+        generated_at: Utc::now().to_rfc3339(),
+        dry_run: true,
+        repositories: rendered,
+    };
+    fs::write(
+        args.output_dir.join("open-prs.json"),
+        serde_json::to_string_pretty(&pr_plan)? + "\n",
+    )?;
+    println!(
+        "fleet dry-run wrote {} ({} repositories)",
+        args.output_dir.join("open-prs.json").display(),
+        pr_plan.repositories.len()
+    );
+    Ok(())
+}
+
+fn print_fleet_scan_result(path: &Path, scan: &FleetScan) -> Result<()> {
+    if is_requested_path(path) {
+        println!(
+            "fleet scan wrote {} ({} repositories, {} warnings)",
+            path.display(),
+            scan.repositories.len(),
+            scan.warnings.len()
+        );
+    } else {
+        println!("{}", serde_json::to_string_pretty(scan)?);
+    }
+    Ok(())
+}
+
+fn gh_repo_list(owner: &str, max_repos: usize, token: Option<&str>) -> Result<Vec<Value>> {
+    let limit = if max_repos == 0 {
+        "1000".to_string()
+    } else {
+        max_repos.to_string()
+    };
+    let output = run_gh_ok(
+        vec![
+            "repo".into(),
+            "list".into(),
+            owner.into(),
+            "--limit".into(),
+            limit,
+            "--json".into(),
+            "name,nameWithOwner,isArchived,isPrivate,pushedAt,defaultBranchRef".into(),
+        ],
+        token,
+    )?;
+    Ok(serde_json::from_str(&output)?)
+}
+
+fn scan_fleet_repositories_bounded(
+    repos: Vec<Value>,
+    api_base_url: &str,
+    token: Option<&str>,
+    deep_checks: bool,
+    concurrency: usize,
+) -> (Vec<FleetRepository>, Vec<String>) {
+    if repos.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let worker_count = concurrency.clamp(1, 16).min(repos.len());
+    let queue = Arc::new(Mutex::new(VecDeque::from(repos)));
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let warnings = Arc::new(Mutex::new(Vec::new()));
+    let api_base_url = api_base_url.to_string();
+    let token = token.map(str::to_string);
+
+    thread::scope(|scope| {
+        for _ in 0..worker_count {
+            let queue = Arc::clone(&queue);
+            let results = Arc::clone(&results);
+            let warnings = Arc::clone(&warnings);
+            let api_base_url = api_base_url.clone();
+            let token = token.clone();
+            scope.spawn(move || {
+                loop {
+                    let repo = {
+                        let mut queue = queue.lock().unwrap();
+                        queue.pop_front()
+                    };
+                    let Some(repo) = repo else {
+                        break;
+                    };
+                    match scan_fleet_repository(&repo, &api_base_url, token.as_deref(), deep_checks)
+                    {
+                        Ok(repository) => results.lock().unwrap().push(repository),
+                        Err(error) => warnings.lock().unwrap().push(format!(
+                            "{}: scan degraded: {error}",
+                            repo["nameWithOwner"].as_str().unwrap_or("<unknown>")
+                        )),
+                    }
+                }
+            });
+        }
+    });
+
+    let repositories = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+    let warnings = Arc::try_unwrap(warnings).unwrap().into_inner().unwrap();
+    (repositories, warnings)
+}
+
+fn scan_fleet_repository(
+    repo: &Value,
+    api_base_url: &str,
+    token: Option<&str>,
+    deep_checks: bool,
+) -> Result<FleetRepository> {
+    let name_with_owner = repo["nameWithOwner"]
+        .as_str()
+        .ok_or("gh repo list response missing nameWithOwner")?
+        .to_string();
+    let (owner, name) = name_with_owner
+        .split_once('/')
+        .ok_or("repository must be owner/name")?;
+    let default_branch = repo["defaultBranchRef"]["name"]
+        .as_str()
+        .or_else(|| repo["defaultBranchRef"].as_str())
+        .unwrap_or("main")
+        .to_string();
+    let archived = repo["isArchived"].as_bool().unwrap_or(false);
+    let private = repo["isPrivate"].as_bool().unwrap_or(false);
+    let pushed_at = repo["pushedAt"].as_str().unwrap_or("").to_string();
+    let paths = github_tree_paths(&name_with_owner, &default_branch, token)?;
+    let path_set: BTreeSet<_> = paths.iter().map(String::as_str).collect();
+    let workflows = paths
+        .iter()
+        .filter_map(|path| path.strip_prefix(".github/workflows/"))
+        .filter(|name| name.ends_with(".yml") || name.ends_with(".yaml"))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let mut release_files = Vec::new();
+    let mut package_topology = Vec::new();
+    let mut signals = Vec::new();
+    for file in [
+        "package.json",
+        "Cargo.toml",
+        "pyproject.toml",
+        "go.mod",
+        ".releaserc",
+        ".releaserc.json",
+        "release-please-config.json",
+        ".landfall.yml",
+    ] {
+        if path_set.contains(file) {
+            if matches!(
+                file,
+                "package.json" | "Cargo.toml" | "pyproject.toml" | "go.mod"
+            ) {
+                package_topology.push(file.to_string());
+            } else {
+                release_files.push(file.to_string());
+            }
+            signals.push(format!("{file} present"));
+        }
+    }
+    if path_set.contains(".changeset") || paths.iter().any(|path| path.starts_with(".changeset/")) {
+        release_files.push(".changeset/".into());
+        signals.push(".changeset directory present".into());
+    }
+    let tags = github_tags(&name_with_owner, token)?;
+    let tag_format = fleet_tag_format(&tags, &package_topology);
+    let release_tool = fleet_release_tool(&release_files, &workflows, &tags);
+    let existing_landfall = release_files.iter().any(|file| file == ".landfall.yml")
+        || workflows
+            .iter()
+            .any(|workflow| workflow.to_ascii_lowercase().contains("landfall"));
+    let branch_protected = if deep_checks {
+        github_branch_protection(&name_with_owner, &default_branch, api_base_url, token)
+    } else {
+        "unavailable: pass --deep-checks to query branch protection metadata".into()
+    };
+    let required_secrets = if deep_checks {
+        github_secret_statuses(
+            &name_with_owner,
+            api_base_url,
+            token,
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+        )
+    } else {
+        unavailable_secret_statuses(
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            "pass --deep-checks to query Actions secret metadata",
+        )
+    };
+    Ok(FleetRepository {
+        owner: owner.to_string(),
+        name: name.to_string(),
+        name_with_owner,
+        private,
+        archived,
+        pushed_at,
+        default_branch,
+        branch_protected,
+        release_tool,
+        tag_format,
+        package_topology,
+        release_files,
+        workflows,
+        existing_landfall,
+        required_secrets,
+        signals,
+    })
+}
+
+fn github_tree_paths(repository: &str, branch: &str, token: Option<&str>) -> Result<Vec<String>> {
+    let output = run_gh_ok(
+        vec![
+            "api".into(),
+            format!(
+                "repos/{repository}/git/trees/{}?recursive=1",
+                urlencoding::encode(branch)
+            ),
+            "--jq".into(),
+            "[.tree[].path]".into(),
+        ],
+        token,
+    )?;
+    Ok(serde_json::from_str(&output)?)
+}
+
+fn github_tags(repository: &str, token: Option<&str>) -> Result<Vec<String>> {
+    let output = run_gh_ok(
+        vec![
+            "api".into(),
+            format!("repos/{repository}/tags?per_page=30"),
+            "--jq".into(),
+            "[.[].name]".into(),
+        ],
+        token,
+    )?;
+    Ok(serde_json::from_str(&output)?)
+}
+
+fn run_gh_ok(args: Vec<String>, token: Option<&str>) -> Result<String> {
+    let mut command = Command::new("gh");
+    command.args(args).current_dir(Path::new("."));
+    if let Some(token) = token {
+        command.env("GH_TOKEN", token);
+    }
+    let output = command.output()?;
+    if !output.status.success() {
+        return Err(format!("gh failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+    }
+    Ok(String::from_utf8(output.stdout)?)
+}
+
+fn github_branch_protection(
+    repository: &str,
+    branch: &str,
+    api_base_url: &str,
+    token: Option<&str>,
+) -> String {
+    let Some(token) = token else {
+        return "unavailable: no GitHub token supplied".into();
+    };
+    let url = format!(
+        "{}/repos/{}/branches/{}/protection",
+        api_base_url.trim_end_matches('/'),
+        repository,
+        urlencoding::encode(branch)
+    );
+    match curl_json("GET", &url, Some(token), None) {
+        Ok(response) if response.status == 200 => "protected".into(),
+        Ok(response) if response.status == 404 => "unprotected-or-unavailable".into(),
+        Ok(response) => format!("unavailable: HTTP {}", response.status),
+        Err(error) => format!("unavailable: {error}"),
+    }
+}
+
+fn github_secret_statuses(
+    repository: &str,
+    api_base_url: &str,
+    token: Option<&str>,
+    required: &[&str],
+) -> Vec<FleetSecretStatus> {
+    let Some(token) = token else {
+        return unavailable_secret_statuses(
+            required,
+            "secret metadata requires a GitHub token with repository access",
+        );
+    };
+    let url = format!(
+        "{}/repos/{}/actions/secrets?per_page=100",
+        api_base_url.trim_end_matches('/'),
+        repository
+    );
+    let response = match curl_json("GET", &url, Some(token), None) {
+        Ok(response) => response,
+        Err(error) => {
+            return unavailable_secret_statuses(
+                required,
+                &format!("secret metadata unavailable: {error}"),
+            );
+        }
+    };
+    if !(200..300).contains(&response.status) {
+        return unavailable_secret_statuses(
+            required,
+            &format!(
+                "GitHub returned HTTP {} for secret metadata",
+                response.status
+            ),
+        );
+    }
+    let payload: Value = serde_json::from_str(&response.body).unwrap_or_else(|_| json!({}));
+    let names: BTreeSet<_> = payload["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|secret| secret["name"].as_str())
+        .collect();
+    required
+        .iter()
+        .map(|name| {
+            if names.contains(name) {
+                FleetSecretStatus {
+                    name: (*name).into(),
+                    status: "present".into(),
+                    detail: "metadata only; value not read".into(),
+                }
+            } else {
+                FleetSecretStatus {
+                    name: (*name).into(),
+                    status: "missing".into(),
+                    detail: "required secret name is absent from Actions secret metadata".into(),
+                }
+            }
+        })
+        .collect()
+}
+
+fn unavailable_secret_statuses(required: &[&str], detail: &str) -> Vec<FleetSecretStatus> {
+    required
+        .iter()
+        .map(|name| FleetSecretStatus {
+            name: (*name).into(),
+            status: "unavailable".into(),
+            detail: detail.into(),
+        })
+        .collect()
+}
+
+fn fleet_release_tool(files: &[String], workflows: &[String], tags: &[String]) -> String {
+    let haystack = files
+        .iter()
+        .chain(workflows)
+        .map(|value| value.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if haystack.contains("release-please") {
+        "release-please".into()
+    } else if haystack.contains("changeset") {
+        "changesets".into()
+    } else if haystack.contains(".releaserc") || haystack.contains("semantic") {
+        "semantic-release".into()
+    } else if !tags.is_empty() || haystack.contains("release") {
+        "manual-tag".into()
+    } else {
+        "no-release-tool".into()
+    }
+}
+
+fn fleet_tag_format(tags: &[String], packages: &[String]) -> String {
+    let package_re = Regex::new(r"^[A-Za-z0-9_.-]+@v?[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    let v_re = Regex::new(r"^v[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    let bare_re = Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+").unwrap();
+    if tags.iter().any(|tag| package_re.is_match(tag)) || packages.len() > 1 {
+        "package@{version}".into()
+    } else if tags.iter().any(|tag| v_re.is_match(tag)) || tags.is_empty() {
+        "v{version}".into()
+    } else if tags.iter().any(|tag| bare_re.is_match(tag)) {
+        "{version}".into()
+    } else {
+        "custom".into()
+    }
+}
+
+fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
+    let mut risk_flags = Vec::new();
+    let mut migration_notes = Vec::new();
+    let missing_secrets = repo
+        .required_secrets
+        .iter()
+        .filter(|secret| secret.status == "missing")
+        .map(|secret| secret.name.clone())
+        .collect::<Vec<_>>();
+    let unavailable_secret_metadata = repo
+        .required_secrets
+        .iter()
+        .filter(|secret| secret.status == "unavailable")
+        .map(|secret| secret.name.clone())
+        .collect::<Vec<_>>();
+    if repo.private {
+        risk_flags
+            .push("private repository; verify token and secret policy before opening PR".into());
+    }
+    if repo.branch_protected == "protected" {
+        risk_flags.push(format!(
+            "default branch {} is protected",
+            repo.default_branch
+        ));
+    }
+    if !missing_secrets.is_empty() {
+        risk_flags.push(format!(
+            "missing required Actions secrets: {}",
+            missing_secrets.join(", ")
+        ));
+    }
+    if !unavailable_secret_metadata.is_empty() {
+        risk_flags
+            .push("secret metadata unavailable; operator must verify required secrets".into());
+    }
+
+    let secret_blocker = if !missing_secrets.is_empty() {
+        Some(format!(
+            "missing required Actions secrets: {}",
+            missing_secrets.join(", ")
+        ))
+    } else if !unavailable_secret_metadata.is_empty() {
+        Some(format!(
+            "secret metadata unavailable for required secrets: {}",
+            unavailable_secret_metadata.join(", ")
+        ))
+    } else {
+        None
+    };
+
+    let (status, recommended_mode, workflow, skip_reason, rank) = if repo.archived {
+        ("skipped", "skipped", "none", "repository is archived", 0u64)
+    } else if let Some(reason) = secret_blocker.as_deref() {
+        ("blocked", "blocked", "manual-tag", reason, 15u64)
+    } else if repo.existing_landfall {
+        migration_notes.push(
+            "Landfall-like workflow or manifest already exists; inspect before replacing".into(),
+        );
+        ("ready", "manifest-only", "manual-tag", "", 65u64)
+    } else {
+        match repo.release_tool.as_str() {
+            "semantic-release" => ("ready", "full", "semantic-release", "", 100u64),
+            "release-please" => ("ready", "synthesis-only", "release-please", "", 85u64),
+            "changesets" => ("ready", "synthesis-only", "changesets", "", 80u64),
+            "manual-tag" => ("ready", "synthesis-only", "manual-tag", "", 60u64),
+            "no-release-tool" => (
+                "blocked",
+                "backfill-first",
+                "manual-tag",
+                "no release tool or release tags detected",
+                20u64,
+            ),
+            _ => (
+                "blocked",
+                "blocked",
+                "manual-tag",
+                "unknown release tooling",
+                10u64,
+            ),
+        }
+    };
+    if repo.release_tool == "no-release-tool" {
+        migration_notes
+            .push("Choose release semantics before installing Landfall automation".into());
+    }
+    if repo.package_topology.len() > 1 {
+        risk_flags.push("multi-package repository; validate tag format and artifact paths".into());
+    }
+    migration_notes.push(format!(
+        "Detected release tool: {}; tag format: {}; default branch: {}",
+        repo.release_tool, repo.tag_format, repo.default_branch
+    ));
+    let manifest = fleet_manifest(repo, recommended_mode);
+    FleetRepositoryPlan {
+        repository: repo.name_with_owner.clone(),
+        rank,
+        default_branch: repo.default_branch.clone(),
+        recommended_mode: recommended_mode.into(),
+        workflow: workflow.into(),
+        status: status.into(),
+        skip_reason: skip_reason.into(),
+        risk_flags,
+        missing_secrets,
+        unavailable_secret_metadata,
+        migration_notes,
+        manifest,
+    }
+}
+
+fn fleet_manifest(repo: &FleetRepository, mode: &str) -> LandfallManifest {
+    LandfallManifest {
+        product: ProductManifest {
+            name: Some(display_name_from_package(&repo.name)),
+            description: Some(format!(
+                "Release notes and changelog automation for {}.",
+                repo.name_with_owner
+            )),
+        },
+        audience: Some("developer".into()),
+        voice: Some("clear, concrete, and specific to shipped behavior".into()),
+        changelog: ChangelogManifest {
+            source: Some("auto".into()),
+        },
+        artifacts: ArtifactManifest {
+            markdown: Some("docs/releases/{version}.md".into()),
+            plaintext: None,
+            html: None,
+            json: Some("docs/releases/releases.json".into()),
+            rss: None,
+        },
+        release: ReleaseManifest {
+            profile: Some(
+                if mode == "full" {
+                    "full"
+                } else {
+                    "synthesis-only"
+                }
+                .into(),
+            ),
+        },
+        model: ModelManifest {
+            policy: Some("balanced".into()),
+            primary: None,
+            fallbacks: Vec::new(),
+        },
+        budget: BudgetManifest {
+            max_input_tokens: Some(12000),
+            max_output_tokens: Some(1200),
+            max_usd: None,
+        },
+    }
+}
+
+fn render_fleet_plan_markdown(plan: &FleetPlan) -> String {
+    let mut out = String::from("# Landfall Fleet Adoption Plan\n\n");
+    out.push_str("## Summary\n\n");
+    for (status, count) in &plan.summary {
+        out.push_str(&format!("- {status}: {count}\n"));
+    }
+    out.push_str("\n## Repositories\n\n");
+    for repo in &plan.repositories {
+        out.push_str(&format!(
+            "### {}\n\n- Rank: {}\n- Status: {}\n- Recommended mode: {}\n- Workflow: {}\n",
+            repo.repository, repo.rank, repo.status, repo.recommended_mode, repo.workflow
+        ));
+        if !repo.skip_reason.is_empty() {
+            out.push_str(&format!("- Skip reason: {}\n", repo.skip_reason));
+        }
+        if !repo.risk_flags.is_empty() {
+            out.push_str(&format!("- Risk flags: {}\n", repo.risk_flags.join("; ")));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn fleet_workflow_for_plan(repo: &FleetRepositoryPlan) -> String {
+    let diagnosis = SetupDiagnosis {
+        release_tool: repo.workflow.clone(),
+        default_branch: repo.default_branch.clone(),
+        tag_format: "v{version}".into(),
+        conventional_commits: "unknown: fleet plan generated without local git history".into(),
+        monorepo: repo
+            .risk_flags
+            .iter()
+            .any(|flag| flag.contains("multi-package")),
+        packages: Vec::new(),
+        signals: repo.migration_notes.clone(),
+    };
+    let workflows = setup_workflows(&diagnosis, Some(&repo.manifest));
+    let preferred = match repo.workflow.as_str() {
+        "semantic-release" => "semantic-release",
+        "release-please" => "release-please",
+        "changesets" => {
+            if diagnosis.monorepo {
+                "changesets-monorepo"
+            } else {
+                "changesets"
+            }
+        }
+        _ => "manual-tag",
+    };
+    workflows
+        .get(preferred)
+        .or_else(|| workflows.values().next())
+        .map(|candidate| candidate.content.clone())
+        .unwrap_or_else(|| workflow_manual_tag(Some(&repo.manifest)))
+}
+
+fn render_fleet_pr_diff(repo: &FleetRepositoryPlan, manifest: &str, workflow: &str) -> String {
+    format!(
+        "# {}\n\nDry-run branch: `landfall/adopt-{}`\n\n## Files\n\n### .landfall.yml\n\n```yaml\n{}\n```\n\n### .github/workflows/landfall-release.yml\n\n```yaml\n{}\n```\n\n## Notes\n\n{}\n",
+        repo.repository,
+        repo.repository.replace('/', "-"),
+        manifest,
+        workflow,
+        repo.migration_notes
+            .iter()
+            .map(|note| format!("- {note}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    )
 }
 
 fn diagnose_setup(root: &Path) -> SetupDiagnosis {
@@ -3760,6 +4665,10 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_action_manifest_defaults_precedence,
     );
     map.insert(
+        "fleet_adoption_planner".to_string(),
+        scenario_fleet_adoption_planner,
+    );
+    map.insert(
         "self_release_pr_path".to_string(),
         scenario_self_release_pr_path,
     );
@@ -3797,6 +4706,7 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "consumer_degraded_required_fails",
         "consumer_floating_tag_behavior",
         "consumer_full_mode_success",
+        "fleet_adoption_planner",
         "manifest_defaults_and_overrides",
         "consumer_release_update_failure",
         "consumer_synthesis_only_success",
@@ -4702,6 +5612,293 @@ fn json_response(status: u16, payload: Value) -> Response<std::io::Cursor<Vec<u8
     Response::from_data(body)
         .with_status_code(status)
         .with_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
+}
+
+fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
+    let fixture = tmp_root.join("fleet-fixture.json");
+    let scan_output = tmp_root.join("fleet.json");
+    let plan_dir = tmp_root.join("fleet-plan");
+    let pr_dir = plan_dir.join("prs");
+    let scan = FleetScan {
+        generated_at: "2026-06-13T00:00:00Z".into(),
+        owners: vec!["phrazzld".into(), "misty-step".into()],
+        warnings: Vec::new(),
+        repositories: vec![
+            fleet_fixture_repo(
+                "phrazzld/semantic-app",
+                "semantic-release",
+                false,
+                false,
+                "unprotected-or-unavailable",
+                &[],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "misty-step/release-please-app",
+                "release-please",
+                false,
+                false,
+                "protected",
+                &[],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "misty-step/changesets-app",
+                "changesets",
+                false,
+                false,
+                "unprotected-or-unavailable",
+                &["package.json", "Cargo.toml"],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "phrazzld/manual-app",
+                "manual-tag",
+                false,
+                false,
+                "unprotected-or-unavailable",
+                &[],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "phrazzld/no-release-app",
+                "no-release-tool",
+                false,
+                false,
+                "unprotected-or-unavailable",
+                &[],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "misty-step/archived-app",
+                "semantic-release",
+                true,
+                false,
+                "unprotected-or-unavailable",
+                &[],
+                &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo(
+                "misty-step/private-app",
+                "release-please",
+                false,
+                true,
+                "unavailable: no GitHub token supplied",
+                &[],
+                &[],
+            ),
+            fleet_fixture_repo(
+                "phrazzld/protected-app",
+                "manual-tag",
+                false,
+                false,
+                "protected",
+                &[],
+                &["GH_RELEASE_TOKEN"],
+            ),
+            fleet_existing_landfall_fixture(),
+        ],
+    };
+    fs::write(&fixture, serde_json::to_string_pretty(&scan)? + "\n")?;
+    let scan_result = Command::new(current_exe())
+        .args([
+            "fleet",
+            "scan",
+            "--owner",
+            "phrazzld",
+            "--owner",
+            "misty-step",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--output",
+            scan_output.to_str().unwrap(),
+        ])
+        .output()?;
+    if !scan_result.status.success() {
+        return Err(String::from_utf8_lossy(&scan_result.stderr)
+            .to_string()
+            .into());
+    }
+    let plan_result = Command::new(current_exe())
+        .args([
+            "fleet",
+            "plan",
+            "--input",
+            scan_output.to_str().unwrap(),
+            "--output-dir",
+            plan_dir.to_str().unwrap(),
+        ])
+        .output()?;
+    if !plan_result.status.success() {
+        return Err(String::from_utf8_lossy(&plan_result.stderr)
+            .to_string()
+            .into());
+    }
+    let dry_run = Command::new(current_exe())
+        .args([
+            "fleet",
+            "open-prs",
+            "--dry-run",
+            "--plan-dir",
+            plan_dir.to_str().unwrap(),
+            "--output-dir",
+            pr_dir.to_str().unwrap(),
+        ])
+        .output()?;
+    if !dry_run.status.success() {
+        return Err(String::from_utf8_lossy(&dry_run.stderr).to_string().into());
+    }
+    let plan: FleetPlan = serde_json::from_str(&fs::read_to_string(plan_dir.join("plan.json"))?)?;
+    let pr_plan: FleetPrPlan =
+        serde_json::from_str(&fs::read_to_string(pr_dir.join("open-prs.json"))?)?;
+    let mut modes = BTreeMap::new();
+    let mut statuses = BTreeMap::new();
+    for repo in &plan.repositories {
+        modes.insert(repo.repository.clone(), repo.recommended_mode.clone());
+        statuses.insert(repo.repository.clone(), repo.status.clone());
+    }
+    for (repo, expected) in [
+        ("phrazzld/semantic-app", "full"),
+        ("misty-step/release-please-app", "synthesis-only"),
+        ("misty-step/changesets-app", "synthesis-only"),
+        ("phrazzld/manual-app", "synthesis-only"),
+        ("phrazzld/no-release-app", "backfill-first"),
+        ("misty-step/archived-app", "skipped"),
+        ("misty-step/existing-landfall-app", "manifest-only"),
+    ] {
+        if modes.get(repo).map(String::as_str) != Some(expected) {
+            return Err(format!("{repo} expected mode {expected}").into());
+        }
+    }
+    if statuses.get("phrazzld/no-release-app").map(String::as_str) != Some("blocked") {
+        return Err("no-release-tool repository should be blocked".into());
+    }
+    let protected = plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "phrazzld/protected-app")
+        .ok_or("protected fixture missing")?;
+    if !protected
+        .risk_flags
+        .iter()
+        .any(|flag| flag.contains("protected"))
+    {
+        return Err("branch-protected repository missing risk flag".into());
+    }
+    let private = plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "misty-step/private-app")
+        .ok_or("private fixture missing")?;
+    if private.unavailable_secret_metadata.len() != 2 {
+        return Err("private fixture should report unavailable secret metadata".into());
+    }
+    let dry_diff = pr_dir.join("phrazzld__semantic-app").join("diff.md");
+    if !dry_diff.is_file() {
+        return Err("dry-run PR diff missing for semantic fixture".into());
+    }
+    let scan_text = fs::read_to_string(&scan_output)?;
+    if scan_text.contains("super-secret") || scan_text.contains("ghp_") {
+        return Err("fleet scan leaked a secret-looking value".into());
+    }
+    Ok(json!({
+        "repositories": plan.repositories.len(),
+        "dry_run_prs": pr_plan.repositories.iter().filter(|repo| !repo.skipped).count(),
+        "modes": modes,
+        "statuses": statuses,
+        "evidence": {
+            "scan": scan_output,
+            "plan": plan_dir.join("plan.json"),
+            "dry_run": pr_dir.join("open-prs.json"),
+        }
+    }))
+}
+
+fn fleet_fixture_repo(
+    name_with_owner: &str,
+    release_tool: &str,
+    archived: bool,
+    private: bool,
+    branch_protected: &str,
+    extra_packages: &[&str],
+    present_secrets: &[&str],
+) -> FleetRepository {
+    let (owner, name) = name_with_owner.split_once('/').unwrap();
+    let mut package_topology = vec!["package.json".to_string()];
+    package_topology.extend(extra_packages.iter().map(|value| (*value).to_string()));
+    package_topology.sort();
+    package_topology.dedup();
+    let release_files = match release_tool {
+        "semantic-release" => vec![".releaserc.json".into()],
+        "release-please" => vec!["release-please-config.json".into()],
+        "changesets" => vec![".changeset/".into()],
+        _ => Vec::new(),
+    };
+    let workflows = match release_tool {
+        "release-please" => vec!["release-please.yml".into()],
+        "changesets" => vec!["changesets.yml".into()],
+        "manual-tag" => vec!["release.yml".into()],
+        _ => Vec::new(),
+    };
+    let required_secrets = ["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"]
+        .iter()
+        .map(|name| {
+            if present_secrets.contains(name) {
+                FleetSecretStatus {
+                    name: (*name).into(),
+                    status: "present".into(),
+                    detail: "metadata only; value not read".into(),
+                }
+            } else if private && present_secrets.is_empty() {
+                FleetSecretStatus {
+                    name: (*name).into(),
+                    status: "unavailable".into(),
+                    detail: "secret metadata unavailable in fixture".into(),
+                }
+            } else {
+                FleetSecretStatus {
+                    name: (*name).into(),
+                    status: "missing".into(),
+                    detail: "required secret name is absent from Actions secret metadata".into(),
+                }
+            }
+        })
+        .collect();
+    FleetRepository {
+        owner: owner.into(),
+        name: name.into(),
+        name_with_owner: name_with_owner.into(),
+        private,
+        archived,
+        pushed_at: "2026-06-13T00:00:00Z".into(),
+        default_branch: "master".into(),
+        branch_protected: branch_protected.into(),
+        release_tool: release_tool.into(),
+        tag_format: "v{version}".into(),
+        package_topology,
+        release_files,
+        workflows,
+        existing_landfall: false,
+        required_secrets,
+        signals: vec![format!("{release_tool} fixture")],
+    }
+}
+
+fn fleet_existing_landfall_fixture() -> FleetRepository {
+    let mut repo = fleet_fixture_repo(
+        "misty-step/existing-landfall-app",
+        "manual-tag",
+        false,
+        false,
+        "unprotected-or-unavailable",
+        &[],
+        &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+    );
+    repo.existing_landfall = true;
+    repo.release_files.push(".landfall.yml".into());
+    repo.workflows.push("landfall-release.yml".into());
+    repo.signals.push(".landfall.yml present".into());
+    repo
 }
 
 fn init_fixture_repo(path: &Path, release_tag: &str) -> Result<()> {
