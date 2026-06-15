@@ -14,7 +14,7 @@ use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
@@ -815,7 +815,43 @@ fn classify_failure(message: &str) -> FailureClass {
 
 fn redact_context(value: &str) -> String {
     let token_re = Regex::new(r"(ghp|github_pat|sk|xox[baprs])[-_][-_=A-Za-z0-9]{8,}").unwrap();
-    token_re.replace_all(value, "[REDACTED]").to_string()
+    redact_configured_secrets(&token_re.replace_all(value, "[REDACTED]"))
+}
+
+fn redact_known_secrets(value: &str) -> String {
+    redact_context(value)
+}
+
+fn redact_configured_secrets(value: &str) -> String {
+    redact_secret_values(
+        value,
+        configured_secret_env_names()
+            .into_iter()
+            .filter_map(|name| env::var(name).ok()),
+    )
+}
+
+fn redact_secret_values<I>(value: &str, secrets: I) -> String
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut redacted = value.to_string();
+    for secret in secrets {
+        if secret.len() >= 8 && redacted.contains(&secret) {
+            redacted = redacted.replace(&secret, "[REDACTED]");
+        }
+    }
+    redacted
+}
+
+fn configured_secret_env_names() -> [&'static str; 5] {
+    [
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "OPENROUTER_API_KEY",
+        "WEBHOOK_SECRET",
+        "SLACK_WEBHOOK_URL",
+    ]
 }
 
 #[derive(Clone, Serialize)]
@@ -3879,38 +3915,89 @@ struct HttpResponse {
     body: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct HttpPolicy {
+    connect_timeout_seconds: u64,
+    max_time_seconds: u64,
+    attempts: usize,
+    retry_delay_ms: u64,
+}
+
+impl Default for HttpPolicy {
+    fn default() -> Self {
+        Self {
+            connect_timeout_seconds: 5,
+            max_time_seconds: 30,
+            attempts: 3,
+            retry_delay_ms: 250,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct CurlInvocation {
+    args: Vec<String>,
+    config: String,
+}
+
 fn curl_json(
     method: &str,
     url: &str,
     token: Option<&str>,
     body: Option<&Value>,
 ) -> Result<HttpResponse> {
-    let mut args = vec![
-        "-sS".to_string(),
-        "-L".to_string(),
-        "-X".to_string(),
-        method.to_string(),
-        "-H".to_string(),
-        "Accept: application/vnd.github+json".to_string(),
-        "-H".to_string(),
-        "User-Agent: landfall".to_string(),
-        "-w".to_string(),
-        "\n%{http_code}".to_string(),
-    ];
-    if let Some(token) = token {
-        args.push("-H".to_string());
-        args.push(format!("Authorization: Bearer {token}"));
+    curl_json_with_policy(method, url, token, body, HttpPolicy::default())
+}
+
+fn curl_json_with_policy(
+    method: &str,
+    url: &str,
+    token: Option<&str>,
+    body: Option<&Value>,
+    policy: HttpPolicy,
+) -> Result<HttpResponse> {
+    let attempts = policy.attempts.max(1);
+    let mut last_error = String::new();
+    for attempt in 1..=attempts {
+        match curl_json_once(method, url, token, body, policy) {
+            Ok(response) if !http_status_retryable(response.status) || attempt == attempts => {
+                return Ok(response);
+            }
+            Ok(response) => {
+                last_error = format!("HTTP {}", response.status);
+            }
+            Err(error) if attempt == attempts => return Err(error),
+            Err(error) => {
+                last_error = error.to_string();
+            }
+        }
+        thread::sleep(Duration::from_millis(policy.retry_delay_ms));
     }
-    if let Some(body) = body {
-        args.push("-H".to_string());
-        args.push("Content-Type: application/json".to_string());
-        args.push("--data".to_string());
-        args.push(body.to_string());
-    }
-    args.push(url.to_string());
-    let output = Command::new("curl").args(args).output()?;
+    Err(last_error.into())
+}
+
+fn curl_json_once(
+    method: &str,
+    url: &str,
+    token: Option<&str>,
+    body: Option<&Value>,
+    policy: HttpPolicy,
+) -> Result<HttpResponse> {
+    let invocation = build_curl_invocation(method, url, token, body, policy);
+    let mut child = Command::new("curl")
+        .args(&invocation.args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .ok_or("failed to open curl stdin")?
+        .write_all(invocation.config.as_bytes())?;
+    let output = child.wait_with_output()?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string().into());
+        return Err(redact_known_secrets(&String::from_utf8_lossy(&output.stderr)).into());
     }
     let raw = String::from_utf8(output.stdout)?;
     let (body, status) = raw.rsplit_once('\n').ok_or("curl status marker missing")?;
@@ -3918,6 +4005,62 @@ fn curl_json(
         status: status.parse()?,
         body: body.to_string(),
     })
+}
+
+fn build_curl_invocation(
+    method: &str,
+    url: &str,
+    token: Option<&str>,
+    body: Option<&Value>,
+    policy: HttpPolicy,
+) -> CurlInvocation {
+    let args = vec![
+        "-sS".to_string(),
+        "-L".to_string(),
+        "--connect-timeout".to_string(),
+        policy.connect_timeout_seconds.to_string(),
+        "--max-time".to_string(),
+        policy.max_time_seconds.to_string(),
+        "-K".to_string(),
+        "-".to_string(),
+    ];
+    let mut config = String::new();
+    push_curl_config(&mut config, "request", method);
+    push_curl_config(&mut config, "header", "Accept: application/vnd.github+json");
+    push_curl_config(&mut config, "header", "User-Agent: landfall");
+    push_curl_config(&mut config, "write-out", "\n%{http_code}");
+    push_curl_config(&mut config, "url", url);
+    if let Some(token) = token {
+        push_curl_config(
+            &mut config,
+            "header",
+            &format!("Authorization: Bearer {token}"),
+        );
+    }
+    if let Some(body) = body {
+        push_curl_config(&mut config, "header", "Content-Type: application/json");
+        push_curl_config(&mut config, "data", &body.to_string());
+    }
+    CurlInvocation { args, config }
+}
+
+fn push_curl_config(config: &mut String, key: &str, value: &str) {
+    config.push_str(key);
+    config.push_str(" = \"");
+    config.push_str(&escape_curl_config_value(value));
+    config.push_str("\"\n");
+}
+
+fn escape_curl_config_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+fn http_status_retryable(status: u16) -> bool {
+    status == 408 || status == 425 || status == 429 || (500..600).contains(&status)
 }
 
 #[derive(Clone, Debug)]
@@ -6951,6 +7094,7 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
     ));
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     errors.extend(validate_agent_native_contracts(&args.repo_root)?);
+    errors.extend(validate_release_integrity_contract(&readme));
     if errors.is_empty() {
         println!("action contract ok");
         Ok(())
@@ -7045,6 +7189,21 @@ fn validate_command_contract_coverage() -> Vec<String> {
                 .map(|command| format!("describe contract references unknown command `{command}`")),
         )
         .collect()
+}
+
+fn validate_release_integrity_contract(readme: &str) -> Vec<String> {
+    [
+        "--connect-timeout",
+        "--max-time",
+        "http_resilience_policy",
+        "action_side_effect_coverage",
+        "webhook",
+        "Slack",
+    ]
+    .iter()
+    .filter(|required| !readme.contains(**required))
+    .map(|required| format!("README missing release integrity token `{required}`"))
+    .collect()
 }
 
 fn validate_manifest_schema_alignment(path: &Path) -> Result<Vec<String>> {
@@ -7389,6 +7548,14 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_agent_native_contracts,
     );
     map.insert(
+        "http_resilience_policy".to_string(),
+        scenario_http_resilience_policy,
+    );
+    map.insert(
+        "action_side_effect_coverage".to_string(),
+        scenario_action_side_effect_coverage,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -7438,7 +7605,210 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "summary_release_update_failed",
         "summary_rss_failed",
         "agent_native_contracts",
+        "http_resilience_policy",
+        "action_side_effect_coverage",
     ]
+}
+
+fn scenario_http_resilience_policy(_: &Path) -> Result<Value> {
+    let token = "ghp_123456789abcdef";
+    let webhook_url = "https://hooks.slack.invalid/services/T000/B000/secret";
+    let invocation = build_curl_invocation(
+        "POST",
+        webhook_url,
+        Some(token),
+        Some(&json!({"ok": true})),
+        HttpPolicy::default(),
+    );
+    let argv = invocation.args.join(" ");
+    if argv.contains(token) || argv.contains(webhook_url) || argv.contains("Authorization") {
+        return Err("curl argv contains secret-bearing request data".into());
+    }
+    if !invocation.config.contains(token) || !invocation.config.contains(webhook_url) {
+        return Err("curl stdin config missing request secret data".into());
+    }
+    let redacted = redact_secret_values(
+        &format!("token={token} slack={webhook_url} short=abc123"),
+        [
+            token.to_string(),
+            webhook_url.to_string(),
+            "abc123".to_string(),
+        ],
+    );
+    if redacted.contains(token) || redacted.contains(webhook_url) {
+        return Err("configured secret redaction left a secret in evidence text".into());
+    }
+    if !redacted.contains("short=abc123") {
+        return Err("configured secret redaction removed a short non-secret value".into());
+    }
+
+    let mut retry_429 = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.into(),
+        ..FakeState::default()
+    };
+    retry_429.llm_responses.push_back((429, String::new()));
+    retry_429.llm_responses.push_back((200, VALID_NOTES.into()));
+    let retry_429_server = start_fake_server(retry_429)?;
+    let retry_429_response = curl_json_with_policy(
+        "POST",
+        &format!("{}/chat/completions", retry_429_server.url),
+        Some(token),
+        Some(&json!({"messages": []})),
+        HttpPolicy {
+            retry_delay_ms: 1,
+            ..HttpPolicy::default()
+        },
+    )?;
+    if retry_429_response.status != 200 {
+        return Err("429 retry did not recover to HTTP 200".into());
+    }
+    let retry_429_requests = retry_429_server.state.lock().unwrap().requests.len();
+    if retry_429_requests != 2 {
+        return Err(format!("429 retry expected 2 requests, got {retry_429_requests}").into());
+    }
+
+    let mut retry_500 = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.into(),
+        ..FakeState::default()
+    };
+    retry_500.llm_responses.push_back((500, String::new()));
+    retry_500.llm_responses.push_back((200, VALID_NOTES.into()));
+    let retry_500_server = start_fake_server(retry_500)?;
+    let retry_500_response = curl_json_with_policy(
+        "POST",
+        &format!("{}/chat/completions", retry_500_server.url),
+        Some(token),
+        Some(&json!({"messages": []})),
+        HttpPolicy {
+            retry_delay_ms: 1,
+            ..HttpPolicy::default()
+        },
+    )?;
+    if retry_500_response.status != 200 {
+        return Err("5xx retry did not recover to HTTP 200".into());
+    }
+
+    let slow_url = start_slow_http_server(Duration::from_millis(1500))?;
+    let slow = curl_json_with_policy(
+        "GET",
+        &slow_url,
+        None,
+        None,
+        HttpPolicy {
+            connect_timeout_seconds: 1,
+            max_time_seconds: 1,
+            attempts: 1,
+            retry_delay_ms: 1,
+        },
+    );
+    if slow.is_ok() {
+        return Err("slow provider request unexpectedly succeeded".into());
+    }
+    let slow_error = redact_known_secrets(&slow.unwrap_err().to_string());
+    if slow_error.contains(token) {
+        return Err("timeout error leaked token-like content".into());
+    }
+
+    Ok(json!({
+        "argv_secret_free": true,
+        "retry_429_requests": retry_429_requests,
+        "retry_500_status": retry_500_response.status,
+        "configured_secret_redaction": true,
+        "slow_timeout": true
+    }))
+}
+
+fn scenario_action_side_effect_coverage(_: &Path) -> Result<Value> {
+    let action = fs::read_to_string("action.yml")?;
+    let invoked = action_landfall_subcommands(&action);
+    let coverage = action_subcommand_replay_coverage();
+    let scenarios = scenario_map();
+    let mut missing = Vec::new();
+    for command in &invoked {
+        match coverage.get(command.as_str()) {
+            Some(names) if names.iter().all(|name| scenarios.contains_key(*name)) => {}
+            Some(_) => missing.push(format!("{command}: coverage references unknown scenario")),
+            None => missing.push(format!("{command}: no replay coverage mapping")),
+        }
+    }
+    if !missing.is_empty() {
+        return Err(missing.join("\n").into());
+    }
+    Ok(json!({
+        "covered_commands": invoked,
+        "coverage": coverage
+    }))
+}
+
+fn action_landfall_subcommands(action: &str) -> BTreeSet<String> {
+    let re = Regex::new(r#"dist/landfall"\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?"#).unwrap();
+    re.captures_iter(action)
+        .map(|caps| {
+            let command = caps.get(1).unwrap().as_str();
+            let nested = caps.get(2).map(|value| value.as_str()).unwrap_or("");
+            if command == "fleet" || command == "release-policy" {
+                format!("{command} {nested}")
+            } else {
+                command.to_string()
+            }
+        })
+        .collect()
+}
+
+fn action_subcommand_replay_coverage() -> BTreeMap<&'static str, Vec<&'static str>> {
+    BTreeMap::from([
+        (
+            "manifest-defaults",
+            vec![
+                "manifest_defaults_and_overrides",
+                "action_manifest_defaults_precedence",
+            ],
+        ),
+        ("healthcheck", vec!["http_resilience_policy"]),
+        ("preflight-tags", vec!["action_side_effect_coverage"]),
+        ("fetch-release-body", vec!["consumer_full_mode_success"]),
+        ("extract-prs", vec!["consumer_full_mode_success"]),
+        (
+            "synthesize",
+            vec!["synthesis_cost_policy", "consumer_synthesis_only_success"],
+        ),
+        (
+            "release-policy publication",
+            vec![
+                "publication_degraded_optional",
+                "publication_degraded_required",
+            ],
+        ),
+        (
+            "release-policy summary",
+            vec![
+                "summary_artifact_failed",
+                "summary_release_update_failed",
+                "summary_rss_failed",
+            ],
+        ),
+        (
+            "run",
+            vec![
+                "local_provider_run",
+                "github_provider_run",
+                "provider_run_parity",
+            ],
+        ),
+        ("notify-webhook", vec!["http_resilience_policy"]),
+        ("notify-slack", vec!["http_resilience_policy"]),
+        ("floating-tag", vec!["consumer_floating_tag_behavior"]),
+        (
+            "close-resolved-failures",
+            vec!["consumer_release_update_failure"],
+        ),
+        (
+            "report-synthesis-failure",
+            vec!["consumer_degraded_required_fails"],
+        ),
+    ])
 }
 
 fn scenario_agent_native_contracts(tmp_root: &Path) -> Result<Value> {
@@ -9141,7 +9511,9 @@ model:
         update_status: 200,
         ..Default::default()
     };
-    fallback_fake.llm_responses.push_back((500, String::new()));
+    for _ in 0..HttpPolicy::default().attempts {
+        fallback_fake.llm_responses.push_back((500, String::new()));
+    }
     fallback_fake
         .llm_responses
         .push_back((200, VALID_NOTES.to_string()));
@@ -9178,6 +9550,13 @@ model:
         || attempts[1]["succeeded"] != true
     {
         return Err("fallback attempt sequence was not recorded".into());
+    }
+    let fallback_requests = fallback_server.state.lock().unwrap().requests.len();
+    if fallback_requests != HttpPolicy::default().attempts + 1 {
+        return Err(format!(
+            "fallback replay expected primary HTTP retries plus fallback request, got {fallback_requests}"
+        )
+        .into());
     }
 
     fs::write(
@@ -9645,6 +10024,19 @@ fn start_fake_server(mut state: FakeState) -> Result<FakeServer> {
         url: format!("http://{addr}"),
         state: shared,
     })
+}
+
+fn start_slow_http_server(delay: Duration) -> Result<String> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let addr = listener.local_addr()?;
+    let server = Server::from_listener(listener, None).map_err(|error| error.to_string())?;
+    thread::spawn(move || {
+        if let Some(request) = server.incoming_requests().next() {
+            thread::sleep(delay);
+            let _ = request.respond(json_response(200, json!({"ok": true})));
+        }
+    });
+    Ok(format!("http://{addr}/slow"))
 }
 
 fn json_response(status: u16, payload: Value) -> Response<std::io::Cursor<Vec<u8>>> {

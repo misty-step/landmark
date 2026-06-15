@@ -1,18 +1,23 @@
 # Make release verification prove every documented guarantee
 
-Priority: P0 · Status: pending · Estimate: XL
+Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
 Ensure `bin/gate` and replay evidence prove Landfall's documented reliability,
 security, and side-effect behavior before releases ship.
 
 ## Oracle
-- [ ] External GitHub, forge, webhook, Slack, and LLM calls have bounded timeout and retry policy with replay tests for hung, slow, 429, and 5xx providers.
-- [ ] No secret-bearing token or API key is passed through argv in the runtime hot path.
-- [ ] Error, log, status, and evidence outputs redact configured secrets.
-- [ ] Replay scenarios cover every side-effecting action subcommand: release mutation, artifact writes, RSS/feed commit, webhook, Slack, failure issue close/report, floating-tag movement, and synthesis status emission.
-- [ ] A meta-test fails when `action.yml` invokes a `dist/landfall` subcommand that has no replay coverage.
-- [ ] README reliability/security claims are tied to executable checks.
+- [x] External GitHub, forge, webhook, Slack, and LLM calls have bounded timeout and retry policy with replay tests for hung, slow, 429, and 5xx providers.
+- [x] No secret-bearing token or API key is passed through argv in the runtime hot path.
+- [x] Error, log, status, and evidence outputs redact configured secrets.
+- [x] Replay scenarios cover every side-effecting action subcommand: release mutation, artifact writes, RSS/feed commit, webhook, Slack, failure issue close/report, floating-tag movement, and synthesis status emission.
+- [x] A meta-test fails when `action.yml` invokes a `dist/landfall` subcommand that has no replay coverage.
+- [x] README reliability/security claims are tied to executable checks.
+
+## Completion Evidence
+- `cargo run --locked -- replay-action --scenario http_resilience_policy --scenario action_side_effect_coverage --evidence-dir .landfall/replay-015-verification` passed.
+- `.landfall/replay-015-verification/replay-result.json` records argv-secret-free curl config, configured-secret redaction, 429 retry, 5xx retry, slow-provider timeout, and action subcommand replay coverage.
+- `cargo run --locked -- check-action-contract` passed with README release-integrity tokens tied to executable scenarios.
 
 ## Children
 1. Replace bare `curl` invocations with a bounded request helper or add strict timeout/retry flags and tests at the current chokepoint.
