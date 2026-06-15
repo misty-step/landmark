@@ -327,8 +327,12 @@ distribution steps:
   balanced policy, or manifest budget limits are treated as successful policy
   outcomes. Release-body mutation and artifact writes are skipped, while
   `synthesis-status.context.cost` records the reason.
-- External GitHub and LLM calls made by the Rust runtime use bounded
-  timeouts and retry policy.
+- External GitHub, webhook, Slack, and LLM calls made by the Rust runtime use
+  the shared `curl_json` policy (`--connect-timeout`, `--max-time`, retries for
+  429/5xx). `replay-action --scenario http_resilience_policy` exercises slow,
+  throttled, and failing providers, and
+  `replay-action --scenario action_side_effect_coverage` fails if `action.yml`
+  invokes a `dist/landfall` subcommand without replay coverage.
 - Generated `release-notes` output uses a collision-resistant GitHub output
   delimiter so synthesized content cannot truncate the output payload.
 
