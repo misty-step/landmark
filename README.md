@@ -1,7 +1,10 @@
 # Landfall
 
-Landfall is a focused release pipeline GitHub Action for repositories that use conventional commits.
-It runs `semantic-release` to publish a version and changelog, then optionally synthesizes user-facing notes with any OpenAI-compatible LLM provider and prepends them to the GitHub Release body.
+Landfall is a portable release-intelligence runtime for repositories that use
+conventional commits. It can run as a GitHub Action, but the product boundary
+is the Rust CLI: local scripts, generic CI systems, and agents can invoke the
+same runtime to produce version decisions, technical changelogs, public release
+notes, feeds, and machine-readable evidence.
 
 ## What It Does
 
@@ -106,6 +109,39 @@ cargo run --locked -p landfall -- run \
 Without `--publish-release-body`, `--provider github` writes the same local
 evidence and artifacts without mutating the remote release. Omit
 `--notes-file` to let Landfall generate notes from the local git range.
+
+## Agent-Native Contracts
+
+Agents should start with the self-description document instead of scraping this
+README:
+
+```bash
+landfall describe --json
+```
+
+The describe payload exposes commands, modes, providers, inputs, outputs,
+schemas, examples, preview policy for mutating commands, and the failure
+taxonomy. stdout carries JSON payloads; stderr carries logs and errors. Use
+`--error-format json` on any command to receive a stable failure envelope with
+`code`, `stage`, `retryable`, `user_action`, and redacted `context`.
+
+The cold-agent integration oracle is:
+
+```bash
+landfall replay-action --scenario agent_native_contracts --format json
+```
+
+The checked schema registry lives in `schemas/`:
+
+- `schemas/landfall-manifest.v1.schema.json` for `.landfall.yml`
+- `schemas/synthesis-status.v1.schema.json` for synthesis status output
+- `schemas/replay-result.v1.schema.json` for replay evidence
+- `schemas/fleet-plan.v1.schema.json` for fleet adoption plans
+- `schemas/release-entry.v1.schema.json` for release-note JSON entries
+- `schemas/run-evidence.v1.schema.json` for `landfall run` evidence packets
+- `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
+
+For the full cold-agent contract, see `docs/agent-integration.md`.
 
 ## Adoption Dry Run
 

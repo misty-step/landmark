@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landfall.dev/schemas/run-evidence.v1.schema.json",
+  "title": "Landfall run evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landfall-artifact": "landfall run evidence packet",
+  "required": ["provider", "generated_at", "repo_root", "repository", "release_tag", "version", "previous_tag", "source", "technical_changelog_sha256", "notes_sha256", "version_decision", "artifacts", "publication"],
+  "properties": {
+    "provider": { "type": "string", "enum": ["local", "github"] },
+    "generated_at": { "type": "string" },
+    "repo_root": { "type": "string" },
+    "repository": { "type": "string" },
+    "release_tag": { "type": "string" },
+    "version": { "type": "string" },
+    "previous_tag": { "type": "string" },
+    "source": { "type": "string" },
+    "technical_changelog_sha256": { "type": "string" },
+    "notes_sha256": { "type": "string" },
+    "version_decision": {
+      "type": "object",
+      "required": ["latest_tag", "bump", "commit_count", "conventional_commit_count", "range"],
+      "properties": {
+        "latest_tag": { "type": "string" },
+        "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+        "commit_count": { "type": "integer", "minimum": 0 },
+        "conventional_commit_count": { "type": "integer", "minimum": 0 },
+        "range": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["technical_changelog", "markdown", "plaintext", "html", "json", "rss", "evidence"],
+      "properties": {
+        "technical_changelog": { "type": "string" },
+        "markdown": { "type": "string" },
+        "plaintext": { "type": "string" },
+        "html": { "type": "string" },
+        "json": { "type": "string" },
+        "rss": { "type": "string" },
+        "evidence": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "publication": {
+      "type": "object",
+      "required": ["provider", "enabled", "release_body_updated", "release_url", "status"],
+      "properties": {
+        "provider": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "release_body_updated": { "type": "boolean" },
+        "release_url": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

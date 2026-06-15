@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landfall.dev/schemas/synthesis-status.v1.schema.json",
+  "title": "Landfall synthesis status",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landfall-artifact": "synthesis-status output",
+  "required": ["synthesis_enabled", "released", "succeeded", "quality", "failure_stage", "failure_message", "model_attempts", "context", "destinations"],
+  "properties": {
+    "synthesis_enabled": { "type": "boolean" },
+    "released": { "type": "boolean" },
+    "succeeded": { "type": "boolean" },
+    "quality": { "type": "string", "enum": ["valid", "degraded", "skipped", "failed"] },
+    "failure_stage": { "type": "string" },
+    "failure_message": { "type": "string" },
+    "model_attempts": { "type": "array", "items": { "type": "object" } },
+    "context": { "type": "object" },
+    "destinations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["enabled", "succeeded", "failure_stage", "failure_message"],
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "succeeded": { "type": "boolean" },
+          "failure_stage": { "type": "string" },
+          "failure_message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

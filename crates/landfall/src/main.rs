@@ -1,5 +1,5 @@
 use chrono::Utc;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use hmac::{Hmac, Mac};
 use pulldown_cmark::{Options, Parser as MarkdownParser, html};
 use regex::Regex;
@@ -30,12 +30,15 @@ const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 #[command(name = "landfall", version)]
 #[command(about = "Rust runtime for the Landfall release action")]
 struct Cli {
+    #[arg(long = "error-format", global = true, default_value = "text")]
+    error_format: String,
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    Describe(DescribeArgs),
     Init(InitArgs),
     Doctor(DoctorArgs),
     ManifestDefaults(ManifestDefaultsArgs),
@@ -66,6 +69,12 @@ enum Commands {
 }
 
 #[derive(Args)]
+struct DescribeArgs {
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args)]
 struct InitArgs {
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
@@ -79,6 +88,8 @@ struct InitArgs {
 struct DoctorArgs {
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
+    #[arg(long = "format", default_value = "text")]
+    format: String,
 }
 
 #[derive(Args)]
@@ -353,6 +364,8 @@ struct RunArgs {
     server_url: String,
     #[arg(long = "publish-release-body")]
     publish_release_body: bool,
+    #[arg(long = "dry-run")]
+    dry_run: bool,
     #[arg(long = "notes-file", default_value = "")]
     notes_file: String,
     #[arg(long = "output-dir", default_value = ".landfall/run")]
@@ -452,6 +465,8 @@ struct ReplayArgs {
     evidence_dir: String,
     #[arg(long = "scenario")]
     scenario: Vec<String>,
+    #[arg(long = "format", default_value = "text")]
+    format: String,
 }
 
 #[derive(Args)]
@@ -509,6 +524,8 @@ struct SetupArgs {
     repo_root: PathBuf,
     #[arg(long = "output-dir", default_value = "")]
     output_dir: String,
+    #[arg(long = "dry-run")]
+    dry_run: bool,
 }
 
 #[derive(Args)]
@@ -547,6 +564,8 @@ struct FleetScanArgs {
     github_token: String,
     #[arg(long = "fixture", hide = true, default_value = "")]
     fixture: String,
+    #[arg(long = "format", default_value = "text")]
+    format: String,
 }
 
 #[derive(Args)]
@@ -555,6 +574,8 @@ struct FleetPlanArgs {
     input: PathBuf,
     #[arg(long = "output-dir", default_value = ".landfall/fleet-plan")]
     output_dir: PathBuf,
+    #[arg(long = "format", default_value = "text")]
+    format: String,
 }
 
 #[derive(Args)]
@@ -567,6 +588,8 @@ struct FleetOpenPrsArgs {
     dry_run: bool,
     #[arg(long = "max-prs", default_value_t = 0)]
     max_prs: usize,
+    #[arg(long = "format", default_value = "text")]
+    format: String,
 }
 
 #[derive(Args)]
@@ -636,14 +659,21 @@ struct SelfReleasePublish {
 }
 
 fn main() {
-    if let Err(error) = run() {
-        eprintln!("{error}");
+    let cli = Cli::parse();
+    let error_format = cli.error_format.clone();
+    if let Err(error) = run(cli) {
+        if error_format == "json" {
+            eprintln!("{}", structured_error_json(&error.to_string()));
+        } else {
+            eprintln!("{error}");
+        }
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
-    match Cli::parse().command {
+fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Commands::Describe(args) => describe(args),
         Commands::Init(args) => init(args),
         Commands::Doctor(args) => doctor(args),
         Commands::ManifestDefaults(args) => manifest_defaults(args),
@@ -677,6 +707,602 @@ fn run() -> Result<()> {
         Commands::PrepareSelfRelease(args) => prepare_self_release(args),
         Commands::PublishSelfRelease(args) => publish_self_release(args),
     }
+}
+
+fn structured_error_json(message: &str) -> String {
+    let failure = classify_failure(message);
+    serde_json::to_string_pretty(&json!({
+        "error": {
+            "code": failure.code,
+            "stage": failure.stage,
+            "retryable": failure.retryable,
+            "user_action": failure.user_action,
+            "context": {
+                "message": redact_context(message)
+            }
+        }
+    }))
+    .unwrap_or_else(|_| "{\"error\":{\"code\":\"internal_error\",\"stage\":\"internal\",\"retryable\":false,\"user_action\":\"inspect stderr\",\"context\":{}}}".into())
+}
+
+struct FailureClass {
+    code: &'static str,
+    stage: &'static str,
+    retryable: bool,
+    user_action: &'static str,
+}
+
+fn classify_failure(message: &str) -> FailureClass {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("github-token") || lower.contains("gh_token") || lower.contains("auth") {
+        FailureClass {
+            code: "provider_auth",
+            stage: "provider",
+            retryable: false,
+            user_action: "Provide a valid provider token through the documented secret or environment variable.",
+        }
+    } else if lower.contains("http 429")
+        || lower.contains("rate limit")
+        || lower.contains("timeout")
+    {
+        FailureClass {
+            code: "provider_outage",
+            stage: "provider",
+            retryable: true,
+            user_action: "Retry after the provider recovers or reduce request volume.",
+        }
+    } else if lower.contains("changelog.source") || lower.contains("invalid changelog") {
+        FailureClass {
+            code: "invalid_changelog_source",
+            stage: "configuration",
+            retryable: false,
+            user_action: "Set changelog.source to auto, changelog, release-body, or prs.",
+        }
+    } else if lower.contains("budget") || lower.contains("model.policy=off") {
+        FailureClass {
+            code: "budget_skip",
+            stage: "synthesis",
+            retryable: false,
+            user_action: "Raise the configured budget, change model policy, or accept synthesis skip.",
+        }
+    } else if lower.contains("degraded") || lower.contains("quality") {
+        FailureClass {
+            code: "synthesis_degradation",
+            stage: "synthesis",
+            retryable: false,
+            user_action: "Inspect synthesis attempts and either improve source context or relax strict synthesis policy.",
+        }
+    } else if lower.contains("release body") || lower.contains("publish-release-body") {
+        FailureClass {
+            code: "publication_mutation_failure",
+            stage: "publication",
+            retryable: true,
+            user_action: "Check release existence, provider permissions, and publication mode.",
+        }
+    } else if lower.contains("rss") || lower.contains("feed") {
+        FailureClass {
+            code: "feed_failure",
+            stage: "artifact",
+            retryable: false,
+            user_action: "Check feed path, max entries, and existing feed XML.",
+        }
+    } else if lower.contains("write") || lower.contains("file") || lower.contains("permission") {
+        FailureClass {
+            code: "artifact_write_failure",
+            stage: "artifact",
+            retryable: false,
+            user_action: "Check output paths and filesystem permissions.",
+        }
+    } else if lower.contains("unsupported provider")
+        || lower.contains("requires")
+        || lower.contains("must")
+    {
+        FailureClass {
+            code: "invalid_input",
+            stage: "configuration",
+            retryable: false,
+            user_action: "Correct the command arguments and retry.",
+        }
+    } else {
+        FailureClass {
+            code: "command_failed",
+            stage: "runtime",
+            retryable: false,
+            user_action: "Inspect the command context and Landfall evidence packet.",
+        }
+    }
+}
+
+fn redact_context(value: &str) -> String {
+    let token_re = Regex::new(r"(ghp|github_pat|sk|xox[baprs])[-_][-_=A-Za-z0-9]{8,}").unwrap();
+    token_re.replace_all(value, "[REDACTED]").to_string()
+}
+
+#[derive(Clone, Serialize)]
+struct SchemaDescriptor {
+    name: &'static str,
+    path: &'static str,
+    id: &'static str,
+    version: &'static str,
+    artifact: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+struct CommandContract {
+    command: &'static str,
+    mode: &'static str,
+    mutates: bool,
+    preview: &'static str,
+    stdout: &'static str,
+    stderr: &'static str,
+    json_output: bool,
+}
+
+fn describe(args: DescribeArgs) -> Result<()> {
+    if !args.json {
+        println!("Run `landfall describe --json` for the machine-readable Landfall contract.");
+        return Ok(());
+    }
+    let command = Cli::command();
+    let commands: Vec<Value> = command
+        .get_subcommands()
+        .map(describe_clap_command)
+        .collect();
+    let document = json!({
+        "schema_version": "landfall.describe.v1",
+        "landfall_version": env!("CARGO_PKG_VERSION"),
+        "product_boundary": "Rust CLI runtime; GitHub Action is an adapter wrapper",
+        "providers": ["local", "github"],
+        "modes": ["full", "synthesis-only", "artifacts-only", "release-body"],
+        "stdout_stderr": {
+            "json_payloads": "stdout",
+            "logs_and_errors": "stderr",
+            "json_errors": "pass --error-format json"
+        },
+        "commands": commands,
+        "contracts": command_contracts(),
+        "schemas": schema_descriptors(),
+        "failure_taxonomy": failure_taxonomy(),
+        "examples": [
+            {
+                "name": "local dry-run release evidence",
+                "command": "landfall run --provider local --repo-root . --dry-run"
+            },
+            {
+                "name": "machine-readable failure",
+                "command": "landfall --error-format json run --provider unsupported --dry-run"
+            },
+            {
+                "name": "cold-agent replay oracle",
+                "command": "landfall replay-action --scenario agent_native_contracts --format json"
+            }
+        ]
+    });
+    println!("{}", serde_json::to_string_pretty(&document)?);
+    Ok(())
+}
+
+fn describe_clap_command(command: &clap::Command) -> Value {
+    let inputs: Vec<Value> = command
+        .get_arguments()
+        .filter(|arg| !arg.is_hide_set())
+        .map(|arg| {
+            let defaults: Vec<String> = arg
+                .get_default_values()
+                .iter()
+                .map(|value| value.to_string_lossy().to_string())
+                .collect();
+            json!({
+                "id": arg.get_id().to_string(),
+                "long": arg.get_long().unwrap_or_default(),
+                "required": arg.is_required_set(),
+                "default": defaults,
+                "help": arg.get_help().map(|help| help.to_string()).unwrap_or_default()
+            })
+        })
+        .collect();
+    let subcommands: Vec<Value> = command
+        .get_subcommands()
+        .map(describe_clap_command)
+        .collect();
+    json!({
+        "name": command.get_name(),
+        "about": command.get_about().map(|about| about.to_string()).unwrap_or_default(),
+        "inputs": inputs,
+        "subcommands": subcommands
+    })
+}
+
+fn schema_descriptors() -> Vec<SchemaDescriptor> {
+    vec![
+        SchemaDescriptor {
+            name: "landfall_manifest",
+            path: "schemas/landfall-manifest.v1.schema.json",
+            id: "https://landfall.dev/schemas/landfall-manifest.v1.schema.json",
+            version: "v1",
+            artifact: ".landfall.yml",
+        },
+        SchemaDescriptor {
+            name: "synthesis_status",
+            path: "schemas/synthesis-status.v1.schema.json",
+            id: "https://landfall.dev/schemas/synthesis-status.v1.schema.json",
+            version: "v1",
+            artifact: "synthesis-status output",
+        },
+        SchemaDescriptor {
+            name: "replay_result",
+            path: "schemas/replay-result.v1.schema.json",
+            id: "https://landfall.dev/schemas/replay-result.v1.schema.json",
+            version: "v1",
+            artifact: "replay-action evidence",
+        },
+        SchemaDescriptor {
+            name: "fleet_plan",
+            path: "schemas/fleet-plan.v1.schema.json",
+            id: "https://landfall.dev/schemas/fleet-plan.v1.schema.json",
+            version: "v1",
+            artifact: "fleet plan",
+        },
+        SchemaDescriptor {
+            name: "release_entry",
+            path: "schemas/release-entry.v1.schema.json",
+            id: "https://landfall.dev/schemas/release-entry.v1.schema.json",
+            version: "v1",
+            artifact: "release notes JSON entry",
+        },
+        SchemaDescriptor {
+            name: "run_evidence",
+            path: "schemas/run-evidence.v1.schema.json",
+            id: "https://landfall.dev/schemas/run-evidence.v1.schema.json",
+            version: "v1",
+            artifact: "landfall run evidence packet",
+        },
+        SchemaDescriptor {
+            name: "failure_envelope",
+            path: "schemas/failure-envelope.v1.schema.json",
+            id: "https://landfall.dev/schemas/failure-envelope.v1.schema.json",
+            version: "v1",
+            artifact: "--error-format json stderr",
+        },
+    ]
+}
+
+fn command_contracts() -> Vec<CommandContract> {
+    vec![
+        CommandContract {
+            command: "describe --json",
+            mode: "agent-discovery",
+            mutates: false,
+            preview: "not needed",
+            stdout: "Describe document JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "init",
+            mode: "configuration-bootstrap",
+            mutates: true,
+            preview: "--dry-run prints inferred manifest without writing .landfall.yml",
+            stdout: "manifest YAML with --dry-run, otherwise no payload",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "doctor",
+            mode: "configuration-validation",
+            mutates: false,
+            preview: "not needed",
+            stdout: "text verdict, or JSON with --format json",
+            stderr: "logs and errors only; pass --error-format json for failures",
+            json_output: true,
+        },
+        CommandContract {
+            command: "manifest-defaults",
+            mode: "action-adapter",
+            mutates: true,
+            preview: "omit --github-output for JSON-only output",
+            stdout: "manifest default JSON when --github-output is omitted",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "healthcheck",
+            mode: "provider-health",
+            mutates: false,
+            preview: "not needed",
+            stdout: "text health verdict",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "preflight-tags",
+            mode: "action-adapter",
+            mutates: true,
+            preview: "not available; this command mutates only the local git checkout tags",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "fetch-release-body",
+            mode: "github-adapter",
+            mutates: true,
+            preview: "not available; writes the requested local output file",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "extract-prs",
+            mode: "github-adapter",
+            mutates: true,
+            preview: "not available; writes the requested local output file",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "synthesize",
+            mode: "synthesis",
+            mutates: true,
+            preview: "--dry-run-cost emits the context packet without calling an LLM or writing notes",
+            stdout: "release notes markdown, or context packet JSON with --dry-run-cost",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "release-policy",
+            mode: "action-adapter",
+            mutates: true,
+            preview: "not available; writes GitHub output key-value fields",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "update-release",
+            mode: "github-adapter",
+            mutates: true,
+            preview: "not available; use run --dry-run for publication preview",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "write-artifacts",
+            mode: "artifact-adapter",
+            mutates: true,
+            preview: "not available; use run --dry-run for artifact path preview",
+            stdout: "release notes markdown",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "update-feed",
+            mode: "artifact-adapter",
+            mutates: true,
+            preview: "not available; use run --dry-run for feed path preview",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "notify-webhook",
+            mode: "notification-adapter",
+            mutates: true,
+            preview: "not available; this command sends exactly one webhook request",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "notify-slack",
+            mode: "notification-adapter",
+            mutates: true,
+            preview: "not available; this command sends exactly one Slack webhook request",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "setup",
+            mode: "adoption-planning",
+            mutates: true,
+            preview: "--dry-run or omit --output-dir for JSON-only planning",
+            stdout: "SetupReport JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "run",
+            mode: "portable-release",
+            mutates: true,
+            preview: "--dry-run computes evidence without writing artifacts or mutating releases",
+            stdout: "RunEvidence JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "backfill",
+            mode: "historical-artifacts",
+            mutates: true,
+            preview: "--dry-run writes no release-body mutations and records planned artifacts",
+            stdout: "BackfillManifest JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "fleet scan",
+            mode: "fleet-adoption",
+            mutates: true,
+            preview: "writes only the requested local JSON scan file; use --fixture for offline replay",
+            stdout: "text receipt when --output is set, otherwise FleetScan JSON; pass --format json for JSON stdout",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "fleet plan",
+            mode: "fleet-adoption",
+            mutates: true,
+            preview: "local files only under --output-dir",
+            stdout: "text receipt plus plan.json artifact, or FleetPlan JSON with --format json",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "fleet open-prs",
+            mode: "fleet-adoption",
+            mutates: true,
+            preview: "requires --dry-run; remote PR mutation is intentionally unavailable",
+            stdout: "text receipt plus open-prs.json artifact, or FleetPrPlan JSON with --format json",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "floating-tag",
+            mode: "action-adapter",
+            mutates: false,
+            preview: "not needed",
+            stdout: "major floating tag text when release tag is stable",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "close-resolved-failures",
+            mode: "github-adapter",
+            mutates: true,
+            preview: "not available; closes matching Landfall failure issues when resolved",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "report-synthesis-failure",
+            mode: "github-adapter",
+            mutates: true,
+            preview: "not available; creates or comments on a GitHub issue",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "update-version-metadata",
+            mode: "self-release",
+            mutates: true,
+            preview: "not available; writes package metadata for self-release",
+            stdout: "none",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "check-version-sync",
+            mode: "verification",
+            mutates: false,
+            preview: "not needed",
+            stdout: "text version verdict",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "check-action-contract",
+            mode: "verification",
+            mutates: false,
+            preview: "not needed",
+            stdout: "text contract verdict",
+            stderr: "logs and errors only",
+            json_output: false,
+        },
+        CommandContract {
+            command: "replay-action",
+            mode: "verification",
+            mutates: true,
+            preview: "writes disposable fixture repos and evidence only",
+            stdout: "text receipt, or ReplayResult JSON with --format json",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "prepare-self-release",
+            mode: "self-release",
+            mutates: true,
+            preview: "not available; prepares the self-release branch and prints a release plan",
+            stdout: "SelfReleasePlan JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "publish-self-release",
+            mode: "self-release",
+            mutates: true,
+            preview: "not available; publishes release state after protected-branch merge",
+            stdout: "SelfReleasePublish JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+    ]
+}
+
+fn failure_taxonomy() -> Vec<Value> {
+    [
+        (
+            "provider_auth",
+            "provider",
+            false,
+            "Provider credentials are missing, invalid, or insufficient.",
+        ),
+        (
+            "provider_outage",
+            "provider",
+            true,
+            "Provider is rate-limited, unavailable, or timed out.",
+        ),
+        (
+            "invalid_changelog_source",
+            "configuration",
+            false,
+            "Manifest or input selects an unsupported changelog source.",
+        ),
+        (
+            "budget_skip",
+            "synthesis",
+            false,
+            "Configured budget or model policy intentionally skipped synthesis.",
+        ),
+        (
+            "synthesis_degradation",
+            "synthesis",
+            false,
+            "LLM output failed quality policy or degraded below the required threshold.",
+        ),
+        (
+            "artifact_write_failure",
+            "artifact",
+            false,
+            "Local release artifact write failed.",
+        ),
+        (
+            "feed_failure",
+            "artifact",
+            false,
+            "RSS feed read, merge, or write failed.",
+        ),
+        (
+            "publication_mutation_failure",
+            "publication",
+            true,
+            "Remote release body mutation failed.",
+        ),
+    ]
+    .into_iter()
+    .map(|(code, stage, retryable, meaning)| {
+        json!({
+            "code": code,
+            "stage": stage,
+            "retryable": retryable,
+            "meaning": meaning
+        })
+    })
+    .collect()
 }
 
 fn parse_bool(value: &str) -> bool {
@@ -877,11 +1503,25 @@ fn init(args: InitArgs) -> Result<()> {
 }
 
 fn doctor(args: DoctorArgs) -> Result<()> {
+    if !matches!(args.format.as_str(), "text" | "json") {
+        return Err("--format must be text or json".into());
+    }
     let manifest = load_manifest(&args.repo_root)?.ok_or(".landfall.yml is missing")?;
     let mut errors = validate_manifest(&manifest);
     errors.extend(validate_manifest_completeness(&manifest));
     if errors.is_empty() {
-        println!("manifest ok");
+        if args.format == "json" {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "verdict": "passed",
+                    "schema": "schemas/landfall-manifest.v1.schema.json",
+                    "manifest": ".landfall.yml"
+                }))?
+            );
+        } else {
+            println!("manifest ok (schema schemas/landfall-manifest.v1.schema.json)");
+        }
         Ok(())
     } else {
         Err(errors.join("\n").into())
@@ -1033,12 +1673,111 @@ fn load_manifest(root: &Path) -> Result<Option<LandfallManifest>> {
     if !path.is_file() {
         return Ok(None);
     }
-    let manifest: LandfallManifest = serde_yaml::from_str(&fs::read_to_string(path)?)?;
+    let text = fs::read_to_string(path)?;
+    let raw: serde_yaml::Value = serde_yaml::from_str(&text)?;
+    let shape_errors = validate_manifest_yaml_shape(&raw);
+    if !shape_errors.is_empty() {
+        return Err(shape_errors.join("\n").into());
+    }
+    let manifest: LandfallManifest = serde_yaml::from_str(&text)?;
     let errors = validate_manifest(&manifest);
     if errors.is_empty() {
         Ok(Some(manifest))
     } else {
         Err(errors.join("\n").into())
+    }
+}
+
+fn validate_manifest_yaml_shape(raw: &serde_yaml::Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (label, _, allowed) in manifest_schema_key_contracts() {
+        validate_yaml_mapping_keys(yaml_value_at_label(raw, label), label, allowed, &mut errors);
+    }
+    errors
+}
+
+fn manifest_schema_key_contracts() -> Vec<(&'static str, &'static str, &'static [&'static str])> {
+    vec![
+        (
+            "manifest",
+            "/properties",
+            &[
+                "product",
+                "audience",
+                "voice",
+                "changelog",
+                "artifacts",
+                "release",
+                "model",
+                "budget",
+            ],
+        ),
+        (
+            "manifest.product",
+            "/properties/product/properties",
+            &["name", "description"],
+        ),
+        (
+            "manifest.changelog",
+            "/properties/changelog/properties",
+            &["source"],
+        ),
+        (
+            "manifest.artifacts",
+            "/properties/artifacts/properties",
+            &["markdown", "plaintext", "html", "json", "rss"],
+        ),
+        (
+            "manifest.release",
+            "/properties/release/properties",
+            &["profile"],
+        ),
+        (
+            "manifest.model",
+            "/properties/model/properties",
+            &["policy", "primary", "fallbacks"],
+        ),
+        (
+            "manifest.budget",
+            "/properties/budget/properties",
+            &["max_input_tokens", "max_output_tokens", "max_usd"],
+        ),
+    ]
+}
+
+fn yaml_value_at_label<'a>(raw: &'a serde_yaml::Value, label: &str) -> &'a serde_yaml::Value {
+    match label {
+        "manifest.product" => &raw["product"],
+        "manifest.changelog" => &raw["changelog"],
+        "manifest.artifacts" => &raw["artifacts"],
+        "manifest.release" => &raw["release"],
+        "manifest.model" => &raw["model"],
+        "manifest.budget" => &raw["budget"],
+        _ => raw,
+    }
+}
+
+fn validate_yaml_mapping_keys(
+    raw: &serde_yaml::Value,
+    label: &str,
+    allowed: &[&str],
+    errors: &mut Vec<String>,
+) {
+    if raw.is_null() {
+        return;
+    }
+    let Some(mapping) = raw.as_mapping() else {
+        errors.push(format!("{label} must be a mapping"));
+        return;
+    };
+    for key in mapping.keys() {
+        let Some(key) = key.as_str() else {
+            errors.push(format!("{label} keys must be strings"));
+            continue;
+        };
+        if !allowed.contains(&key) {
+            errors.push(format!("{label} contains unknown key `{key}`"));
+        }
     }
 }
 
@@ -1360,7 +2099,7 @@ fn setup(args: SetupArgs) -> Result<()> {
     let manifest = load_manifest(&args.repo_root)?;
     let recommendation = recommend_setup(&diagnosis, manifest.as_ref());
     let workflows = setup_workflows(&diagnosis, manifest.as_ref());
-    if !args.output_dir.trim().is_empty() {
+    if !args.dry_run && !args.output_dir.trim().is_empty() {
         let output_dir = args.repo_root.join(args.output_dir.trim());
         fs::create_dir_all(&output_dir)?;
         for candidate in workflows.values() {
@@ -1396,10 +2135,13 @@ fn fleet(args: FleetArgs) -> Result<()> {
 }
 
 fn fleet_scan(args: FleetScanArgs) -> Result<()> {
+    if !matches!(args.format.as_str(), "text" | "json") {
+        return Err("--format must be text or json".into());
+    }
     if !args.fixture.trim().is_empty() {
         let scan: FleetScan = serde_json::from_str(&fs::read_to_string(&args.fixture)?)?;
         write_json_if_requested(&args.output, &scan)?;
-        print_fleet_scan_result(&args.output, &scan)?;
+        print_fleet_scan_result(&args.output, &scan, &args.format)?;
         return Ok(());
     }
     if args.owner.is_empty() {
@@ -1453,11 +2195,14 @@ fn fleet_scan(args: FleetScanArgs) -> Result<()> {
         warnings,
     };
     write_json_if_requested(&args.output, &scan)?;
-    print_fleet_scan_result(&args.output, &scan)?;
+    print_fleet_scan_result(&args.output, &scan, &args.format)?;
     Ok(())
 }
 
 fn fleet_plan(args: FleetPlanArgs) -> Result<()> {
+    if !matches!(args.format.as_str(), "text" | "json") {
+        return Err("--format must be text or json".into());
+    }
     let scan: FleetScan = serde_json::from_str(&fs::read_to_string(&args.input)?)?;
     fs::create_dir_all(&args.output_dir)?;
     let mut repositories: Vec<_> = scan
@@ -1487,16 +2232,23 @@ fn fleet_plan(args: FleetPlanArgs) -> Result<()> {
         args.output_dir.join("README.md"),
         render_fleet_plan_markdown(&plan),
     )?;
-    println!(
-        "fleet plan wrote {} and {} ({} repositories)",
-        plan_path.display(),
-        args.output_dir.join("README.md").display(),
-        plan.repositories.len()
-    );
+    if args.format == "json" {
+        println!("{}", serde_json::to_string_pretty(&plan)?);
+    } else {
+        println!(
+            "fleet plan wrote {} and {} ({} repositories)",
+            plan_path.display(),
+            args.output_dir.join("README.md").display(),
+            plan.repositories.len()
+        );
+    }
     Ok(())
 }
 
 fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
+    if !matches!(args.format.as_str(), "text" | "json") {
+        return Err("--format must be text or json".into());
+    }
     if !args.dry_run {
         return Err(
             "fleet open-prs currently requires --dry-run; refusing to mutate remote repositories"
@@ -1574,24 +2326,28 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         args.output_dir.join("open-prs.json"),
         serde_json::to_string_pretty(&pr_plan)? + "\n",
     )?;
-    println!(
-        "fleet dry-run wrote {} ({} repositories)",
-        args.output_dir.join("open-prs.json").display(),
-        pr_plan.repositories.len()
-    );
+    if args.format == "json" {
+        println!("{}", serde_json::to_string_pretty(&pr_plan)?);
+    } else {
+        println!(
+            "fleet dry-run wrote {} ({} repositories)",
+            args.output_dir.join("open-prs.json").display(),
+            pr_plan.repositories.len()
+        );
+    }
     Ok(())
 }
 
-fn print_fleet_scan_result(path: &Path, scan: &FleetScan) -> Result<()> {
-    if is_requested_path(path) {
+fn print_fleet_scan_result(path: &Path, scan: &FleetScan, format: &str) -> Result<()> {
+    if format == "json" || !is_requested_path(path) {
+        println!("{}", serde_json::to_string_pretty(scan)?);
+    } else {
         println!(
             "fleet scan wrote {} ({} repositories, {} warnings)",
             path.display(),
             scan.repositories.len(),
             scan.warnings.len()
         );
-    } else {
-        println!("{}", serde_json::to_string_pretty(scan)?);
     }
     Ok(())
 }
@@ -4714,7 +5470,9 @@ fn run_pipeline(args: RunArgs) -> Result<()> {
     if args.rss_max_entries == 0 {
         return Err("--rss-max-entries must be positive".into());
     }
-    fs::create_dir_all(args.repo_root.join(&args.output_dir))?;
+    if !args.dry_run {
+        fs::create_dir_all(args.repo_root.join(&args.output_dir))?;
+    }
     let manifest =
         load_manifest(&args.repo_root)?.unwrap_or_else(|| infer_manifest(&args.repo_root));
     let repository = trimmed_option(&args.repository)
@@ -4762,8 +5520,10 @@ fn run_pipeline(args: RunArgs) -> Result<()> {
     let evidence_json = serde_json::to_string_pretty(&evidence)? + "\n";
     let evidence_path = run_output_path(&args.repo_root, &args.evidence_file, &release.release_tag)
         .ok_or("--evidence-file must not be empty")?;
-    ensure_parent(&evidence_path)?;
-    fs::write(&evidence_path, &evidence_json)?;
+    if !args.dry_run {
+        ensure_parent(&evidence_path)?;
+        fs::write(&evidence_path, &evidence_json)?;
+    }
     println!("{evidence_json}");
     Ok(())
 }
@@ -4998,37 +5758,33 @@ fn write_run_artifacts(
     notes: &str,
 ) -> Result<RunArtifactRecord> {
     let artifact = ReleaseNoteArtifact::from_markdown(release_tag, notes);
-    let technical = run_write_template_if_requested(
-        &args.repo_root,
-        &args.technical_changelog_file,
-        release_tag,
-        technical_changelog,
-    )?;
-    let markdown = run_write_template_if_requested(
-        &args.repo_root,
-        &args.output_file,
-        release_tag,
-        &artifact.notes,
-    )?;
-    let plaintext = run_write_template_if_requested(
-        &args.repo_root,
-        &args.output_text_file,
-        release_tag,
-        &artifact.plaintext,
-    )?;
-    let html = run_write_template_if_requested(
-        &args.repo_root,
-        &args.output_html_file,
-        release_tag,
-        &artifact.html,
-    )?;
+    let technical = run_template_path(&args.repo_root, &args.technical_changelog_file, release_tag);
+    if !args.dry_run && !technical.as_os_str().is_empty() {
+        write_path(&technical, technical_changelog)?;
+    }
+    let markdown = run_template_path(&args.repo_root, &args.output_file, release_tag);
+    if !args.dry_run && !markdown.as_os_str().is_empty() {
+        write_path(&markdown, &artifact.notes)?;
+    }
+    let plaintext = run_template_path(&args.repo_root, &args.output_text_file, release_tag);
+    if !args.dry_run && !plaintext.as_os_str().is_empty() {
+        write_path(&plaintext, &artifact.plaintext)?;
+    }
+    let html = run_template_path(&args.repo_root, &args.output_html_file, release_tag);
+    if !args.dry_run && !html.as_os_str().is_empty() {
+        write_path(&html, &artifact.html)?;
+    }
     let json_path = if args.output_json.trim().is_empty() {
         PathBuf::new()
+    } else if args.dry_run {
+        run_template_path(&args.repo_root, &args.output_json, release_tag)
     } else {
         backfill_append_json(&args.repo_root, &args.output_json, &artifact)?
     };
     let rss_path = if args.rss_feed_file.trim().is_empty() {
         PathBuf::new()
+    } else if args.dry_run {
+        args.repo_root.join(&args.rss_feed_file)
     } else {
         let path = args.repo_root.join(&args.rss_feed_file);
         let existing = fs::read_to_string(&path).unwrap_or_default();
@@ -5083,6 +5839,15 @@ fn publish_run_release_body(
     release_tag: &str,
     notes: &str,
 ) -> Result<RunPublicationRecord> {
+    if args.dry_run {
+        return Ok(RunPublicationRecord {
+            provider: provider.into(),
+            enabled: args.publish_release_body,
+            release_body_updated: false,
+            release_url: release_link(&release_url_base(args, repository), repository, release_tag),
+            status: "dry-run; release-body publication previewed but not mutated".into(),
+        });
+    }
     if provider == "local" {
         return Ok(RunPublicationRecord {
             provider: provider.into(),
@@ -5129,18 +5894,14 @@ fn publish_run_release_body(
     })
 }
 
-fn run_write_template_if_requested(
-    repo_root: &Path,
-    template: &str,
-    tag: &str,
-    content: &str,
-) -> Result<PathBuf> {
-    let Some(path) = run_output_path(repo_root, template, tag) else {
-        return Ok(PathBuf::new());
-    };
-    ensure_parent(&path)?;
-    fs::write(&path, content)?;
-    Ok(path)
+fn run_template_path(repo_root: &Path, template: &str, tag: &str) -> PathBuf {
+    run_output_path(repo_root, template, tag).unwrap_or_default()
+}
+
+fn write_path(path: &Path, content: &str) -> Result<()> {
+    ensure_parent(path)?;
+    fs::write(path, content)?;
+    Ok(())
 }
 
 fn run_output_path(repo_root: &Path, template: &str, tag: &str) -> Option<PathBuf> {
@@ -6189,12 +6950,125 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
         &fs::read_to_string(&action_path)?,
     ));
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
+    errors.extend(validate_agent_native_contracts(&args.repo_root)?);
     if errors.is_empty() {
         println!("action contract ok");
         Ok(())
     } else {
         Err(errors.join("\n").into())
     }
+}
+
+fn validate_agent_native_contracts(repo_root: &Path) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let readme = fs::read_to_string(repo_root.join("README.md")).unwrap_or_default();
+    let guide = fs::read_to_string(repo_root.join("docs/agent-integration.md")).unwrap_or_default();
+    for descriptor in schema_descriptors() {
+        let path = repo_root.join(descriptor.path);
+        if !path.is_file() {
+            errors.push(format!("missing schema `{}`", descriptor.path));
+            continue;
+        }
+        let schema: Value = match serde_json::from_str(&fs::read_to_string(&path)?) {
+            Ok(schema) => schema,
+            Err(error) => {
+                errors.push(format!(
+                    "schema `{}` is invalid JSON: {error}",
+                    descriptor.path
+                ));
+                continue;
+            }
+        };
+        if schema["$id"].as_str() != Some(descriptor.id) {
+            errors.push(format!("schema `{}` has wrong $id", descriptor.path));
+        }
+        if schema["x-landfall-artifact"].as_str() != Some(descriptor.artifact) {
+            errors.push(format!(
+                "schema `{}` has wrong x-landfall-artifact",
+                descriptor.path
+            ));
+        }
+        if !readme.contains(descriptor.path) {
+            errors.push(format!("README missing schema path `{}`", descriptor.path));
+        }
+        if !guide.contains(descriptor.path) {
+            errors.push(format!(
+                "agent integration guide missing schema path `{}`",
+                descriptor.path
+            ));
+        }
+    }
+    errors.extend(validate_command_contract_coverage());
+    errors.extend(validate_manifest_schema_alignment(
+        &repo_root.join("schemas/landfall-manifest.v1.schema.json"),
+    )?);
+    for required in [
+        "landfall describe --json",
+        "--error-format json",
+        "replay-action --scenario agent_native_contracts",
+        "stdout carries JSON payloads",
+        "stderr carries logs and errors",
+    ] {
+        if !readme.contains(required) {
+            errors.push(format!("README missing agent contract token `{required}`"));
+        }
+        if !guide.contains(required) {
+            errors.push(format!(
+                "agent integration guide missing contract token `{required}`"
+            ));
+        }
+    }
+    Ok(errors)
+}
+
+fn validate_command_contract_coverage() -> Vec<String> {
+    let commands: BTreeSet<String> = Cli::command()
+        .get_subcommands()
+        .map(|command| command.get_name().to_string())
+        .collect();
+    let contracts: BTreeSet<String> = command_contracts()
+        .into_iter()
+        .filter_map(|contract| {
+            contract
+                .command
+                .split_whitespace()
+                .next()
+                .map(str::to_string)
+        })
+        .collect();
+    commands
+        .difference(&contracts)
+        .map(|command| format!("describe contract missing command `{command}`"))
+        .chain(
+            contracts
+                .difference(&commands)
+                .map(|command| format!("describe contract references unknown command `{command}`")),
+        )
+        .collect()
+}
+
+fn validate_manifest_schema_alignment(path: &Path) -> Result<Vec<String>> {
+    let schema: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let mut errors = Vec::new();
+    for (label, pointer, allowed) in manifest_schema_key_contracts() {
+        let actual = schema_property_keys(&schema, pointer);
+        let expected: BTreeSet<String> = allowed.iter().map(|key| (*key).to_string()).collect();
+        if actual != expected {
+            errors.push(format!(
+                "{label} schema keys drifted from runtime validation: expected {:?}, got {:?}",
+                expected, actual
+            ));
+        }
+    }
+    Ok(errors)
+}
+
+fn schema_property_keys(schema: &Value, pointer: &str) -> BTreeSet<String> {
+    schema
+        .pointer(pointer)
+        .and_then(Value::as_object)
+        .map(|properties| properties.keys().cloned().collect())
+        .unwrap_or_default()
 }
 
 fn validate_self_release_workflow_contract(repo_root: &Path) -> Result<Vec<String>> {
@@ -6363,6 +7237,9 @@ fn default_contract_scan_paths(repo_root: &Path) -> Vec<PathBuf> {
 }
 
 fn replay_action(args: ReplayArgs) -> Result<()> {
+    if !matches!(args.format.as_str(), "text" | "json") {
+        return Err("--format must be text or json".into());
+    }
     let scenarios = scenario_map();
     let selected: Vec<String> = if args.scenario.is_empty() {
         canonical_scenarios()
@@ -6417,10 +7294,14 @@ fn replay_action(args: ReplayArgs) -> Result<()> {
         serde_json::to_string_pretty(&evidence)? + "\n",
     )?;
     if verdict == "passed" {
-        println!(
-            "replay evidence: {}",
-            evidence_dir.join("replay-result.json").display()
-        );
+        if args.format == "json" {
+            println!("{}", serde_json::to_string_pretty(&evidence)?);
+        } else {
+            println!(
+                "replay evidence: {}",
+                evidence_dir.join("replay-result.json").display()
+            );
+        }
         Ok(())
     } else {
         Err("one or more replay scenarios failed".into())
@@ -6504,6 +7385,10 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_backfill_release_history,
     );
     map.insert(
+        "agent_native_contracts".to_string(),
+        scenario_agent_native_contracts,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -6552,7 +7437,279 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "summary_artifact_failed",
         "summary_release_update_failed",
         "summary_rss_failed",
+        "agent_native_contracts",
     ]
+}
+
+fn scenario_agent_native_contracts(tmp_root: &Path) -> Result<Value> {
+    let repo_root = env::current_dir()?;
+    let schema_errors = validate_agent_native_contracts(&repo_root)?;
+    if !schema_errors.is_empty() {
+        return Err(schema_errors.join("\n").into());
+    }
+
+    let describe = Command::new(current_exe())
+        .args(["describe", "--json"])
+        .output()?;
+    if !describe.status.success() {
+        return Err(format!(
+            "describe --json failed: {}",
+            String::from_utf8_lossy(&describe.stderr)
+        )
+        .into());
+    }
+    let describe_json: Value = serde_json::from_slice(&describe.stdout)?;
+    assert_json_eq(
+        &describe_json,
+        "/schema_version",
+        "landfall.describe.v1",
+        "describe schema version",
+    )?;
+    let schema_paths: BTreeSet<String> = describe_json["schemas"]
+        .as_array()
+        .ok_or("describe schemas must be an array")?
+        .iter()
+        .filter_map(|schema| schema["path"].as_str().map(str::to_string))
+        .collect();
+    for descriptor in schema_descriptors() {
+        if !schema_paths.contains(descriptor.path) {
+            return Err(format!("describe missing schema {}", descriptor.path).into());
+        }
+    }
+    let contracts = describe_json["contracts"]
+        .as_array()
+        .ok_or("describe contracts must be an array")?;
+    let run_contract = contracts
+        .iter()
+        .find(|contract| contract["command"] == "run")
+        .ok_or("describe missing run contract")?;
+    assert_json_eq(
+        run_contract,
+        "/preview",
+        "--dry-run computes evidence without writing artifacts or mutating releases",
+        "run preview",
+    )?;
+
+    let invalid = Command::new(current_exe())
+        .args([
+            "--error-format",
+            "json",
+            "run",
+            "--provider",
+            "unsupported",
+            "--dry-run",
+        ])
+        .output()?;
+    if invalid.status.success() {
+        return Err("invalid provider unexpectedly succeeded".into());
+    }
+    let failure: Value = serde_json::from_slice(&invalid.stderr)?;
+    assert_json_eq(
+        &failure,
+        "/error/code",
+        "invalid_input",
+        "invalid provider error code",
+    )?;
+    assert_json_eq(
+        &failure,
+        "/error/stage",
+        "configuration",
+        "invalid provider error stage",
+    )?;
+    if failure["error"]["context"]["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("ghp_")
+    {
+        return Err("failure context leaked token-like content".into());
+    }
+
+    let repo = tmp_root.join("agent-native-run");
+    init_fixture_repo(&repo, "v1.0.0")?;
+    fs::write(repo.join("feature.txt"), "feature\n")?;
+    run_ok("git", ["add", "feature.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: agent native run"],
+        &repo,
+    )?;
+    let dry_run = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--dry-run",
+            "--output-file",
+            "docs/releases/{version}.md",
+            "--output-json",
+            "docs/releases/releases.json",
+            "--rss-feed-file",
+            "docs/releases/feed.xml",
+        ])
+        .output()?;
+    if !dry_run.status.success() {
+        return Err(format!(
+            "run --dry-run failed: {}",
+            String::from_utf8_lossy(&dry_run.stderr)
+        )
+        .into());
+    }
+    let evidence: Value = serde_json::from_slice(&dry_run.stdout)?;
+    assert_json_eq(&evidence, "/provider", "local", "dry-run provider")?;
+    assert_json_eq(
+        &evidence,
+        "/publication/status",
+        "dry-run; release-body publication previewed but not mutated",
+        "dry-run publication status",
+    )?;
+    if repo.join("docs/releases/releases.json").exists() {
+        return Err("run --dry-run wrote JSON artifact".into());
+    }
+
+    let backfill = Command::new(current_exe())
+        .args([
+            "backfill",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--dry-run",
+            "--max-tags",
+            "1",
+            "--output-json",
+            "docs/releases/releases.json",
+            "--rss-feed-file",
+            "docs/releases/feed.xml",
+        ])
+        .output()?;
+    if !backfill.status.success() {
+        return Err(format!(
+            "backfill --dry-run failed: {}",
+            String::from_utf8_lossy(&backfill.stderr)
+        )
+        .into());
+    }
+    let backfill_manifest: Value = serde_json::from_slice(&backfill.stdout)?;
+    if backfill_manifest["dry_run"] != json!(true) {
+        return Err("backfill --dry-run did not emit dry_run=true".into());
+    }
+
+    let fleet_fixture_path = tmp_root.join("agent-native-fleet.json");
+    let fleet_scan_path = tmp_root.join("agent-native-fleet-scan.json");
+    let fleet_plan_dir = tmp_root.join("agent-native-fleet-plan");
+    let fleet_pr_dir = fleet_plan_dir.join("prs");
+    let fleet_fixture = FleetScan {
+        generated_at: "2026-06-15T00:00:00Z".into(),
+        owners: vec!["phrazzld".into()],
+        repositories: vec![fleet_fixture_repo(
+            "phrazzld/semantic-app",
+            "semantic-release",
+            false,
+            false,
+            "unprotected-or-unavailable",
+            &[],
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+        )],
+        warnings: Vec::new(),
+    };
+    fs::write(
+        &fleet_fixture_path,
+        serde_json::to_string_pretty(&fleet_fixture)? + "\n",
+    )?;
+    let fleet_scan = Command::new(current_exe())
+        .args([
+            "fleet",
+            "scan",
+            "--fixture",
+            fleet_fixture_path.to_str().unwrap(),
+            "--output",
+            fleet_scan_path.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()?;
+    if !fleet_scan.status.success() {
+        return Err(format!(
+            "fleet scan --format json failed: {}",
+            String::from_utf8_lossy(&fleet_scan.stderr)
+        )
+        .into());
+    }
+    let fleet_scan_json: Value = serde_json::from_slice(&fleet_scan.stdout)?;
+    if fleet_scan_json["repositories"].as_array().map(Vec::len) != Some(1) {
+        return Err("fleet scan JSON stdout did not include one repository".into());
+    }
+    let fleet_plan = Command::new(current_exe())
+        .args([
+            "fleet",
+            "plan",
+            "--input",
+            fleet_scan_path.to_str().unwrap(),
+            "--output-dir",
+            fleet_plan_dir.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .output()?;
+    if !fleet_plan.status.success() {
+        return Err(format!(
+            "fleet plan --format json failed: {}",
+            String::from_utf8_lossy(&fleet_plan.stderr)
+        )
+        .into());
+    }
+    let fleet_plan_json: Value = serde_json::from_slice(&fleet_plan.stdout)?;
+    if fleet_plan_json["repositories"].as_array().map(Vec::len) != Some(1) {
+        return Err("fleet plan JSON stdout did not include one repository".into());
+    }
+    let fleet_prs = Command::new(current_exe())
+        .args([
+            "fleet",
+            "open-prs",
+            "--plan-dir",
+            fleet_plan_dir.to_str().unwrap(),
+            "--output-dir",
+            fleet_pr_dir.to_str().unwrap(),
+            "--dry-run",
+            "--format",
+            "json",
+        ])
+        .output()?;
+    if !fleet_prs.status.success() {
+        return Err(format!(
+            "fleet open-prs --format json failed: {}",
+            String::from_utf8_lossy(&fleet_prs.stderr)
+        )
+        .into());
+    }
+    let fleet_prs_json: Value = serde_json::from_slice(&fleet_prs.stdout)?;
+    if fleet_prs_json["dry_run"] != json!(true) {
+        return Err("fleet open-prs JSON stdout did not include dry_run=true".into());
+    }
+
+    Ok(json!({
+        "describe_schemas": schema_paths.len(),
+        "backfill_dry_run": backfill_manifest["dry_run"],
+        "json_error_code": failure["error"]["code"],
+        "dry_run_release_tag": evidence["release_tag"],
+        "dry_run_artifacts": evidence["artifacts"],
+        "fleet_json_paths": {
+            "scan_repositories": fleet_scan_json["repositories"].as_array().map(Vec::len).unwrap_or(0),
+            "plan_repositories": fleet_plan_json["repositories"].as_array().map(Vec::len).unwrap_or(0),
+            "prs_dry_run": fleet_prs_json["dry_run"]
+        }
+    }))
+}
+
+fn assert_json_eq(value: &Value, pointer: &str, expected: &str, label: &str) -> Result<()> {
+    let actual = value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{label} missing JSON string at {pointer}"))?;
+    if actual != expected {
+        return Err(format!("{label} expected `{expected}`, got `{actual}`").into());
+    }
+    Ok(())
 }
 
 fn scenario_backfill_release_history(tmp_root: &Path) -> Result<Value> {
@@ -9477,6 +10634,43 @@ model:
                 .iter()
                 .any(|error| error.contains("model.policy must be cheap, balanced, rich, or off"))
         );
+    }
+
+    #[test]
+    fn manifest_shape_rejects_unknown_keys() {
+        let raw: serde_yaml::Value = serde_yaml::from_str(
+            "product:\n  name: Demo\n  description: Demo app\n  tagline: nope\nrelease:\n  profile: synthesis-only\nsurprise: true\n",
+        )
+        .unwrap();
+        let errors = validate_manifest_yaml_shape(&raw);
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("manifest contains unknown key `surprise`"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("manifest.product contains unknown key `tagline`"))
+        );
+    }
+
+    #[test]
+    fn failure_classifier_emits_stable_codes_and_redacts_tokens() {
+        let auth = classify_failure("--publish-release-body requires --github-token");
+        assert_eq!(auth.code, "provider_auth");
+        assert_eq!(auth.stage, "provider");
+        assert!(!auth.retryable);
+
+        let changelog = classify_failure("manifest changelog.source must be auto");
+        assert_eq!(changelog.code, "invalid_changelog_source");
+        assert_eq!(changelog.stage, "configuration");
+
+        let redacted =
+            redact_context("request failed with ghp_123456789abcdef and sk-123456789abcdef");
+        assert!(!redacted.contains("ghp_123456789abcdef"));
+        assert!(!redacted.contains("sk-123456789abcdef"));
+        assert!(redacted.contains("[REDACTED]"));
     }
 
     fn test_synthesis_config(

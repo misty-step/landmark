@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landfall.dev/schemas/release-entry.v1.schema.json",
+  "title": "Landfall release entry",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landfall-artifact": "release notes JSON entry",
+  "required": ["version", "tag", "notes", "markdown", "html", "plaintext", "slack", "sections", "published_at"],
+  "properties": {
+    "version": { "type": "string" },
+    "tag": { "type": "string" },
+    "notes": { "type": "string" },
+    "markdown": { "type": "string" },
+    "html": { "type": "string" },
+    "plaintext": { "type": "string" },
+    "slack": { "type": "string" },
+    "published_at": { "type": "string" },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "bullets"],
+        "properties": {
+          "title": { "type": "string" },
+          "bullets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text", "links"],
+              "properties": {
+                "text": { "type": "string" },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["label", "href"],
+                    "properties": {
+                      "label": { "type": "string" },
+                      "href": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

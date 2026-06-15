@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landfall.dev/schemas/fleet-plan.v1.schema.json",
+  "title": "Landfall fleet plan",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landfall-artifact": "fleet plan",
+  "required": ["generated_at", "source", "summary", "repositories"],
+  "properties": {
+    "generated_at": { "type": "string" },
+    "source": { "type": "string" },
+    "summary": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repository", "rank", "default_branch", "recommended_mode", "workflow", "status", "skip_reason", "risk_flags", "missing_secrets", "unavailable_secret_metadata", "migration_notes", "manifest"],
+        "properties": {
+          "repository": { "type": "string" },
+          "rank": { "type": "integer" },
+          "default_branch": { "type": "string" },
+          "recommended_mode": { "type": "string" },
+          "workflow": { "type": "string" },
+          "status": { "type": "string" },
+          "skip_reason": { "type": "string" },
+          "risk_flags": { "type": "array", "items": { "type": "string" } },
+          "missing_secrets": { "type": "array", "items": { "type": "string" } },
+          "unavailable_secret_metadata": { "type": "array", "items": { "type": "string" } },
+          "migration_notes": { "type": "array", "items": { "type": "string" } },
+          "manifest": { "$ref": "landfall-manifest.v1.schema.json" }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
