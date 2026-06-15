@@ -30,7 +30,7 @@ inputs:
     required: false
   node-version:
     description: Node.js version for semantic-release.
-    default: "22"
+    default: "24"
     required: false
   synthesis:
     description: Whether to synthesize user-facing release notes.

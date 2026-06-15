@@ -16,9 +16,61 @@ notes, feeds, and machine-readable evidence.
 6. Updates the GitHub Release body to prepend a `## What's New` section
 7. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
 
-## Quick Start
+## Adoption Modes
 
-Create `.github/workflows/release.yml` in your repository:
+Landfall's product boundary is the Rust CLI. Start locally, then choose the
+smallest integration mode that matches the release system you already have.
+
+### Local CLI Preview
+
+Use this first in a checkout. It requires no secrets and does not call GitHub or
+an LLM:
+
+```bash
+cargo run --locked -- run --provider local --repo-root .
+```
+
+The command reads git tags and conventional commits, chooses the next semantic
+version when `--release-tag` is omitted, writes `.landfall/run/evidence.json`,
+generates a technical changelog, and writes markdown, plaintext, HTML, JSON, and
+RSS release artifacts under `docs/releases/`.
+
+Source build is the portable install path today: use `cargo run --locked -- ...`
+or a locally built `target/debug/landfall`. dist/landfall is the checked-in
+Linux x86_64 action binary used by the GitHub Action; do not use it as the
+macOS install path. Packaged binaries are not published yet, so downstream
+projects should use Cargo or their own locally built binary outside GitHub
+Actions.
+
+The executable quickstart oracle is:
+
+```bash
+cargo run --locked -- replay-action --scenario first_run_local_preview
+```
+
+### Generic CI
+
+A shell script, GitLab CI job, Forgejo workflow, Buildkite step, or agent can run
+the same Rust runtime directly:
+
+```bash
+cargo run --locked -- run \
+  --provider local \
+  --repo-root . \
+  --output-dir .landfall/run \
+  --output-file docs/releases/{version}.md \
+  --output-json docs/releases/releases.json \
+  --rss-feed-file docs/releases/feed.xml
+```
+
+Use `--dry-run` when you only want the evidence preview on stdout. Use
+`--provider github --publish-release-body` only when the CI job is explicitly
+allowed to mutate an existing GitHub Release.
+
+### GitHub Action Full Mode
+
+Use full mode when Landfall should run `semantic-release`, create the release,
+then synthesize and publish notes:
 
 ```yaml
 name: Release
@@ -66,49 +118,32 @@ jobs:
           # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
 ```
 
-Landfall is language-agnostic. Your repo does not need `package.json` or Node.js — the action handles its own runtime setup. Any project using conventional commits works.
+Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
+unless full mode is running `semantic-release`; the action handles its own Node
+24 runtime setup.
 
-## Local Or Generic CI Pipeline
+### GitHub Action Synthesis-Only Mode
 
-The GitHub Action is optional. A shell script, GitLab CI job, Forgejo workflow,
-Buildkite step, or agent can run the Rust runtime directly from a checkout and
-produce release evidence without a GitHub token:
+Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a
+custom pipeline already creates the version and release:
 
-```bash
-cargo run --locked -p landfall -- run \
-  --provider local \
-  --repo-root . \
-  --output-dir .landfall/run \
-  --output-file docs/releases/{version}.md \
-  --output-json docs/releases/releases.json \
-  --rss-feed-file docs/releases/feed.xml
+```yaml
+- uses: misty-step/landfall@v1
+  with:
+    mode: synthesis-only
+    release-tag: ${{ steps.release.outputs.tag_name }}
+    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
-`run --provider local` reads local git tags and conventional commits, chooses
-the semantic-version bump when `--release-tag` is omitted, generates a
-technical changelog from the git range, writes public release-note artifacts,
-updates the optional RSS feed, and emits a machine-readable evidence packet.
-It does not call GitHub, require `GH_RELEASE_TOKEN`, or mutate a remote release.
-Use this mode when another trigger or pipeline owns publishing, or when an
-agent needs a zero-secret preview before deciding how to publish.
+This skips semantic-release entirely. Ready-to-use synthesis-only examples:
 
-For pipelines that still want Landfall to update a GitHub Release, use the same
-command with the GitHub provider and make publication explicit:
-
-```bash
-cargo run --locked -p landfall -- run \
-  --provider github \
-  --repo-root . \
-  --repository owner/repo \
-  --release-tag v1.2.3 \
-  --notes-file /tmp/landfall-notes.md \
-  --github-token "$GH_RELEASE_TOKEN" \
-  --publish-release-body
-```
-
-Without `--publish-release-body`, `--provider github` writes the same local
-evidence and artifacts without mutating the remote release. Omit
-`--notes-file` to let Landfall generate notes from the local git range.
+| Tool | Example | Trigger |
+| --- | --- | --- |
+| [release-please](https://github.com/googleapis/release-please-action) | [`examples/release-please.yml`](examples/release-please.yml) | Push to main; release-please creates the release |
+| [Changesets](https://github.com/changesets/changesets) | [`examples/changesets.yml`](examples/changesets.yml) | Push to main; Changesets publishes packages |
+| Changesets monorepo | [`examples/changesets-monorepo.yml`](examples/changesets-monorepo.yml) | Push to main; matrix per published package |
+| Manual GitHub Releases | [`examples/manual-tag.yml`](examples/manual-tag.yml) | `release.published` event |
 
 ## Agent-Native Contracts
 
@@ -368,34 +403,6 @@ distribution steps:
     llm-model: provider/model-id
     llm-api-url: https://provider.example.com/v1/chat/completions
 ```
-
-### Synthesis-Only Mode (release-please, changesets, manual tags)
-
-Use `mode: synthesis-only` when another tool handles versioning and you only want Landfall for note synthesis:
-
-```yaml
-- uses: misty-step/landfall@v2
-  with:
-    mode: synthesis-only
-    release-tag: ${{ steps.release.outputs.tag_name }}
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-    llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-```
-
-This skips Node.js setup and semantic-release entirely; the Rust runtime handles synthesis. Works with any release tool that creates GitHub Releases.
-
-### Integration with Other Tools
-
-Ready-to-use workflow examples for common release tools. Each uses `mode: synthesis-only` so Landfall only adds the synthesis layer.
-
-| Tool | Example | Trigger |
-| --- | --- | --- |
-| [release-please](https://github.com/googleapis/release-please-action) | [`examples/release-please.yml`](examples/release-please.yml) | Push to main (release-please creates the release) |
-| [Changesets](https://github.com/changesets/changesets) | [`examples/changesets.yml`](examples/changesets.yml) | Push to main (changesets publishes packages) |
-| Changesets monorepo | [`examples/changesets-monorepo.yml`](examples/changesets-monorepo.yml) | Push to main (matrix per published package) |
-| Manual tags | [`examples/manual-tag.yml`](examples/manual-tag.yml) | Tag push matching `v*` |
-
-Copy the relevant example to `.github/workflows/` in your repository and update the secrets.
 
 ### Backfill Existing Releases
 

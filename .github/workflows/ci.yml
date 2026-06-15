@@ -16,7 +16,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
+
+      - name: Verify Node 24 runtime
+        shell: bash
+        run: node --version | grep '^v24\.'
 
       - name: Verify lockfile is in sync
         shell: bash

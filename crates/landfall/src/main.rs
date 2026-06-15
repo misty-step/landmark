@@ -3237,7 +3237,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: npm ci
       - uses: changesets/action@v1
         id: changesets
@@ -3291,7 +3291,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: npm ci
       - uses: changesets/action@v1
         id: changesets
@@ -3328,9 +3328,6 @@ fn workflow_manual_tag(manifest: Option<&LandfallManifest>) -> String {
         r#"name: Synthesize Release Notes
 
 on:
-  push:
-    tags:
-      - "v[0-9]*"
   release:
     types: [published]
 
@@ -3350,7 +3347,7 @@ jobs:
         with:
           mode: synthesis-only
           healthcheck: "true"
-          release-tag: ${{{{ github.event.release.tag_name || github.ref_name }}}}
+          release-tag: ${{{{ github.event.release.tag_name }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
@@ -7095,6 +7092,7 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     errors.extend(validate_agent_native_contracts(&args.repo_root)?);
     errors.extend(validate_release_integrity_contract(&readme));
+    errors.extend(validate_first_run_adoption_contract(&args.repo_root)?);
     if errors.is_empty() {
         println!("action contract ok");
         Ok(())
@@ -7204,6 +7202,157 @@ fn validate_release_integrity_contract(readme: &str) -> Vec<String> {
     .filter(|required| !readme.contains(**required))
     .map(|required| format!("README missing release integrity token `{required}`"))
     .collect()
+}
+
+fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let readme = fs::read_to_string(repo_root.join("README.md")).unwrap_or_default();
+    let action = fs::read_to_string(repo_root.join("action.yml")).unwrap_or_default();
+    let ci = fs::read_to_string(repo_root.join(".github/workflows/ci.yml")).unwrap_or_default();
+    let manual_example =
+        fs::read_to_string(repo_root.join("examples/manual-tag.yml")).unwrap_or_default();
+
+    for required in [
+        "## Adoption Modes",
+        "### Local CLI Preview",
+        "### Generic CI",
+        "### GitHub Action Full Mode",
+        "### GitHub Action Synthesis-Only Mode",
+        "cargo run --locked -- run --provider local --repo-root .",
+        "dist/landfall is the checked-in",
+        "Linux x86_64 action binary",
+        "Packaged binaries are not published yet",
+        "replay-action --scenario first_run_local_preview",
+    ] {
+        if !readme.contains(required) {
+            errors.push(format!(
+                "README missing first-run adoption token `{required}`"
+            ));
+        }
+    }
+
+    if action.contains("default: \"22\"") {
+        errors.push("action.yml node-version default must not remain on Node 22".into());
+    }
+    if !action.contains("default: \"24\"") {
+        errors.push("action.yml node-version default must be 24".into());
+    }
+    if ci.contains("node-version: \"22\"") || ci.contains("node-version: 22") {
+        errors.push("CI workflow must not pin setup-node to Node 22".into());
+    }
+    if !ci.contains("node-version: \"24\"") || !ci.contains("node --version | grep '^v24\\.'") {
+        errors.push("CI workflow must pin and verify Node 24".into());
+    }
+
+    let diagnosis = SetupDiagnosis {
+        release_tool: "manual-tag".into(),
+        default_branch: "main".into(),
+        tag_format: "v{version}".into(),
+        conventional_commits: "ready".into(),
+        monorepo: false,
+        packages: Vec::new(),
+        signals: Vec::new(),
+    };
+    let workflows = setup_workflows(&diagnosis, None);
+    let manual = &workflows["manual-tag"].content;
+    if manual.contains("push:\n    tags:") {
+        errors
+            .push("setup manual-tag workflow must not include tag-push trigger by default".into());
+    }
+    if !manual.contains("release:\n    types: [published]") {
+        errors.push("setup manual-tag workflow must use release.published trigger".into());
+    }
+    for candidate in workflows.values() {
+        if candidate.content.contains("node-version: 22") {
+            errors.push(format!(
+                "{} generated workflow still pins Node 22",
+                candidate.path
+            ));
+        }
+    }
+
+    errors.extend(validate_docs_link_targets(repo_root, &readme));
+    errors.extend(validate_readme_command_names(&readme));
+    for required_model in [
+        "anthropic/claude-sonnet-4",
+        "openai/gpt-4o-mini",
+        "google/gemini-2.5-flash",
+    ] {
+        if !readme.contains(required_model) {
+            errors.push(format!(
+                "README missing supported model id `{required_model}`"
+            ));
+        }
+    }
+    if readme.contains("misty-step/landfall@v2") {
+        errors.push("README references nonexistent misty-step/landfall@v2 example".into());
+    }
+    if let Err(error) = serde_yaml::from_str::<serde_yaml::Value>(&manual_example) {
+        errors.push(format!("examples/manual-tag.yml is invalid YAML: {error}"));
+    }
+    if manual_example.contains("push:\n    tags:") {
+        errors.push("examples/manual-tag.yml must not include tag-push trigger".into());
+    }
+    if !manual_example.contains("release:\n    types: [published]") {
+        errors.push("examples/manual-tag.yml must use release.published trigger".into());
+    }
+    if !manual_example.contains("release-tag: ${{ github.event.release.tag_name }}") {
+        errors.push("examples/manual-tag.yml must use github.event.release.tag_name".into());
+    }
+    if manual_example.contains("github.ref_name") || manual_example.contains("ref_nameevent") {
+        errors
+            .push("examples/manual-tag.yml contains stale tag-push release-tag expression".into());
+    }
+
+    Ok(errors)
+}
+
+fn validate_docs_link_targets(repo_root: &Path, readme: &str) -> Vec<String> {
+    let link_re = Regex::new(r"\]\((docs/[^)#]+|examples/[^)#]+|schemas/[^)#]+)\)").unwrap();
+    link_re
+        .captures_iter(readme)
+        .filter_map(|caps| {
+            let path = caps.get(1).unwrap().as_str();
+            if repo_root.join(path).is_file() {
+                None
+            } else {
+                Some(format!("README links to nonexistent file `{path}`"))
+            }
+        })
+        .collect()
+}
+
+fn validate_readme_command_names(readme: &str) -> Vec<String> {
+    let commands: BTreeSet<String> = Cli::command()
+        .get_subcommands()
+        .map(|command| command.get_name().to_string())
+        .collect();
+    let nested: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::from([
+        ("fleet", BTreeSet::from(["scan", "plan", "open-prs"])),
+        ("release-policy", BTreeSet::from(["publication", "summary"])),
+    ]);
+    let command_re =
+        Regex::new(r"(?m)(?:^\s*|`)landfall\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?").unwrap();
+    let mut errors = Vec::new();
+    for caps in command_re.captures_iter(readme) {
+        let command = caps.get(1).unwrap().as_str();
+        if !commands.contains(command) {
+            errors.push(format!(
+                "README references unknown landfall command `{command}`"
+            ));
+            continue;
+        }
+        if let Some(subcommands) = nested.get(command)
+            && let Some(subcommand) = caps.get(2).map(|value| value.as_str())
+            && !subcommands.contains(subcommand)
+            && !subcommand.starts_with("--")
+        {
+            errors.push(format!(
+                "README references unknown landfall subcommand `{command} {subcommand}`"
+            ));
+        }
+    }
+    errors
 }
 
 fn validate_manifest_schema_alignment(path: &Path) -> Result<Vec<String>> {
@@ -7520,6 +7669,10 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_local_provider_run,
     );
     map.insert(
+        "first_run_local_preview".to_string(),
+        scenario_first_run_local_preview,
+    );
+    map.insert(
         "github_provider_run".to_string(),
         scenario_github_provider_run,
     );
@@ -7590,6 +7743,7 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "consumer_floating_tag_behavior",
         "consumer_full_mode_success",
         "fleet_adoption_planner",
+        "first_run_local_preview",
         "github_provider_run",
         "local_provider_run",
         "provider_run_parity",
@@ -8695,6 +8849,68 @@ fn scenario_consumer_full_mode_success(tmp_root: &Path) -> Result<Value> {
 
 fn scenario_consumer_synthesis_only_success(tmp_root: &Path) -> Result<Value> {
     consumer_success(tmp_root, "consumer-synthesis-only", false)
+}
+
+fn scenario_first_run_local_preview(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("first-run-local-preview");
+    init_fixture_repo(&repo, "v0.1.0")?;
+    fs::write(repo.join("README.md"), "# First Run Demo\n")?;
+    fs::write(repo.join("feature.txt"), "first run adoption\n")?;
+    run_ok("git", ["add", "README.md", "feature.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "fix(cli): make first run obvious"],
+        &repo,
+    )?;
+
+    let result = Command::new(current_exe())
+        .args(["run", "--provider", "local", "--repo-root"])
+        .arg(&repo)
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let stdout_evidence: Value = serde_json::from_slice(&result.stdout)?;
+    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
+    if stdout_evidence != evidence {
+        return Err("first-run preview stdout did not match written evidence packet".into());
+    }
+    if evidence["provider"] != "local"
+        || evidence["publication"]["release_body_updated"] != false
+        || evidence["version_decision"]["bump"] != "patch"
+        || evidence["release_tag"] != "v0.1.1"
+    {
+        return Err("first-run preview evidence did not record local patch preview".into());
+    }
+    let expected = [
+        repo.join(".landfall/run/technical-changelog.md"),
+        repo.join(".landfall/run/evidence.json"),
+        repo.join("docs/releases/v0.1.1.md"),
+        repo.join("docs/releases/v0.1.1.txt"),
+        repo.join("docs/releases/v0.1.1.html"),
+        repo.join("docs/releases/releases.json"),
+        repo.join("docs/releases/feed.xml"),
+    ];
+    for path in expected {
+        if !path.is_file() {
+            return Err(format!("first-run preview did not write {}", path.display()).into());
+        }
+    }
+    let notes = fs::read_to_string(repo.join("docs/releases/v0.1.1.md"))?;
+    let technical = fs::read_to_string(repo.join(".landfall/run/technical-changelog.md"))?;
+    if !notes.contains("Make first run obvious")
+        || !technical.contains("fix(cli): make first run obvious")
+    {
+        return Err("first-run preview artifacts did not include release context".into());
+    }
+    Ok(json!({
+        "release_tag": evidence["release_tag"],
+        "provider": evidence["provider"],
+        "evidence": evidence_path,
+        "markdown": repo.join("docs/releases/v0.1.1.md"),
+        "technical_changelog": repo.join(".landfall/run/technical-changelog.md")
+    }))
 }
 
 fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
@@ -11113,7 +11329,9 @@ model:
             assert!(parsed["jobs"].is_mapping(), "{}", candidate.path);
         }
         let manual = &setup_workflows(&diagnosis, None)["manual-tag"].content;
-        assert!(manual.contains("${{ github.event.release.tag_name || github.ref_name }}"));
+        assert!(manual.contains("release:\n    types: [published]"));
+        assert!(!manual.contains("push:\n    tags:"));
+        assert!(manual.contains("${{ github.event.release.tag_name }}"));
         assert!(manual.contains("${{ secrets.GH_RELEASE_TOKEN }}"));
     }
 
