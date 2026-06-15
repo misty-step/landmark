@@ -567,11 +567,23 @@ runs:
         fi
 
         update_log="${RUNNER_TEMP}/landfall-update-release.log"
-        if ! "${GITHUB_ACTION_PATH}/dist/landfall" update-release \
-          --github-token "${GITHUB_TOKEN}" \
+        if ! "${GITHUB_ACTION_PATH}/dist/landfall" run \
+          --provider github \
+          --repo-root "${GITHUB_WORKSPACE}" \
           --repository "${GITHUB_REPOSITORY}" \
-          --tag "${RELEASE_TAG}" \
+          --release-tag "${RELEASE_TAG}" \
+          --server-url "${GITHUB_SERVER_URL}" \
+          --github-token "${GITHUB_TOKEN}" \
           --notes-file "${NOTES_FILE}" \
+          --publish-release-body \
+          --output-dir "${RUNNER_TEMP}/landfall-run" \
+          --technical-changelog-file "${RUNNER_TEMP}/landfall-technical-changelog.md" \
+          --evidence-file "${RUNNER_TEMP}/landfall-run-evidence.json" \
+          --output-file "" \
+          --output-text-file "" \
+          --output-html-file "" \
+          --output-json "" \
+          --rss-feed-file "" \
           > /dev/null \
           2> "${update_log}"; then
           details="$(tail -n 5 "${update_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
@@ -619,17 +631,24 @@ runs:
 
         if [ -f "${NOTES_FILE}" ]; then
           artifacts_log="${RUNNER_TEMP}/landfall-write-artifacts.log"
-          if notes_output="$("${GITHUB_ACTION_PATH}/dist/landfall" write-artifacts \
+          if "${GITHUB_ACTION_PATH}/dist/landfall" run \
+            --provider github \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --release-tag "${RELEASE_TAG}" \
+            --server-url "${GITHUB_SERVER_URL}" \
             --notes-file "${NOTES_FILE}" \
-            --version "${RELEASE_TAG}" \
+            --output-dir "${RUNNER_TEMP}/landfall-run" \
+            --technical-changelog-file "${RUNNER_TEMP}/landfall-artifacts-technical-changelog.md" \
+            --evidence-file "${RUNNER_TEMP}/landfall-artifacts-evidence.json" \
             --output-file "${OUTPUT_FILE}" \
             --output-text-file "${OUTPUT_TEXT_FILE}" \
             --output-html-file "${OUTPUT_HTML_FILE}" \
             --output-json "${OUTPUT_JSON}" \
-            2> "${artifacts_log}")"; then
-            if [ -n "${notes_output}" ]; then
-              notes="${notes_output}"
-            fi
+            --rss-feed-file "" \
+            > "${RUNNER_TEMP}/landfall-artifacts-evidence.stdout" \
+            2> "${artifacts_log}"; then
+            notes="$(cat "${NOTES_FILE}")"
             set_output "succeeded" "true"
           else
             details="$(tail -n 5 "${artifacts_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
@@ -700,19 +719,25 @@ runs:
           return 1
         }
 
-        release_tag="${RELEASE_TAG}"
-        release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
         rss_log="${RUNNER_TEMP}/landfall-update-rss.log"
 
         if {
-          "${GITHUB_ACTION_PATH}/dist/landfall" update-feed \
-            --feed-file "${RSS_FEED_FILE}" \
-            --max-entries "${RSS_MAX_ENTRIES}" \
+          "${GITHUB_ACTION_PATH}/dist/landfall" run \
+            --provider github \
+            --repo-root "${GITHUB_WORKSPACE}" \
             --repository "${GITHUB_REPOSITORY}" \
-            --release-tag "${release_tag}" \
-            --release-url "${release_url}" \
+            --release-tag "${RELEASE_TAG}" \
+            --server-url "${GITHUB_SERVER_URL}" \
             --notes-file "${NOTES_FILE}" \
-            --workspace "${GITHUB_WORKSPACE}" &&
+            --output-dir "${RUNNER_TEMP}/landfall-run" \
+            --technical-changelog-file "${RUNNER_TEMP}/landfall-rss-technical-changelog.md" \
+            --evidence-file "${RUNNER_TEMP}/landfall-rss-evidence.json" \
+            --output-file "" \
+            --output-text-file "" \
+            --output-html-file "" \
+            --output-json "" \
+            --rss-feed-file "${RSS_FEED_FILE}" \
+            --rss-max-entries "${RSS_MAX_ENTRIES}" &&
           git config user.name "github-actions[bot]" &&
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com" &&
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" &&
@@ -724,7 +749,7 @@ runs:
             exit 0
           fi
 
-          if git commit -m "chore(feed): update releases feed for ${release_tag} [skip ci]" \
+          if git commit -m "chore(feed): update releases feed for ${RELEASE_TAG} [skip ci]" \
             >> "${rss_log}" 2>&1 && \
             retry_command "${rss_log}" git push origin "HEAD:${GITHUB_REF_NAME}"; then
             set_output "succeeded" "true"

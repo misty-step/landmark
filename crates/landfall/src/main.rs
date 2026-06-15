@@ -50,6 +50,7 @@ enum Commands {
     UpdateFeed(UpdateFeedArgs),
     NotifyWebhook(NotifyWebhookArgs),
     NotifySlack(NotifySlackArgs),
+    Run(RunArgs),
     FloatingTag(FloatingTagArgs),
     CloseResolvedFailures(FailureLifecycleArgs),
     ReportSynthesisFailure(ReportFailureArgs),
@@ -333,6 +334,57 @@ struct NotifySlackArgs {
 }
 
 #[derive(Args)]
+struct RunArgs {
+    #[arg(long = "provider", default_value = "local")]
+    provider: String,
+    #[arg(long = "repo-root", default_value = ".")]
+    repo_root: PathBuf,
+    #[arg(long = "repository", default_value = "")]
+    repository: String,
+    #[arg(long = "release-tag", default_value = "")]
+    release_tag: String,
+    #[arg(long = "previous-tag", default_value = "")]
+    previous_tag: String,
+    #[arg(long = "github-token", default_value = "")]
+    github_token: String,
+    #[arg(long = "api-base-url", default_value = "https://api.github.com")]
+    api_base_url: String,
+    #[arg(long = "server-url", default_value = "")]
+    server_url: String,
+    #[arg(long = "publish-release-body")]
+    publish_release_body: bool,
+    #[arg(long = "notes-file", default_value = "")]
+    notes_file: String,
+    #[arg(long = "output-dir", default_value = ".landfall/run")]
+    output_dir: PathBuf,
+    #[arg(
+        long = "technical-changelog-file",
+        default_value = ".landfall/run/technical-changelog.md"
+    )]
+    technical_changelog_file: String,
+    #[arg(long = "evidence-file", default_value = ".landfall/run/evidence.json")]
+    evidence_file: String,
+    #[arg(long = "output-file", default_value = "docs/releases/{version}.md")]
+    output_file: String,
+    #[arg(
+        long = "output-text-file",
+        default_value = "docs/releases/{version}.txt"
+    )]
+    output_text_file: String,
+    #[arg(
+        long = "output-html-file",
+        default_value = "docs/releases/{version}.html"
+    )]
+    output_html_file: String,
+    #[arg(long = "output-json", default_value = "docs/releases/releases.json")]
+    output_json: String,
+    #[arg(long = "rss-feed-file", default_value = "docs/releases/feed.xml")]
+    rss_feed_file: String,
+    #[arg(long = "rss-max-entries", default_value_t = 50)]
+    rss_max_entries: usize,
+}
+
+#[derive(Args)]
 struct FloatingTagArgs {
     #[arg(long = "release-tag")]
     release_tag: String,
@@ -606,6 +658,7 @@ fn run() -> Result<()> {
         Commands::UpdateFeed(args) => update_feed(args),
         Commands::NotifyWebhook(args) => notify_webhook(args),
         Commands::NotifySlack(args) => notify_slack(args),
+        Commands::Run(args) => run_pipeline(args),
         Commands::FloatingTag(args) => {
             if let Some(tag) = parse_major_tag(&args.release_tag) {
                 println!("{tag}");
@@ -1636,7 +1689,8 @@ fn scan_fleet_repository(
     let archived = repo["isArchived"].as_bool().unwrap_or(false);
     let private = repo["isPrivate"].as_bool().unwrap_or(false);
     let pushed_at = repo["pushedAt"].as_str().unwrap_or("").to_string();
-    let paths = github_tree_paths(&name_with_owner, &default_branch, token)?;
+    let provider = GitHubProvider::new(api_base_url, token);
+    let paths = provider.tree_paths(&name_with_owner, &default_branch)?;
     let path_set: BTreeSet<_> = paths.iter().map(String::as_str).collect();
     let workflows = paths
         .iter()
@@ -1644,8 +1698,7 @@ fn scan_fleet_repository(
         .filter(|name| name.ends_with(".yml") || name.ends_with(".yaml"))
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let workflow_texts =
-        github_workflow_texts(&name_with_owner, &default_branch, &workflows, token);
+    let workflow_texts = provider.workflow_texts(&name_with_owner, &default_branch, &workflows);
     let mut release_files = Vec::new();
     let mut package_topology = Vec::new();
     let mut signals = Vec::new();
@@ -1675,7 +1728,7 @@ fn scan_fleet_repository(
         release_files.push(".changeset/".into());
         signals.push(".changeset directory present".into());
     }
-    let tags = github_tags(&name_with_owner, token)?;
+    let tags = provider.tags(&name_with_owner)?;
     let tag_format = fleet_tag_format(&tags, &package_topology);
     let release_tool = fleet_release_tool(&release_files, &workflows, &workflow_texts, &tags);
     let existing_landfall = release_files.iter().any(|file| file == ".landfall.yml")
@@ -1691,15 +1744,13 @@ fn scan_fleet_repository(
         }
     }
     let branch_protected = if deep_checks {
-        github_branch_protection(&name_with_owner, &default_branch, api_base_url, token)
+        provider.branch_protection_status(&name_with_owner, &default_branch)
     } else {
         "unavailable: pass --deep-checks to query branch protection metadata".into()
     };
     let required_secrets = if deep_checks {
-        github_secret_statuses(
+        provider.secret_statuses(
             &name_with_owner,
-            api_base_url,
-            token,
             &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
         )
     } else {
@@ -1728,63 +1779,6 @@ fn scan_fleet_repository(
     })
 }
 
-fn github_tree_paths(repository: &str, branch: &str, token: Option<&str>) -> Result<Vec<String>> {
-    let output = run_gh_ok(
-        vec![
-            "api".into(),
-            format!(
-                "repos/{repository}/git/trees/{}?recursive=1",
-                urlencoding::encode(branch)
-            ),
-            "--jq".into(),
-            "[.tree[].path]".into(),
-        ],
-        token,
-    )?;
-    Ok(serde_json::from_str(&output)?)
-}
-
-fn github_tags(repository: &str, token: Option<&str>) -> Result<Vec<String>> {
-    let output = run_gh_ok(
-        vec![
-            "api".into(),
-            format!("repos/{repository}/tags?per_page=30"),
-            "--jq".into(),
-            "[.[].name]".into(),
-        ],
-        token,
-    )?;
-    Ok(serde_json::from_str(&output)?)
-}
-
-fn github_workflow_texts(
-    repository: &str,
-    branch: &str,
-    workflows: &[String],
-    token: Option<&str>,
-) -> Vec<(String, String)> {
-    workflows
-        .iter()
-        .filter_map(|workflow| {
-            let output = run_gh_ok(
-                vec![
-                    "api".into(),
-                    format!(
-                        "repos/{repository}/contents/.github/workflows/{}?ref={}",
-                        urlencoding::encode(workflow),
-                        urlencoding::encode(branch)
-                    ),
-                    "--header".into(),
-                    "Accept: application/vnd.github.raw".into(),
-                ],
-                token,
-            )
-            .ok()?;
-            Some((workflow.clone(), output))
-        })
-        .collect()
-}
-
 fn run_gh_ok(args: Vec<String>, token: Option<&str>) -> Result<String> {
     let mut command = Command::new("gh");
     command.args(args).current_dir(Path::new("."));
@@ -1796,91 +1790,6 @@ fn run_gh_ok(args: Vec<String>, token: Option<&str>) -> Result<String> {
         return Err(format!("gh failed: {}", String::from_utf8_lossy(&output.stderr)).into());
     }
     Ok(String::from_utf8(output.stdout)?)
-}
-
-fn github_branch_protection(
-    repository: &str,
-    branch: &str,
-    api_base_url: &str,
-    token: Option<&str>,
-) -> String {
-    let Some(token) = token else {
-        return "unavailable: no GitHub token supplied".into();
-    };
-    let url = format!(
-        "{}/repos/{}/branches/{}/protection",
-        api_base_url.trim_end_matches('/'),
-        repository,
-        urlencoding::encode(branch)
-    );
-    match curl_json("GET", &url, Some(token), None) {
-        Ok(response) if response.status == 200 => "protected".into(),
-        Ok(response) if response.status == 404 => "unprotected-or-unavailable".into(),
-        Ok(response) => format!("unavailable: HTTP {}", response.status),
-        Err(error) => format!("unavailable: {error}"),
-    }
-}
-
-fn github_secret_statuses(
-    repository: &str,
-    api_base_url: &str,
-    token: Option<&str>,
-    required: &[&str],
-) -> Vec<FleetSecretStatus> {
-    let Some(token) = token else {
-        return unavailable_secret_statuses(
-            required,
-            "secret metadata requires a GitHub token with repository access",
-        );
-    };
-    let url = format!(
-        "{}/repos/{}/actions/secrets?per_page=100",
-        api_base_url.trim_end_matches('/'),
-        repository
-    );
-    let response = match curl_json("GET", &url, Some(token), None) {
-        Ok(response) => response,
-        Err(error) => {
-            return unavailable_secret_statuses(
-                required,
-                &format!("secret metadata unavailable: {error}"),
-            );
-        }
-    };
-    if !(200..300).contains(&response.status) {
-        return unavailable_secret_statuses(
-            required,
-            &format!(
-                "GitHub returned HTTP {} for secret metadata",
-                response.status
-            ),
-        );
-    }
-    let payload: Value = serde_json::from_str(&response.body).unwrap_or_else(|_| json!({}));
-    let names: BTreeSet<_> = payload["secrets"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|secret| secret["name"].as_str())
-        .collect();
-    required
-        .iter()
-        .map(|name| {
-            if names.contains(name) {
-                FleetSecretStatus {
-                    name: (*name).into(),
-                    status: "present".into(),
-                    detail: "metadata only; value not read".into(),
-                }
-            } else {
-                FleetSecretStatus {
-                    name: (*name).into(),
-                    status: "missing".into(),
-                    detail: "required secret name is absent from Actions secret metadata".into(),
-                }
-            }
-        })
-        .collect()
 }
 
 fn unavailable_secret_statuses(required: &[&str], detail: &str) -> Vec<FleetSecretStatus> {
@@ -2932,10 +2841,8 @@ fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     }
 
     let release_tag = format!("v{package_version}");
-    let existing_url = github_release_url(&args.api_base_url, &args.repository, &release_tag);
-    let existing = curl_json("GET", &existing_url, Some(&args.github_token), None)?;
-    if (200..300).contains(&existing.status) {
-        let value: Value = serde_json::from_str(&existing.body)?;
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    if let Some(value) = provider.release_by_tag(&args.repository, &release_tag)? {
         let publish = SelfReleasePublish {
             published: false,
             reason: "release already exists".into(),
@@ -2946,44 +2853,17 @@ fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
         };
         return emit_self_release_publish(&publish, &args.github_output);
     }
-    if existing.status != 404 {
-        return Err(format!("GitHub release lookup failed with HTTP {}", existing.status).into());
-    }
 
     let body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &package_version)?;
-    let create_url = format!(
-        "{}/repos/{}/releases",
-        args.api_base_url.trim_end_matches('/'),
-        args.repository
-    );
-    let response = curl_json(
-        "POST",
-        &create_url,
-        Some(&args.github_token),
-        Some(&json!({
-            "tag_name": release_tag,
-            "target_commitish": args.target_sha,
-            "name": release_tag,
-            "body": body,
-            "draft": false,
-            "prerelease": false
-        })),
-    )?;
-    if !(200..300).contains(&response.status) {
-        return Err(format!(
-            "GitHub release creation failed with HTTP {}",
-            response.status
-        )
-        .into());
-    }
-    let value: Value = serde_json::from_str(&response.body)?;
+    let release_url =
+        provider.create_release(&args.repository, &release_tag, &args.target_sha, &body)?;
     let publish = SelfReleasePublish {
         published: true,
         reason: "published release from landed release pull request".into(),
         latest_version,
         version: package_version,
         release_tag,
-        release_url: value["html_url"].as_str().unwrap_or("").to_string(),
+        release_url,
     };
     emit_self_release_publish(&publish, &args.github_output)
 }
@@ -3284,13 +3164,333 @@ fn curl_json(
     })
 }
 
-fn github_release_url(base: &str, repository: &str, tag: &str) -> String {
-    format!(
-        "{}/repos/{}/releases/tags/{}",
-        base.trim_end_matches('/'),
-        repository,
-        urlencoding::encode(tag)
-    )
+#[derive(Clone, Debug)]
+struct GitHubProvider {
+    api_base_url: String,
+    token: Option<String>,
+}
+
+impl GitHubProvider {
+    fn new(api_base_url: &str, token: Option<&str>) -> Self {
+        Self {
+            api_base_url: api_base_url.trim_end_matches('/').to_string(),
+            token: token.map(str::to_string),
+        }
+    }
+
+    fn required(api_base_url: &str, token: &str) -> Self {
+        Self::new(api_base_url, Some(token))
+    }
+
+    fn token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
+
+    fn release_by_tag(&self, repository: &str, tag: &str) -> Result<Option<Value>> {
+        validate_repo(repository)?;
+        let response = curl_json(
+            "GET",
+            &self.release_by_tag_url(repository, tag),
+            self.token(),
+            None,
+        )?;
+        if response.status == 404 {
+            return Ok(None);
+        }
+        if !(200..300).contains(&response.status) {
+            return Err(
+                format!("GitHub release fetch failed with HTTP {}", response.status).into(),
+            );
+        }
+        Ok(Some(serde_json::from_str(&response.body)?))
+    }
+
+    fn update_release_body(&self, repository: &str, tag: &str, notes: &str) -> Result<String> {
+        let release = self
+            .release_by_tag(repository, tag)?
+            .ok_or_else(|| format!("release {tag} not found"))?;
+        let id = release["id"]
+            .as_i64()
+            .ok_or("release response missing id")?;
+        let existing = release["body"].as_str().unwrap_or("");
+        let update = curl_json(
+            "PATCH",
+            &self.release_by_id_url(repository, id),
+            self.token(),
+            Some(&json!({ "body": compose_release_body(notes, existing) })),
+        )?;
+        if !(200..300).contains(&update.status) {
+            return Err(format!("GitHub release update failed with HTTP {}", update.status).into());
+        }
+        Ok(release["html_url"]
+            .as_str()
+            .unwrap_or(&format!(
+                "https://github.com/{repository}/releases/tag/{tag}"
+            ))
+            .to_string())
+    }
+
+    fn create_release(
+        &self,
+        repository: &str,
+        tag: &str,
+        target_commitish: &str,
+        body: &str,
+    ) -> Result<String> {
+        validate_repo(repository)?;
+        let response = curl_json(
+            "POST",
+            &format!("{}/repos/{repository}/releases", self.api_base_url),
+            self.token(),
+            Some(&json!({
+                "tag_name": tag,
+                "target_commitish": target_commitish,
+                "name": tag,
+                "body": body,
+                "draft": false,
+                "prerelease": false
+            })),
+        )?;
+        if !(200..300).contains(&response.status) {
+            return Err(format!(
+                "GitHub release creation failed with HTTP {}",
+                response.status
+            )
+            .into());
+        }
+        let value: Value = serde_json::from_str(&response.body)?;
+        Ok(value["html_url"].as_str().unwrap_or("").to_string())
+    }
+
+    fn closed_pull_requests(&self, repository: &str) -> Result<Vec<Value>> {
+        validate_repo(repository)?;
+        let response = curl_json(
+            "GET",
+            &format!(
+                "{}/repos/{repository}/pulls?state=closed&per_page=100",
+                self.api_base_url
+            ),
+            self.token(),
+            None,
+        )?;
+        if !(200..300).contains(&response.status) {
+            return Err(format!("GitHub PR fetch failed with HTTP {}", response.status).into());
+        }
+        Ok(serde_json::from_str(&response.body)?)
+    }
+
+    fn tree_paths(&self, repository: &str, branch: &str) -> Result<Vec<String>> {
+        let output = run_gh_ok(
+            vec![
+                "api".into(),
+                format!(
+                    "repos/{repository}/git/trees/{}?recursive=1",
+                    urlencoding::encode(branch)
+                ),
+                "--jq".into(),
+                "[.tree[].path]".into(),
+            ],
+            self.token(),
+        )?;
+        Ok(serde_json::from_str(&output)?)
+    }
+
+    fn tags(&self, repository: &str) -> Result<Vec<String>> {
+        let output = run_gh_ok(
+            vec![
+                "api".into(),
+                format!("repos/{repository}/tags?per_page=30"),
+                "--jq".into(),
+                "[.[].name]".into(),
+            ],
+            self.token(),
+        )?;
+        Ok(serde_json::from_str(&output)?)
+    }
+
+    fn workflow_texts(
+        &self,
+        repository: &str,
+        branch: &str,
+        workflows: &[String],
+    ) -> Vec<(String, String)> {
+        workflows
+            .iter()
+            .filter_map(|workflow| {
+                let output = run_gh_ok(
+                    vec![
+                        "api".into(),
+                        format!(
+                            "repos/{repository}/contents/.github/workflows/{}?ref={}",
+                            urlencoding::encode(workflow),
+                            urlencoding::encode(branch)
+                        ),
+                        "--header".into(),
+                        "Accept: application/vnd.github.raw".into(),
+                    ],
+                    self.token(),
+                )
+                .ok()?;
+                Some((workflow.clone(), output))
+            })
+            .collect()
+    }
+
+    fn branch_protection_status(&self, repository: &str, branch: &str) -> String {
+        let Some(token) = self.token() else {
+            return "unavailable: no GitHub token supplied".into();
+        };
+        let url = format!(
+            "{}/repos/{repository}/branches/{}/protection",
+            self.api_base_url,
+            urlencoding::encode(branch)
+        );
+        match curl_json("GET", &url, Some(token), None) {
+            Ok(response) if response.status == 200 => "protected".into(),
+            Ok(response) if response.status == 404 => "unprotected-or-unavailable".into(),
+            Ok(response) => format!("unavailable: HTTP {}", response.status),
+            Err(error) => format!("unavailable: {error}"),
+        }
+    }
+
+    fn secret_statuses(&self, repository: &str, required: &[&str]) -> Vec<FleetSecretStatus> {
+        let Some(token) = self.token() else {
+            return unavailable_secret_statuses(
+                required,
+                "secret metadata requires a GitHub token with repository access",
+            );
+        };
+        let response = match curl_json(
+            "GET",
+            &format!(
+                "{}/repos/{repository}/actions/secrets?per_page=100",
+                self.api_base_url
+            ),
+            Some(token),
+            None,
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                return unavailable_secret_statuses(
+                    required,
+                    &format!("secret metadata unavailable: {error}"),
+                );
+            }
+        };
+        if !(200..300).contains(&response.status) {
+            return unavailable_secret_statuses(
+                required,
+                &format!(
+                    "GitHub returned HTTP {} for secret metadata",
+                    response.status
+                ),
+            );
+        }
+        let value: Value = match serde_json::from_str(&response.body) {
+            Ok(value) => value,
+            Err(error) => {
+                return unavailable_secret_statuses(
+                    required,
+                    &format!("secret metadata parse failed: {error}"),
+                );
+            }
+        };
+        let names: BTreeSet<String> = value["secrets"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|secret| secret["name"].as_str())
+            .map(str::to_string)
+            .collect();
+        required
+            .iter()
+            .map(|name| FleetSecretStatus {
+                name: (*name).to_string(),
+                status: if names.contains(*name) {
+                    "present".into()
+                } else {
+                    "missing".into()
+                },
+                detail: if names.contains(*name) {
+                    "metadata only; value not read".into()
+                } else {
+                    "required secret name is absent from Actions secret metadata".into()
+                },
+            })
+            .collect()
+    }
+
+    fn find_failure_issues(&self, repository: &str, release_tag: &str) -> Result<Vec<Value>> {
+        validate_repo(repository)?;
+        let response = curl_json(
+            "GET",
+            &format!(
+                "{}/repos/{repository}/issues?state=open&labels=landfall,release-notes&per_page=100",
+                self.api_base_url
+            ),
+            self.token(),
+            None,
+        )?;
+        if !(200..300).contains(&response.status) {
+            return Err(format!("issue search failed with HTTP {}", response.status).into());
+        }
+        let issues: Vec<Value> = serde_json::from_str(&response.body)?;
+        let title = failure_issue_title(release_tag);
+        Ok(issues
+            .into_iter()
+            .filter(|issue| issue["title"].as_str() == Some(&title))
+            .collect())
+    }
+
+    fn create_failure_issue(&self, repository: &str, title: &str, body: &str) -> Result<()> {
+        let response = curl_json(
+            "POST",
+            &format!("{}/repos/{repository}/issues", self.api_base_url),
+            self.token(),
+            Some(&json!({"title": title, "body": body, "labels": ["landfall", "release-notes"]})),
+        )?;
+        if (200..300).contains(&response.status) {
+            Ok(())
+        } else {
+            Err(format!("issue creation failed with HTTP {}", response.status).into())
+        }
+    }
+
+    fn comment_issue(&self, repository: &str, number: i64, body: &str) -> Result<()> {
+        let _ = curl_json(
+            "POST",
+            &format!(
+                "{}/repos/{repository}/issues/{number}/comments",
+                self.api_base_url
+            ),
+            self.token(),
+            Some(&json!({"body": body})),
+        )?;
+        Ok(())
+    }
+
+    fn close_issue(&self, repository: &str, number: i64) -> Result<()> {
+        let _ = curl_json(
+            "PATCH",
+            &format!("{}/repos/{repository}/issues/{number}", self.api_base_url),
+            self.token(),
+            Some(&json!({"state": "closed"})),
+        )?;
+        Ok(())
+    }
+
+    fn release_by_tag_url(&self, repository: &str, tag: &str) -> String {
+        format!(
+            "{}/repos/{}/releases/tags/{}",
+            self.api_base_url,
+            repository,
+            urlencoding::encode(tag)
+        )
+    }
+
+    fn release_by_id_url(&self, repository: &str, id: i64) -> String {
+        format!("{}/repos/{repository}/releases/{id}", self.api_base_url)
+    }
 }
 
 fn healthcheck(args: HealthcheckArgs) -> Result<()> {
@@ -3353,35 +3553,22 @@ fn preflight_tags() -> Result<()> {
 }
 
 fn fetch_release_body(args: FetchReleaseBodyArgs) -> Result<()> {
-    validate_repo(&args.repository)?;
-    let url = github_release_url(&args.api_base_url, &args.repository, &args.release_tag);
-    let response = curl_json("GET", &url, Some(&args.github_token), None)?;
-    if response.status == 404 {
-        ensure_parent(&args.output_file)?;
-        fs::write(args.output_file, "")?;
-        return Ok(());
-    }
-    if !(200..300).contains(&response.status) {
-        return Err(format!("GitHub release fetch failed with HTTP {}", response.status).into());
-    }
-    let value: Value = serde_json::from_str(&response.body)?;
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    let value = provider.release_by_tag(&args.repository, &args.release_tag)?;
     ensure_parent(&args.output_file)?;
-    fs::write(args.output_file, value["body"].as_str().unwrap_or(""))?;
+    fs::write(
+        args.output_file,
+        value
+            .as_ref()
+            .and_then(|release| release["body"].as_str())
+            .unwrap_or(""),
+    )?;
     Ok(())
 }
 
 fn extract_prs(args: ExtractPrsArgs) -> Result<()> {
-    validate_repo(&args.repository)?;
-    let url = format!(
-        "{}/repos/{}/pulls?state=closed&per_page=100",
-        args.api_base_url.trim_end_matches('/'),
-        args.repository
-    );
-    let response = curl_json("GET", &url, Some(&args.github_token), None)?;
-    if !(200..300).contains(&response.status) {
-        return Err(format!("GitHub PR fetch failed with HTTP {}", response.status).into());
-    }
-    let prs: Vec<Value> = serde_json::from_str(&response.body)?;
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    let prs = provider.closed_pull_requests(&args.repository)?;
     let mut rendered = String::new();
     for pr in prs.iter().filter(|pr| !pr["merged_at"].is_null()) {
         let number = pr["number"].as_i64().unwrap_or_default();
@@ -4212,39 +4399,10 @@ fn normalize_quality(value: &str) -> String {
 }
 
 fn update_release(args: UpdateReleaseArgs) -> Result<()> {
-    validate_repo(&args.repository)?;
     let notes = read_nonempty(&args.notes_file)?;
-    let url = github_release_url(&args.api_base_url, &args.repository, &args.tag);
-    let response = curl_json("GET", &url, Some(&args.github_token), None)?;
-    if response.status == 404 {
-        return Err(format!("release {} not found", args.tag).into());
-    }
-    if !(200..300).contains(&response.status) {
-        return Err(format!("GitHub release fetch failed with HTTP {}", response.status).into());
-    }
-    let release: Value = serde_json::from_str(&response.body)?;
-    let id = release["id"]
-        .as_i64()
-        .ok_or("release response missing id")?;
-    let existing = release["body"].as_str().unwrap_or("");
-    let body = compose_release_body(&notes, existing);
-    let update_url = format!(
-        "{}/repos/{}/releases/{}",
-        args.api_base_url.trim_end_matches('/'),
-        args.repository,
-        id
-    );
-    let update = curl_json(
-        "PATCH",
-        &update_url,
-        Some(&args.github_token),
-        Some(&json!({ "body": body })),
-    )?;
-    if (200..300).contains(&update.status) {
-        Ok(())
-    } else {
-        Err(format!("GitHub release update failed with HTTP {}", update.status).into())
-    }
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    provider.update_release_body(&args.repository, &args.tag, &notes)?;
+    Ok(())
 }
 
 fn compose_release_body(notes: &str, existing: &str) -> String {
@@ -4460,6 +4618,68 @@ struct BackfillReleaseBodyUpdate {
     preview_sha256: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct RunEvidence {
+    provider: String,
+    generated_at: String,
+    repo_root: String,
+    repository: String,
+    release_tag: String,
+    version: String,
+    previous_tag: String,
+    source: String,
+    technical_changelog_sha256: String,
+    notes_sha256: String,
+    version_decision: RunVersionDecision,
+    artifacts: RunArtifactRecord,
+    publication: RunPublicationRecord,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunVersionDecision {
+    latest_tag: String,
+    bump: String,
+    commit_count: usize,
+    conventional_commit_count: usize,
+    range: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunArtifactRecord {
+    technical_changelog: String,
+    markdown: String,
+    plaintext: String,
+    html: String,
+    json: String,
+    rss: String,
+    evidence: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunPublicationRecord {
+    provider: String,
+    enabled: bool,
+    release_body_updated: bool,
+    release_url: String,
+    status: String,
+}
+
+#[derive(Clone, Debug)]
+struct RunReleaseContext {
+    release_tag: String,
+    previous_tag: String,
+    version: String,
+    decision: RunVersionDecision,
+    commits: Vec<RunCommit>,
+}
+
+#[derive(Clone, Debug)]
+struct RunCommit {
+    subject: String,
+    short_hash: String,
+    body: String,
+}
+
 #[derive(Clone, Debug)]
 struct BackfillTag {
     tag: String,
@@ -4481,6 +4701,450 @@ struct BackfillSource {
     source: String,
     notes: String,
     duplicate_changelog: bool,
+}
+
+fn run_pipeline(args: RunArgs) -> Result<()> {
+    let provider = args.provider.trim().to_ascii_lowercase();
+    if !matches!(provider.as_str(), "local" | "github") {
+        return Err(format!(
+            "unsupported provider '{provider}'; this build supports provider=local or provider=github"
+        )
+        .into());
+    }
+    if args.rss_max_entries == 0 {
+        return Err("--rss-max-entries must be positive".into());
+    }
+    fs::create_dir_all(args.repo_root.join(&args.output_dir))?;
+    let manifest =
+        load_manifest(&args.repo_root)?.unwrap_or_else(|| infer_manifest(&args.repo_root));
+    let repository = trimmed_option(&args.repository)
+        .or_else(|| {
+            args.repo_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "local".into());
+    let release = resolve_local_release(&args)?;
+    let technical_changelog = render_local_technical_changelog(&release);
+    let notes = if let Some(notes_file) =
+        run_output_path(&args.repo_root, &args.notes_file, &release.release_tag)
+    {
+        read_nonempty(&notes_file)?
+    } else {
+        render_local_public_notes(&manifest, &release)
+    };
+    let artifacts = write_run_artifacts(
+        &args,
+        &repository,
+        &release.release_tag,
+        &release_url_base(&args, &repository),
+        &technical_changelog,
+        &notes,
+    )?;
+    let publication =
+        publish_run_release_body(&args, &provider, &repository, &release.release_tag, &notes)?;
+    let evidence = RunEvidence {
+        provider,
+        generated_at: Utc::now().to_rfc3339(),
+        repo_root: args.repo_root.display().to_string(),
+        repository,
+        release_tag: release.release_tag.clone(),
+        version: release.version.clone(),
+        previous_tag: release.previous_tag.clone(),
+        source: "git_range".into(),
+        technical_changelog_sha256: sha256_hex(technical_changelog.as_bytes()),
+        notes_sha256: sha256_hex(notes.as_bytes()),
+        version_decision: release.decision,
+        artifacts,
+        publication,
+    };
+    let evidence_json = serde_json::to_string_pretty(&evidence)? + "\n";
+    let evidence_path = run_output_path(&args.repo_root, &args.evidence_file, &release.release_tag)
+        .ok_or("--evidence-file must not be empty")?;
+    ensure_parent(&evidence_path)?;
+    fs::write(&evidence_path, &evidence_json)?;
+    println!("{evidence_json}");
+    Ok(())
+}
+
+fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext> {
+    let tags = backfill_tags(&args.repo_root)?;
+    let latest_tag = tags.iter().rfind(|tag| !tag.prerelease).cloned();
+    let explicit_release_tag = trimmed_option(&args.release_tag);
+    let explicit_tag = explicit_release_tag.as_deref().and_then(backfill_parse_tag);
+    let previous_tag = trimmed_option(&args.previous_tag)
+        .or_else(|| {
+            explicit_tag
+                .as_ref()
+                .and_then(|tag| previous_backfill_tag(&tags, tag))
+        })
+        .or_else(|| latest_tag.as_ref().map(|tag| tag.tag.clone()))
+        .unwrap_or_default();
+    let target_ref = explicit_release_tag
+        .as_ref()
+        .filter(|tag| tags.iter().any(|existing| existing.tag == **tag))
+        .cloned()
+        .unwrap_or_else(|| "HEAD".into());
+    let commits = local_release_commits(&args.repo_root, previous_tag.as_str(), &target_ref)?;
+    let bump = decide_version_bump(&commits);
+    let release_tag =
+        explicit_release_tag.unwrap_or_else(|| next_release_tag(latest_tag.as_ref(), &bump));
+    let version = release_tag.trim_start_matches('v').to_string();
+    let range = if previous_tag.is_empty() {
+        target_ref
+    } else {
+        format!("{previous_tag}..{target_ref}")
+    };
+    let conventional_commit_count = commits
+        .iter()
+        .filter(|commit| conventional_commit_type(&commit.subject).is_some())
+        .count();
+    Ok(RunReleaseContext {
+        release_tag,
+        previous_tag,
+        version,
+        decision: RunVersionDecision {
+            latest_tag: latest_tag.map(|tag| tag.tag).unwrap_or_default(),
+            bump,
+            commit_count: commits.len(),
+            conventional_commit_count,
+            range,
+        },
+        commits,
+    })
+}
+
+fn local_release_commits(
+    repo_root: &Path,
+    previous_tag: &str,
+    target_ref: &str,
+) -> Result<Vec<RunCommit>> {
+    let range = if previous_tag.trim().is_empty() {
+        target_ref.to_string()
+    } else {
+        format!("{previous_tag}..{target_ref}")
+    };
+    let log = run_ok(
+        "git",
+        [
+            "log",
+            "--reverse",
+            "--format=%x1e%s%x1f%h%x1f%b",
+            range.as_str(),
+        ],
+        repo_root,
+    )?;
+    Ok(log
+        .split('\x1e')
+        .filter_map(|record| {
+            let record = record.trim_matches('\n');
+            if record.trim().is_empty() {
+                return None;
+            }
+            let mut parts = record.splitn(3, '\x1f');
+            Some(RunCommit {
+                subject: parts.next().unwrap_or("").trim().to_string(),
+                short_hash: parts.next().unwrap_or("").trim().to_string(),
+                body: parts.next().unwrap_or("").trim().to_string(),
+            })
+        })
+        .collect())
+}
+
+fn decide_version_bump(commits: &[RunCommit]) -> String {
+    if commits.iter().any(is_breaking_commit) {
+        "major".into()
+    } else if commits
+        .iter()
+        .any(|commit| conventional_commit_type(&commit.subject) == Some("feat"))
+    {
+        "minor".into()
+    } else if commits.iter().any(|commit| {
+        matches!(
+            conventional_commit_type(&commit.subject),
+            Some("fix" | "perf")
+        )
+    }) {
+        "patch".into()
+    } else if commits.is_empty() {
+        "none".into()
+    } else {
+        "patch".into()
+    }
+}
+
+fn conventional_commit_type(subject: &str) -> Option<&str> {
+    let subject = subject.trim();
+    let header = subject.split(':').next()?;
+    let header = header.strip_suffix('!').unwrap_or(header);
+    let header = header.split('(').next().unwrap_or(header);
+    if header
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch == '-')
+    {
+        Some(header)
+    } else {
+        None
+    }
+}
+
+fn is_breaking_commit(commit: &RunCommit) -> bool {
+    commit.subject.contains("!:")
+        || commit.subject.contains(")!:")
+        || commit.body.lines().any(|line| {
+            let line = line.trim();
+            line.starts_with("BREAKING CHANGE:") || line.starts_with("BREAKING-CHANGE:")
+        })
+}
+
+fn next_release_tag(latest: Option<&BackfillTag>, bump: &str) -> String {
+    let Some(latest) = latest else {
+        return match bump {
+            "major" => "v1.0.0".into(),
+            "minor" => "v0.1.0".into(),
+            "none" => "v0.0.0".into(),
+            _ => "v0.0.1".into(),
+        };
+    };
+    let (mut major, mut minor, mut patch) = latest.key;
+    match bump {
+        "major" => {
+            major += 1;
+            minor = 0;
+            patch = 0;
+        }
+        "minor" => {
+            minor += 1;
+            patch = 0;
+        }
+        "none" => {}
+        _ => {
+            patch += 1;
+        }
+    }
+    if latest.package.is_empty() {
+        format!("v{major}.{minor}.{patch}")
+    } else {
+        format!("{}@v{major}.{minor}.{patch}", latest.package)
+    }
+}
+
+fn render_local_technical_changelog(release: &RunReleaseContext) -> String {
+    let mut markdown = format!("## Technical Changelog {}\n\n", release.release_tag);
+    if release.commits.is_empty() {
+        markdown.push_str("- No commits were found in the selected release range.\n");
+    } else {
+        for commit in &release.commits {
+            markdown.push_str("- ");
+            markdown.push_str(&commit.display_line());
+            markdown.push('\n');
+        }
+    }
+    markdown
+}
+
+fn render_local_public_notes(manifest: &LandfallManifest, release: &RunReleaseContext) -> String {
+    let product = manifest
+        .product
+        .name
+        .as_deref()
+        .and_then(trimmed_option)
+        .unwrap_or_else(|| "This project".into());
+    let mut markdown = format!("## Improvements in {}\n\n", release.release_tag);
+    if release.commits.is_empty() {
+        markdown.push_str(&format!(
+            "- {product} has no user-visible commit entries in this release range.\n"
+        ));
+    } else {
+        for commit in &release.commits {
+            markdown.push_str("- ");
+            markdown.push_str(&humanize_commit_subject(&commit.subject));
+            markdown.push('\n');
+        }
+    }
+    markdown
+}
+
+impl RunCommit {
+    fn display_line(&self) -> String {
+        if self.short_hash.is_empty() {
+            self.subject.clone()
+        } else {
+            format!("{} ({})", self.subject, self.short_hash)
+        }
+    }
+}
+
+fn humanize_commit_subject(subject: &str) -> String {
+    let text = subject
+        .split_once(':')
+        .map(|(_, rest)| rest)
+        .unwrap_or(subject)
+        .trim();
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => subject.to_string(),
+    }
+}
+
+fn write_run_artifacts(
+    args: &RunArgs,
+    repository: &str,
+    release_tag: &str,
+    release_url_base: &str,
+    technical_changelog: &str,
+    notes: &str,
+) -> Result<RunArtifactRecord> {
+    let artifact = ReleaseNoteArtifact::from_markdown(release_tag, notes);
+    let technical = run_write_template_if_requested(
+        &args.repo_root,
+        &args.technical_changelog_file,
+        release_tag,
+        technical_changelog,
+    )?;
+    let markdown = run_write_template_if_requested(
+        &args.repo_root,
+        &args.output_file,
+        release_tag,
+        &artifact.notes,
+    )?;
+    let plaintext = run_write_template_if_requested(
+        &args.repo_root,
+        &args.output_text_file,
+        release_tag,
+        &artifact.plaintext,
+    )?;
+    let html = run_write_template_if_requested(
+        &args.repo_root,
+        &args.output_html_file,
+        release_tag,
+        &artifact.html,
+    )?;
+    let json_path = if args.output_json.trim().is_empty() {
+        PathBuf::new()
+    } else {
+        backfill_append_json(&args.repo_root, &args.output_json, &artifact)?
+    };
+    let rss_path = if args.rss_feed_file.trim().is_empty() {
+        PathBuf::new()
+    } else {
+        let path = args.repo_root.join(&args.rss_feed_file);
+        let existing = fs::read_to_string(&path).unwrap_or_default();
+        let mut items = parse_existing_feed_items(&existing);
+        items.retain(|item| item.guid != release_tag);
+        items.insert(
+            0,
+            FeedItem {
+                title: format!("{repository} {release_tag}"),
+                link: release_link(release_url_base, repository, release_tag),
+                guid: release_tag.to_string(),
+                description: artifact.html,
+                pub_date: Utc::now().to_rfc2822(),
+            },
+        );
+        items.truncate(args.rss_max_entries);
+        ensure_parent(&path)?;
+        fs::write(&path, render_feed(repository, release_url_base, &items))?;
+        path
+    };
+    let evidence =
+        run_output_path(&args.repo_root, &args.evidence_file, release_tag).unwrap_or_default();
+    Ok(RunArtifactRecord {
+        technical_changelog: technical.display().to_string(),
+        markdown: markdown.display().to_string(),
+        plaintext: plaintext.display().to_string(),
+        html: html.display().to_string(),
+        json: json_path.display().to_string(),
+        rss: rss_path.display().to_string(),
+        evidence: evidence.display().to_string(),
+    })
+}
+
+fn release_url_base(args: &RunArgs, repository: &str) -> String {
+    trimmed_option(&args.server_url)
+        .map(|url| format!("{}/{}", url.trim_end_matches('/'), repository))
+        .unwrap_or_else(|| default_release_url_base(repository))
+}
+
+fn release_link(base: &str, repository: &str, release_tag: &str) -> String {
+    if repository.contains('/') {
+        format!("{}/releases/tag/{release_tag}", base.trim_end_matches('/'))
+    } else {
+        format!("local://{repository}/releases/{release_tag}")
+    }
+}
+
+fn publish_run_release_body(
+    args: &RunArgs,
+    provider: &str,
+    repository: &str,
+    release_tag: &str,
+    notes: &str,
+) -> Result<RunPublicationRecord> {
+    if provider == "local" {
+        return Ok(RunPublicationRecord {
+            provider: provider.into(),
+            enabled: false,
+            release_body_updated: false,
+            release_url: format!("local://{repository}/releases/{release_tag}"),
+            status: "local provider does not mutate remote releases".into(),
+        });
+    }
+    let release_url = if repository.contains('/') {
+        format!("https://github.com/{repository}/releases/tag/{release_tag}")
+    } else {
+        String::new()
+    };
+    if !args.publish_release_body {
+        return Ok(RunPublicationRecord {
+            provider: provider.into(),
+            enabled: false,
+            release_body_updated: false,
+            release_url,
+            status: "release-body publication skipped".into(),
+        });
+    }
+    let token = trimmed_option(&args.github_token)
+        .or_else(|| {
+            env::var("GITHUB_TOKEN")
+                .ok()
+                .and_then(|value| trimmed_option(&value))
+        })
+        .or_else(|| {
+            env::var("GH_TOKEN")
+                .ok()
+                .and_then(|value| trimmed_option(&value))
+        })
+        .ok_or("--publish-release-body requires --github-token, GITHUB_TOKEN, or GH_TOKEN")?;
+    let gh_provider = GitHubProvider::required(&args.api_base_url, &token);
+    let release_url = gh_provider.update_release_body(repository, release_tag, notes)?;
+    Ok(RunPublicationRecord {
+        provider: provider.into(),
+        enabled: true,
+        release_body_updated: true,
+        release_url,
+        status: "updated".into(),
+    })
+}
+
+fn run_write_template_if_requested(
+    repo_root: &Path,
+    template: &str,
+    tag: &str,
+    content: &str,
+) -> Result<PathBuf> {
+    let Some(path) = run_output_path(repo_root, template, tag) else {
+        return Ok(PathBuf::new());
+    };
+    ensure_parent(&path)?;
+    fs::write(&path, content)?;
+    Ok(path)
+}
+
+fn run_output_path(repo_root: &Path, template: &str, tag: &str) -> Option<PathBuf> {
+    trimmed_option(template).map(|value| repo_root.join(value.replace("{version}", tag)))
 }
 
 fn backfill(args: BackfillArgs) -> Result<()> {
@@ -4726,31 +5390,23 @@ fn backfill_release_lookup(
             body: String::new(),
         });
     }
-    let response = curl_json(
-        "GET",
-        &github_release_url(api_base_url, repository, tag),
-        github_token,
-        None,
-    )?;
-    if (200..300).contains(&response.status) {
-        let value: Value = serde_json::from_str(&response.body)?;
-        Ok(BackfillReleaseLookup {
+    let provider = GitHubProvider::new(api_base_url, github_token);
+    match provider.release_by_tag(repository, tag) {
+        Ok(Some(value)) => Ok(BackfillReleaseLookup {
             status: "found".into(),
             id: value["id"].as_i64(),
             body: value["body"].as_str().unwrap_or("").to_string(),
-        })
-    } else if response.status == 404 {
-        Ok(BackfillReleaseLookup {
+        }),
+        Ok(None) => Ok(BackfillReleaseLookup {
             status: "missing".into(),
             id: None,
             body: String::new(),
-        })
-    } else {
-        Ok(BackfillReleaseLookup {
-            status: format!("unavailable: GitHub returned HTTP {}", response.status),
+        }),
+        Err(error) => Ok(BackfillReleaseLookup {
+            status: format!("unavailable: {error}"),
             id: None,
             body: String::new(),
-        })
+        }),
     }
 }
 
@@ -5017,7 +5673,10 @@ fn backfill_write_feed(args: &BackfillArgs, repository: &str, items: Vec<FeedIte
     }
     let path = args.repo_root.join(&args.rss_feed_file);
     ensure_parent(&path)?;
-    fs::write(path, render_feed(repository, &items))?;
+    fs::write(
+        path,
+        render_feed(repository, &default_release_url_base(repository), &items),
+    )?;
     Ok(())
 }
 
@@ -5204,7 +5863,11 @@ fn update_feed(args: UpdateFeedArgs) -> Result<()> {
     items.retain(|item| item.guid != new_item.guid);
     items.insert(0, new_item);
     items.truncate(args.max_entries);
-    let xml = render_feed(&args.repository, &items);
+    let xml = render_feed(
+        &args.repository,
+        &default_release_url_base(&args.repository),
+        &items,
+    );
     fs::write(path, xml)?;
     Ok(())
 }
@@ -5240,11 +5903,11 @@ fn xml_tag(block: &str, tag: &str) -> Option<String> {
     Some(re.captures(block)?.get(1)?.as_str().to_string())
 }
 
-fn render_feed(repository: &str, items: &[FeedItem]) -> String {
+fn render_feed(repository: &str, channel_link: &str, items: &[FeedItem]) -> String {
     let mut xml = format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n<channel>\n<title>{}</title>\n<link>https://github.com/{}</link>\n<description>Release notes for {}</description>\n<lastBuildDate>{}</lastBuildDate>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n<channel>\n<title>{}</title>\n<link>{}</link>\n<description>Release notes for {}</description>\n<lastBuildDate>{}</lastBuildDate>\n",
         xml_escape(repository),
-        xml_escape(repository),
+        xml_escape(channel_link),
         xml_escape(repository),
         Utc::now().to_rfc2822()
     );
@@ -5260,6 +5923,14 @@ fn render_feed(repository: &str, items: &[FeedItem]) -> String {
     }
     xml.push_str("</channel>\n</rss>\n");
     xml
+}
+
+fn default_release_url_base(repository: &str) -> String {
+    if repository.contains('/') {
+        format!("https://github.com/{repository}")
+    } else {
+        format!("local://{repository}/releases")
+    }
 }
 
 fn xml_escape(value: &str) -> String {
@@ -5353,53 +6024,26 @@ fn parse_major_tag(release_tag: &str) -> Option<String> {
 }
 
 fn close_resolved_failures(args: FailureLifecycleArgs) -> Result<()> {
-    let issues = find_failure_issues(
-        &args.github_token,
-        &args.api_base_url,
-        &args.repository,
-        &args.release_tag,
-    )?;
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    let issues = provider.find_failure_issues(&args.repository, &args.release_tag)?;
     for issue in issues {
         let number = issue["number"].as_i64().unwrap_or_default();
-        let comment_url = format!(
-            "{}/repos/{}/issues/{}/comments",
-            args.api_base_url.trim_end_matches('/'),
-            args.repository,
-            number
-        );
-        let _ = curl_json(
-            "POST",
-            &comment_url,
-            Some(&args.github_token),
-            Some(
-                &json!({"body": format!("Landfall synthesis recovered for {}.", args.release_tag)}),
-            ),
+        provider.comment_issue(
+            &args.repository,
+            number,
+            &format!("Landfall synthesis recovered for {}.", args.release_tag),
         )?;
-        let issue_url = format!(
-            "{}/repos/{}/issues/{}",
-            args.api_base_url.trim_end_matches('/'),
-            args.repository,
-            number
-        );
-        let _ = curl_json(
-            "PATCH",
-            &issue_url,
-            Some(&args.github_token),
-            Some(&json!({"state": "closed"})),
-        )?;
+        provider.close_issue(&args.repository, number)?;
     }
     Ok(())
 }
 
 fn report_synthesis_failure(args: ReportFailureArgs) -> Result<()> {
     validate_url(&args.workflow_run_url)?;
-    if !find_failure_issues(
-        &args.github_token,
-        &args.api_base_url,
-        &args.repository,
-        &args.release_tag,
-    )?
-    .is_empty()
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    if !provider
+        .find_failure_issues(&args.repository, &args.release_tag)?
+        .is_empty()
     {
         return Ok(());
     }
@@ -5412,46 +6056,7 @@ fn report_synthesis_failure(args: ReportFailureArgs) -> Result<()> {
         args.failure_stage,
         args.failure_message
     );
-    let url = format!(
-        "{}/repos/{}/issues",
-        args.api_base_url.trim_end_matches('/'),
-        args.repository
-    );
-    let response = curl_json(
-        "POST",
-        &url,
-        Some(&args.github_token),
-        Some(&json!({"title": title, "body": body, "labels": ["landfall", "release-notes"]})),
-    )?;
-    if (200..300).contains(&response.status) {
-        Ok(())
-    } else {
-        Err(format!("issue creation failed with HTTP {}", response.status).into())
-    }
-}
-
-fn find_failure_issues(
-    token: &str,
-    base: &str,
-    repository: &str,
-    release_tag: &str,
-) -> Result<Vec<Value>> {
-    validate_repo(repository)?;
-    let url = format!(
-        "{}/repos/{}/issues?state=open&labels=landfall,release-notes&per_page=100",
-        base.trim_end_matches('/'),
-        repository
-    );
-    let response = curl_json("GET", &url, Some(token), None)?;
-    if !(200..300).contains(&response.status) {
-        return Err(format!("issue search failed with HTTP {}", response.status).into());
-    }
-    let issues: Vec<Value> = serde_json::from_str(&response.body)?;
-    let title = failure_issue_title(release_tag);
-    Ok(issues
-        .into_iter()
-        .filter(|issue| issue["title"].as_str() == Some(&title))
-        .collect())
+    provider.create_failure_issue(&args.repository, &title, &body)
 }
 
 fn failure_issue_title(release_tag: &str) -> String {
@@ -5871,6 +6476,18 @@ fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_action_manifest_defaults_precedence,
     );
     map.insert(
+        "local_provider_run".to_string(),
+        scenario_local_provider_run,
+    );
+    map.insert(
+        "github_provider_run".to_string(),
+        scenario_github_provider_run,
+    );
+    map.insert(
+        "provider_run_parity".to_string(),
+        scenario_provider_run_parity,
+    );
+    map.insert(
         "fleet_adoption_planner".to_string(),
         scenario_fleet_adoption_planner,
     );
@@ -5921,6 +6538,9 @@ fn canonical_scenarios() -> Vec<&'static str> {
         "consumer_floating_tag_behavior",
         "consumer_full_mode_success",
         "fleet_adoption_planner",
+        "github_provider_run",
+        "local_provider_run",
+        "provider_run_parity",
         "manifest_defaults_and_overrides",
         "consumer_release_update_failure",
         "consumer_synthesis_only_success",
@@ -6301,7 +6921,21 @@ fn scenario_action_static_contract(_: &Path) -> Result<Value> {
     if !action.contains("dist/landfall") {
         return Err("action.yml does not invoke dist/landfall".into());
     }
-    Ok(json!({"checked": ["action.yml"]}))
+    if !action.contains("dist/landfall\" run")
+        || !action.contains("--provider github")
+        || !action.contains("--release-tag \"${RELEASE_TAG}\"")
+    {
+        return Err("action.yml does not invoke the provider-neutral run command".into());
+    }
+    if action.contains("dist/landfall\" update-release") {
+        return Err("action.yml still mutates GitHub releases through update-release".into());
+    }
+    if action.contains("dist/landfall\" write-artifacts")
+        || action.contains("dist/landfall\" update-feed")
+    {
+        return Err("action.yml still writes release artifacts outside the run command".into());
+    }
+    Ok(json!({"checked": ["action.yml", "provider-neutral run"]}))
 }
 
 fn scenario_action_manifest_defaults_precedence(tmp_root: &Path) -> Result<Value> {
@@ -6534,6 +7168,458 @@ fn scenario_consumer_full_mode_success(tmp_root: &Path) -> Result<Value> {
 
 fn scenario_consumer_synthesis_only_success(tmp_root: &Path) -> Result<Value> {
     consumer_success(tmp_root, "consumer-synthesis-only", false)
+}
+
+fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("local-provider-run");
+    init_fixture_repo(&repo, "v1.0.0")?;
+    fs::write(repo.join("feature.txt"), "portable release\n")?;
+    run_ok("git", ["add", "feature.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat(cli): add portable release run"],
+        &repo,
+    )?;
+    let result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "local-provider-run",
+            "--output-dir",
+            ".landfall/run",
+            "--technical-changelog-file",
+            ".landfall/run/technical.md",
+            "--evidence-file",
+            ".landfall/run/evidence.json",
+            "--output-file",
+            "docs/releases/{version}.md",
+            "--output-text-file",
+            "docs/releases/{version}.txt",
+            "--output-html-file",
+            "docs/releases/{version}.html",
+            "--output-json",
+            "docs/releases/releases.json",
+            "--rss-feed-file",
+            "docs/releases/feed.xml",
+        ])
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
+    if evidence["provider"] != "local" {
+        return Err("local provider evidence did not record provider=local".into());
+    }
+    if evidence["release_tag"] != "v1.1.0" {
+        return Err(format!(
+            "expected local run to compute v1.1.0, got {}",
+            evidence["release_tag"]
+        )
+        .into());
+    }
+    if evidence["version_decision"]["bump"] != "minor" {
+        return Err("local run did not classify feat commit as a minor bump".into());
+    }
+    let markdown = repo.join("docs/releases/v1.1.0.md");
+    let plaintext = repo.join("docs/releases/v1.1.0.txt");
+    let html = repo.join("docs/releases/v1.1.0.html");
+    let json_path = repo.join("docs/releases/releases.json");
+    let feed = repo.join("docs/releases/feed.xml");
+    for path in [&markdown, &plaintext, &html, &json_path, &feed] {
+        if !path.is_file() {
+            return Err(format!("local run did not write {}", path.display()).into());
+        }
+    }
+    let notes = fs::read_to_string(&markdown)?;
+    if !notes.contains("Add portable release run") {
+        return Err("local run release notes did not include the feature commit".into());
+    }
+    let technical = fs::read_to_string(repo.join(".landfall/run/technical.md"))?;
+    if !technical.contains("feat(cli): add portable release run") {
+        return Err("local run technical changelog did not include the raw commit".into());
+    }
+    run_ok("git", ["tag", "v1.1.0"], &repo)?;
+    fs::write(repo.join("after-release.txt"), "post release work\n")?;
+    run_ok("git", ["add", "after-release.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "fix(cli): post-release patch"],
+        &repo,
+    )?;
+    let tagged_result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "local-provider-run",
+            "--release-tag",
+            "v1.1.0",
+            "--output-dir",
+            ".landfall/tagged-run",
+            "--technical-changelog-file",
+            ".landfall/tagged-run/technical.md",
+            "--evidence-file",
+            ".landfall/tagged-run/evidence.json",
+            "--output-file",
+            "",
+            "--output-text-file",
+            "",
+            "--output-html-file",
+            "",
+            "--output-json",
+            "",
+            "--rss-feed-file",
+            "",
+        ])
+        .output()?;
+    if !tagged_result.status.success() {
+        return Err(String::from_utf8_lossy(&tagged_result.stderr)
+            .to_string()
+            .into());
+    }
+    let tagged_evidence_path = repo.join(".landfall/tagged-run/evidence.json");
+    let tagged_evidence: Value = serde_json::from_str(&fs::read_to_string(&tagged_evidence_path)?)?;
+    if tagged_evidence["version_decision"]["range"] != "v1.0.0..v1.1.0" {
+        return Err(format!(
+            "expected existing-tag run to end at v1.1.0, got {}",
+            tagged_evidence["version_decision"]["range"]
+        )
+        .into());
+    }
+    if tagged_evidence["version_decision"]["commit_count"] != 1 {
+        return Err("existing-tag run included commits outside the tagged range".into());
+    }
+    let tagged_technical = fs::read_to_string(repo.join(".landfall/tagged-run/technical.md"))?;
+    if tagged_technical.contains("post-release patch") {
+        return Err("existing-tag run included a post-release commit".into());
+    }
+    let breaking_repo = tmp_root.join("local-provider-breaking-footer");
+    init_fixture_repo(&breaking_repo, "v1.2.3")?;
+    fs::write(breaking_repo.join("api.txt"), "breaking api\n")?;
+    run_ok("git", ["add", "api.txt"], &breaking_repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(api): rename field",
+            "-m",
+            "BREAKING CHANGE: clients must migrate field names",
+        ],
+        &breaking_repo,
+    )?;
+    let breaking_result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            breaking_repo.to_str().unwrap(),
+            "--repository",
+            "local-provider-breaking-footer",
+            "--output-dir",
+            ".landfall/run",
+            "--technical-changelog-file",
+            ".landfall/run/technical.md",
+            "--evidence-file",
+            ".landfall/run/evidence.json",
+            "--output-file",
+            "",
+            "--output-text-file",
+            "",
+            "--output-html-file",
+            "",
+            "--output-json",
+            "",
+            "--rss-feed-file",
+            "",
+        ])
+        .output()?;
+    if !breaking_result.status.success() {
+        return Err(String::from_utf8_lossy(&breaking_result.stderr)
+            .to_string()
+            .into());
+    }
+    let breaking_evidence_path = breaking_repo.join(".landfall/run/evidence.json");
+    let breaking_evidence: Value =
+        serde_json::from_str(&fs::read_to_string(&breaking_evidence_path)?)?;
+    if breaking_evidence["version_decision"]["bump"] != "major"
+        || breaking_evidence["release_tag"] != "v2.0.0"
+    {
+        return Err("local run did not treat BREAKING CHANGE footer as a major bump".into());
+    }
+    Ok(json!({
+        "evidence": evidence,
+        "tagged_evidence": tagged_evidence,
+        "breaking_footer_evidence": breaking_evidence,
+        "stdout": String::from_utf8_lossy(&result.stdout).trim(),
+        "artifacts": {
+            "markdown": markdown,
+            "plaintext": plaintext,
+            "html": html,
+            "json": json_path,
+            "rss": feed,
+            "technical_changelog": repo.join(".landfall/run/technical.md"),
+            "evidence": evidence_path,
+        }
+    }))
+}
+
+fn scenario_github_provider_run(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("github-provider-run");
+    init_fixture_repo(&repo, "v1.0.0")?;
+    fs::write(repo.join("feature.txt"), "github provider release\n")?;
+    run_ok("git", ["add", "feature.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat(action): add provider run"],
+        &repo,
+    )?;
+    let mut fake = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.to_string(),
+        update_status: 200,
+        ..Default::default()
+    };
+    fake.releases.insert(
+        "v1.1.0".to_string(),
+        json!({"id": 11, "tag_name": "v1.1.0", "body": "## Technical\n\n- Existing release body", "html_url": "https://example.invalid/releases/v1.1.0"}),
+    );
+    let server = start_fake_server(fake)?;
+    let notes_file = repo.join("notes.md");
+    fs::write(
+        &notes_file,
+        "## Improvements in v1.1.0\n\n- Add provider run\n",
+    )?;
+    let result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "github",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "owner/repo",
+            "--release-tag",
+            "v1.1.0",
+            "--notes-file",
+            notes_file.to_str().unwrap(),
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+            "--publish-release-body",
+            "--output-dir",
+            ".landfall/run",
+            "--technical-changelog-file",
+            ".landfall/run/technical.md",
+            "--evidence-file",
+            ".landfall/run/evidence.json",
+            "--output-file",
+            "docs/releases/{version}.md",
+            "--output-json",
+            "docs/releases/releases.json",
+            "--rss-feed-file",
+            "",
+        ])
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
+    if evidence["provider"] != "github" {
+        return Err("github provider evidence did not record provider=github".into());
+    }
+    if evidence["publication"]["release_body_updated"] != true {
+        return Err("github provider did not report release-body update".into());
+    }
+    let state = server.state.lock().unwrap();
+    let body = state.releases["v1.1.0"]["body"].as_str().unwrap_or("");
+    if !body.contains("## What's New") || !body.contains("Add provider run") {
+        return Err("github provider did not update the fake release body with run notes".into());
+    }
+    Ok(json!({
+        "evidence": evidence,
+        "release_body": body,
+        "requests": state.requests,
+        "artifacts": {
+            "markdown": repo.join("docs/releases/v1.1.0.md"),
+            "json": repo.join("docs/releases/releases.json"),
+            "technical_changelog": repo.join(".landfall/run/technical.md"),
+            "evidence": evidence_path,
+        }
+    }))
+}
+
+fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("provider-run-parity");
+    init_fixture_repo(&repo, "v1.0.0")?;
+    fs::write(repo.join("feature.txt"), "provider parity\n")?;
+    run_ok("git", ["add", "feature.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat(release): add provider parity"],
+        &repo,
+    )?;
+
+    let local = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "provider-run-parity",
+            "--output-dir",
+            ".landfall/local",
+            "--technical-changelog-file",
+            ".landfall/local/technical.md",
+            "--evidence-file",
+            ".landfall/local/evidence.json",
+            "--output-file",
+            "docs/local/{version}.md",
+            "--output-text-file",
+            "docs/local/{version}.txt",
+            "--output-html-file",
+            "docs/local/{version}.html",
+            "--output-json",
+            "docs/local/releases.json",
+            "--rss-feed-file",
+            "docs/local/feed.xml",
+        ])
+        .output()?;
+    if !local.status.success() {
+        return Err(String::from_utf8_lossy(&local.stderr).to_string().into());
+    }
+    let local_evidence_path = repo.join(".landfall/local/evidence.json");
+    let local_evidence: Value = serde_json::from_str(&fs::read_to_string(&local_evidence_path)?)?;
+    if local_evidence["provider"] != "local" || local_evidence["release_tag"] != "v1.1.0" {
+        return Err("provider parity local run did not produce v1.1.0 local evidence".into());
+    }
+    for path in [
+        repo.join("docs/local/v1.1.0.md"),
+        repo.join("docs/local/v1.1.0.txt"),
+        repo.join("docs/local/v1.1.0.html"),
+        repo.join("docs/local/releases.json"),
+        repo.join("docs/local/feed.xml"),
+    ] {
+        if !path.is_file() {
+            return Err(
+                format!("provider parity local run did not write {}", path.display()).into(),
+            );
+        }
+    }
+
+    let mut fake = FakeState {
+        llm_status: 200,
+        llm_notes: VALID_NOTES.to_string(),
+        update_status: 200,
+        ..Default::default()
+    };
+    fake.releases.insert(
+        "v1.1.0".to_string(),
+        json!({"id": 22, "tag_name": "v1.1.0", "body": "## Technical\n\n- Existing", "html_url": "https://example.invalid/releases/v1.1.0"}),
+    );
+    let server = start_fake_server(fake)?;
+    let local_notes = repo.join("docs/local/v1.1.0.md");
+    let github = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "github",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "owner/repo",
+            "--release-tag",
+            "v1.1.0",
+            "--server-url",
+            "https://github.enterprise.invalid",
+            "--notes-file",
+            local_notes.to_str().unwrap(),
+            "--github-token",
+            "token",
+            "--api-base-url",
+            &server.url,
+            "--publish-release-body",
+            "--output-dir",
+            ".landfall/github",
+            "--technical-changelog-file",
+            ".landfall/github/technical.md",
+            "--evidence-file",
+            ".landfall/github/evidence.json",
+            "--output-file",
+            "docs/github/{version}.md",
+            "--output-text-file",
+            "docs/github/{version}.txt",
+            "--output-html-file",
+            "docs/github/{version}.html",
+            "--output-json",
+            "docs/github/releases.json",
+            "--rss-feed-file",
+            "docs/github/feed.xml",
+        ])
+        .output()?;
+    if !github.status.success() {
+        return Err(String::from_utf8_lossy(&github.stderr).to_string().into());
+    }
+    let github_evidence_path = repo.join(".landfall/github/evidence.json");
+    let github_evidence: Value = serde_json::from_str(&fs::read_to_string(&github_evidence_path)?)?;
+    if github_evidence["provider"] != "github"
+        || github_evidence["release_tag"] != local_evidence["release_tag"]
+        || github_evidence["publication"]["release_body_updated"] != true
+    {
+        return Err("provider parity github run did not publish the same fixture release".into());
+    }
+    for path in [
+        repo.join("docs/github/v1.1.0.md"),
+        repo.join("docs/github/v1.1.0.txt"),
+        repo.join("docs/github/v1.1.0.html"),
+        repo.join("docs/github/releases.json"),
+        repo.join("docs/github/feed.xml"),
+    ] {
+        if !path.is_file() {
+            return Err(format!(
+                "provider parity github run did not write {}",
+                path.display()
+            )
+            .into());
+        }
+    }
+    let github_feed = fs::read_to_string(repo.join("docs/github/feed.xml"))?;
+    if !github_feed.contains("<link>https://github.enterprise.invalid/owner/repo</link>") {
+        return Err(
+            "provider parity github feed channel did not use the configured GitHub server URL"
+                .into(),
+        );
+    }
+    if !github_feed.contains("https://github.enterprise.invalid/owner/repo/releases/tag/v1.1.0") {
+        return Err(
+            "provider parity github feed did not use the configured GitHub server URL".into(),
+        );
+    }
+    let state = server.state.lock().unwrap();
+    let body = state.releases["v1.1.0"]["body"].as_str().unwrap_or("");
+    if !body.contains("Add provider parity") {
+        return Err("provider parity github release body did not use local notes".into());
+    }
+    Ok(json!({
+        "local_evidence": local_evidence,
+        "github_evidence": github_evidence,
+        "release_body": body,
+        "requests": state.requests,
+    }))
 }
 
 fn consumer_success(tmp_root: &Path, name: &str, write_artifact: bool) -> Result<Value> {
@@ -7917,6 +9003,52 @@ mod tests {
             "https://example.com"
         );
         assert!(artifact.json_entry()["sections"].is_array());
+    }
+
+    #[test]
+    fn local_provider_version_decision_uses_conventional_commits() {
+        let latest = BackfillTag {
+            tag: "v1.2.3".into(),
+            version: "1.2.3".into(),
+            key: (1, 2, 3),
+            package: String::new(),
+            prerelease: false,
+        };
+        assert_eq!(
+            decide_version_bump(&[RunCommit {
+                subject: "feat(cli): add local run".into(),
+                short_hash: String::new(),
+                body: String::new(),
+            }]),
+            "minor"
+        );
+        assert_eq!(
+            decide_version_bump(&[RunCommit {
+                subject: "fix(action): patch output".into(),
+                short_hash: String::new(),
+                body: String::new(),
+            }]),
+            "patch"
+        );
+        assert_eq!(
+            decide_version_bump(&[RunCommit {
+                subject: "feat(api)!: change provider contract".into(),
+                short_hash: String::new(),
+                body: String::new(),
+            }]),
+            "major"
+        );
+        assert_eq!(
+            decide_version_bump(&[RunCommit {
+                subject: "feat(api): rename field".into(),
+                short_hash: String::new(),
+                body: "BREAKING CHANGE: clients must migrate field names".into(),
+            }]),
+            "major"
+        );
+        assert_eq!(next_release_tag(Some(&latest), "minor"), "v1.3.0");
+        assert_eq!(next_release_tag(Some(&latest), "patch"), "v1.2.4");
+        assert_eq!(next_release_tag(Some(&latest), "major"), "v2.0.0");
     }
 
     #[test]

@@ -65,6 +65,48 @@ jobs:
 
 Landfall is language-agnostic. Your repo does not need `package.json` or Node.js — the action handles its own runtime setup. Any project using conventional commits works.
 
+## Local Or Generic CI Pipeline
+
+The GitHub Action is optional. A shell script, GitLab CI job, Forgejo workflow,
+Buildkite step, or agent can run the Rust runtime directly from a checkout and
+produce release evidence without a GitHub token:
+
+```bash
+cargo run --locked -p landfall -- run \
+  --provider local \
+  --repo-root . \
+  --output-dir .landfall/run \
+  --output-file docs/releases/{version}.md \
+  --output-json docs/releases/releases.json \
+  --rss-feed-file docs/releases/feed.xml
+```
+
+`run --provider local` reads local git tags and conventional commits, chooses
+the semantic-version bump when `--release-tag` is omitted, generates a
+technical changelog from the git range, writes public release-note artifacts,
+updates the optional RSS feed, and emits a machine-readable evidence packet.
+It does not call GitHub, require `GH_RELEASE_TOKEN`, or mutate a remote release.
+Use this mode when another trigger or pipeline owns publishing, or when an
+agent needs a zero-secret preview before deciding how to publish.
+
+For pipelines that still want Landfall to update a GitHub Release, use the same
+command with the GitHub provider and make publication explicit:
+
+```bash
+cargo run --locked -p landfall -- run \
+  --provider github \
+  --repo-root . \
+  --repository owner/repo \
+  --release-tag v1.2.3 \
+  --notes-file /tmp/landfall-notes.md \
+  --github-token "$GH_RELEASE_TOKEN" \
+  --publish-release-body
+```
+
+Without `--publish-release-body`, `--provider github` writes the same local
+evidence and artifacts without mutating the remote release. Omit
+`--notes-file` to let Landfall generate notes from the local git range.
+
 ## Adoption Dry Run
 
 Before wiring a release workflow, run Landfall's setup analyzer from a checkout:

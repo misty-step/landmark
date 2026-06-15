@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Landfall 013 Pipeline-Neutral Delivery Plan</title>
+  <style>
+    :root {
+      --bg: #111318;
+      --panel: #191d25;
+      --panel-2: #202633;
+      --text: #eef2f8;
+      --muted: #9aa6b8;
+      --accent: #76d1c4;
+      --warn: #f1b76a;
+      --risk: #ee7d7d;
+      --line: #303849;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+    header, .grid, .map, .phase, .review-strip { display: grid; gap: 14px; }
+    header { grid-template-columns: 2fr 1fr; align-items: start; }
+    .grid { grid-template-columns: repeat(12, 1fr); }
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .panel, .meta {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .map { grid-template-columns: repeat(3, 1fr); }
+    .phase { grid-template-columns: 120px 1fr 1fr; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+    .review-strip { grid-template-columns: repeat(3, 1fr); }
+    .chip {
+      display: inline-block;
+      margin: 0 6px 8px 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+    h1 { margin: 0 0 10px; font-size: 34px; line-height: 1.1; letter-spacing: 0; }
+    h2 { margin: 0 0 8px; font-size: 16px; letter-spacing: 0; }
+    h3 { margin: 0 0 6px; font-size: 14px; letter-spacing: 0; }
+    p, ul { margin-top: 0; }
+    .lede { color: var(--muted); font-size: 16px; }
+    .callout { border-color: var(--accent); }
+    .warn { border-color: var(--warn); }
+    .risk { border-color: var(--risk); }
+    code { background: #0d1016; padding: 2px 5px; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    a { color: var(--accent); }
+    @media (max-width: 860px) {
+      header, .map, .phase, .review-strip { grid-template-columns: 1fr; }
+      .span-4, .span-6, .span-8, .span-12 { grid-column: span 12; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <section>
+      <p class="eyebrow">Plan review</p>
+      <h1>Deliver 013: Pipeline-Neutral Landfall</h1>
+      <p class="lede">Make GitHub one provider path by adding a local, tokenless
+        release run that uses the same Rust runtime and replay evidence model as
+        the GitHub Action.</p>
+    </section>
+    <aside class="meta" aria-label="Plan metadata">
+      <span class="chip">Status: execution plan</span>
+      <span class="chip">Owner: Codex</span>
+      <span class="chip">Updated: 2026-06-15</span>
+      <span class="chip">Premise: backlog.d/013</span>
+    </aside>
+  </header>
+
+  <section class="grid" aria-label="Executive summary">
+    <article class="panel callout span-4">
+      <h2>Recommendation</h2>
+      <p>Add a provider-neutral <code>run</code> command with
+        <code>--provider local</code> as the first concrete provider. It should
+        read git tags/CHANGELOG/manifest, compute a release evidence packet,
+        write markdown/plaintext/HTML/JSON/RSS artifacts, and avoid GitHub
+        tokens entirely.</p>
+    </article>
+    <article class="panel span-4">
+      <h2>Definition Of Done</h2>
+      <ul>
+        <li><code>landfall run --provider local</code> produces release evidence and artifacts from a disposable git repo.</li>
+        <li>Replay has a canonical local-provider scenario.</li>
+        <li>README and backlog explain the non-GitHub path.</li>
+        <li>PR is reviewed, green, squash-merged, and master is monitored.</li>
+      </ul>
+    </article>
+    <article class="panel warn span-4">
+      <h2>Stop Conditions</h2>
+      <ul>
+        <li>Need to replace semantic-release entirely in this ticket.</li>
+        <li>Need GitHub or external LLM credentials to prove local mode.</li>
+        <li>Replay cannot exercise the new command locally.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="panel span-12" aria-label="Visual map" style="margin-top: 14px;">
+    <h2>Visual Map</h2>
+    <div class="map">
+      <div>
+        <h3>Current State</h3>
+        <p>Backfill can derive notes from git ranges and write artifacts, but
+          normal release orchestration is centered on <code>action.yml</code>
+          and GitHub release mutation.</p>
+      </div>
+      <div>
+        <h3>Change Shape</h3>
+        <p>Promote the git-range source and artifact writing into
+          <code>run --provider local</code>; keep GitHub full mode intact.</p>
+      </div>
+      <div>
+        <h3>Proof Surface</h3>
+        <p><code>cargo test --locked</code>, <code>landfall replay-action --scenario local_provider_run</code>,
+          <code>bin/gate</code>, fresh reviewer, PR checks, post-merge runs.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid" aria-label="Scope and anchors" style="margin-top: 14px;">
+    <article class="panel span-6">
+      <h2>Scope</h2>
+      <ul>
+        <li>Goal: tokenless local release pipeline with evidence.</li>
+        <li>Non-goal: complete GitLab/Forgejo adapters in this ticket.</li>
+        <li>Invariant: existing GitHub Action behavior and outputs survive.</li>
+      </ul>
+    </article>
+    <article class="panel span-6">
+      <h2>Repo Anchors</h2>
+      <ul>
+        <li><code>crates/landfall/src/main.rs</code> - CLI, backfill source, replay harness.</li>
+        <li><code>README.md</code> - public integration contract.</li>
+        <li><code>backlog.d/013-make-landfall-pipeline-neutral.md</code> - acceptance oracle.</li>
+        <li><code>bin/gate</code> - release verification loop.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="panel" style="margin-top: 14px;">
+    <h2>Execution Plan</h2>
+    <div class="phase">
+      <strong>Phase 1</strong>
+      <div>
+        <h3>Docs and red test</h3>
+        <p>Document local/generic pipeline use, add replay scenario and focused
+          tests that fail until <code>run --provider local</code> exists.</p>
+      </div>
+      <div><h3>Evidence</h3><p><code>cargo test --locked local_provider_run</code> red then green.</p></div>
+    </div>
+    <div class="phase">
+      <strong>Phase 2</strong>
+      <div>
+        <h3>Implement local provider run</h3>
+        <p>Add command args, evidence structs, git/tag source selection, artifact
+          writing, and replay scenario. Reuse existing parsing/rendering helpers.</p>
+      </div>
+      <div><h3>Evidence</h3><p><code>cargo run --locked -- run --provider local ...</code> writes JSON, markdown, RSS.</p></div>
+    </div>
+    <div class="phase">
+      <strong>Phase 3</strong>
+      <div>
+        <h3>Refactor, review, land</h3>
+        <p>Tighten helper seams, run gate, get fresh-context review, fix findings,
+          push PR, squash merge, monitor master workflows.</p>
+      </div>
+      <div><h3>Evidence</h3><p><code>bin/gate</code>, PR checks, review verdict, <code>git status</code>, remote sync.</p></div>
+    </div>
+  </section>
+
+  <section class="grid" aria-label="Decision tables" style="margin-top: 14px;">
+    <article class="panel span-8">
+      <h2>Alternatives</h2>
+      <table>
+        <thead><tr><th>Option</th><th>Why It Helps</th><th>Failure Mode</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>Local provider tracer</td><td>Proves GitHub-free execution now.</td><td>Could under-deliver adapter extraction.</td><td>Choose.</td></tr>
+          <tr><td>Full provider trait rewrite</td><td>Cleaner long-term architecture.</td><td>Large blast radius before proof.</td><td>Defer after tracer.</td></tr>
+          <tr><td>Docs-only generic CI example</td><td>Fast.</td><td>Does not make runtime portable.</td><td>Reject.</td></tr>
+        </tbody>
+      </table>
+    </article>
+    <article class="panel risk span-4">
+      <h2>Risks</h2>
+      <table>
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Duplicate backfill logic.</td><td>Reuse source/artifact helpers where possible.</td></tr>
+          <tr><td>Existing action drift.</td><td>Run full replay and action contract checks.</td></tr>
+          <tr><td>Evidence too vague.</td><td>Write a structured run evidence JSON file.</td></tr>
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <section class="panel" style="margin-top: 14px;">
+    <h2>Review Focus</h2>
+    <div class="review-strip">
+      <div><h3>Operator Question</h3><p>Is local provider first the right proof before GitLab/Forgejo adapters?</p></div>
+      <div><h3>Agent Self-Check</h3><p>Does the new command run with no GitHub token and leave a durable evidence packet?</p></div>
+      <div><h3>Fresh Critic Prompt</h3><p>What production or downstream integration claim does this change make but fail to prove?</p></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
