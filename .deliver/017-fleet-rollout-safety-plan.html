@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Landfall 017 Fleet Rollout Safety Plan</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #172018; background: #f8f8f3; }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 56px; }
+    h1 { font-size: 34px; margin: 0 0 8px; }
+    h2 { font-size: 20px; margin: 26px 0 10px; }
+    p, li { line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .panel { border: 1px solid #d0d9c7; background: white; border-radius: 8px; padding: 18px; }
+    table { width: 100%; border-collapse: collapse; background: white; border: 1px solid #d0d9c7; }
+    th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #dfe5d9; padding: 10px; }
+    th { background: #edf2e8; }
+    code { background: #eef2e9; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Ticket 017: Fleet Rollout Safety</h1>
+  <p>Make fleet adoption decide what each repo is, what mode it should use, what secrets are actually needed, and what evidence must exist before rollout continues.</p>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Assumptions</h2>
+      <ul>
+        <li>Remote PR creation must stay guarded and auditable; no implicit mutation from a planning command.</li>
+        <li>Classification should be explicit in scan and plan artifacts so operators can override bad inferences.</li>
+        <li>Secret readiness should depend on mode. Local and generic CI adoption should not be blocked by GitHub Action secrets.</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Evidence</h2>
+      <ul>
+        <li><code>fleet_adoption_planner</code> replay proves classification, integration modes, secret minimization, receipts, and dashboards.</li>
+        <li>Schema and README contracts name new fields and refusal rules.</li>
+        <li><code>bin/gate</code>, adversarial review, hosted parity, and post-merge checks close the ticket.</li>
+      </ul>
+    </section>
+  </div>
+
+  <h2>Implementation Slices</h2>
+  <table>
+    <thead><tr><th>Slice</th><th>Change</th><th>Oracle</th></tr></thead>
+    <tbody>
+      <tr><td>Classification</td><td>Add repo kind and release surface to fleet scan/plan.</td><td>Replay fixture distinguishes applications, libraries, infrastructure, experiments, archived repos, and no-release repos.</td></tr>
+      <tr><td>Modes</td><td>Add explicit integration mode and rationale: local, generic CI, GitHub full, GitHub synthesis-only, manifest-only, backfill-first.</td><td>Plan JSON and dashboard expose mode rationale per repository.</td></tr>
+      <tr><td>Secrets</td><td>Compute required secrets per integration mode, not globally.</td><td>Local/generic/backfill/manifest paths have no required GitHub Action secret blocker.</td></tr>
+      <tr><td>Rollout receipts</td><td>Extend <code>fleet open-prs</code> output with branch, commit message, disposition, rollback command, and monitoring status.</td><td>Dry-run and guarded non-dry-run paths emit the same receipt shape and refuse risky repos.</td></tr>
+      <tr><td>Docs</td><td>Update fleet README and dogfood report with the operational workflow.</td><td>Contract and replay catch stale fleet prose.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

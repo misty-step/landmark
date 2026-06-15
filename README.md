@@ -229,18 +229,27 @@ The default scan uses bounded concurrency and avoids expensive per-repo secret
 and branch-protection probes; pass `--deep-checks` for a smaller owner slice
 when you want GitHub to verify branch protection and Actions secret names.
 
-`fleet plan` ranks each repository into an adoption lane: `full`,
-`synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, or `skipped`.
-It writes `.landfall/fleet-plan/plan.json` and a Markdown operator dashboard
-with risk flags, missing secrets, skip reasons, and migration notes. Missing
-required secrets or unavailable required secret metadata block rollout readiness
-until the operator verifies the repository can run Landfall safely.
+`fleet plan` classifies each repository by kind and release surface, including
+`non-release` repositories that should not publish release artifacts, then ranks
+it into an integration mode: `local`, `generic-ci`, `github-full`,
+`github-synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, or
+`skipped`. It writes `.landfall/fleet-plan/plan.json` and a Markdown operator
+dashboard with repository kind, release surface, integration rationale, risk
+flags, required secret names, missing secrets, skip reasons, and migration
+notes. GitHub secrets are required only for GitHub integration modes; local,
+generic CI, manifest-only, backfill-first, and skipped non-release plans avoid
+secret blockers.
 
-`fleet open-prs --dry-run` renders the exact `.landfall.yml` and
-`.github/workflows/landfall-release.yml` files Landfall would propose for each
-eligible repository under `.landfall/fleet-plan/prs/`. It refuses to mutate
-remote repositories unless a future implementation explicitly adds a non-dry-run
-path.
+`fleet open-prs --dry-run` renders the exact `.landfall.yml`, optional
+`.github/workflows/landfall-release.yml`, `diff.md`, and `open-prs.json`
+receipt Landfall would propose for each eligible repository under
+`.landfall/fleet-plan/prs/`. Local, generic CI, backfill-first, and
+manifest-only modes do not get a GitHub release workflow. Confirmed rollout
+requires `--confirm-remote --max-prs 1`; the receipt records branch names,
+commit messages, rollback/disposition guidance, evidence directories, and an
+`APPLY.md` packet with the remote branch, commit, PR, rollback, and monitoring
+commands. Operators merge one downstream PR, watch its release run, then
+continue the fleet rollout deliberately.
 
 ## Product Manifest
 
