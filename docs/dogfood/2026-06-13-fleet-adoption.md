@@ -41,6 +41,25 @@ target/debug/landfall fleet open-prs --dry-run --plan-dir .landfall/dogfood/flee
   replayed the exact no-release path that previously failed and completed
   successfully.
 
+## 2026-06-15 Rollout-Safety Update
+
+- `fleet scan` and `fleet plan` now carry `repository_kind`,
+  `release_surface`, `integration_mode`, `integration_rationale`, and
+  mode-scoped `required_secrets`.
+- Fleet planning now distinguishes applications, libraries, infrastructure,
+  archived repositories, experiments, non-release repositories,
+  already-adopted repositories, and no-release-tool repositories before
+  recommending rollout.
+- Fleet modes now include `local`, `generic-ci`, `github-full`,
+  `github-synthesis-only`, `manifest-only`, and `backfill-first`. GitHub secret
+  blockers apply only to GitHub integration modes.
+- `fleet open-prs` now records branch names, commit messages, rollback guidance,
+  disposition, evidence directory, and monitoring status in `open-prs.json`.
+  Confirmed rollout requires `--confirm-remote --max-prs 1` and writes an
+  `APPLY.md` packet for the one repository being advanced.
+- Local, generic CI, backfill-first, and manifest-only plans render manifests
+  and receipts without adding GitHub release workflows.
+
 ## Findings
 
 ### LF-DOGFOOD-001: default scan produces a fully blocked plan
@@ -77,6 +96,10 @@ Category: classification
 Evidence: fleet scan included configs, docs, splash pages, and other non-application repos in the 75 active repositories.
 Impact: full rollout needs a repo-type/app classifier before safe bulk secret provisioning or PR creation.
 Action: captured in `skills/landfall-dogfood`; product follow-up should add app classification and allow/deny controls to fleet planning.
+Status 2026-06-15: addressed for first-pass rollout by repository kind,
+release-surface classification, explicit integration modes, and dogfood skill
+updates. Allow/deny controls remain a future ergonomics improvement, not a
+safe-rollout blocker.
 
 ### LF-DOGFOOD-006: generated manifests are generic
 Severity: medium
@@ -135,6 +158,10 @@ Action: add a hardening ticket to test Landfall and generated workflows with `FO
 
 1. Add Node 24 workflow-runtime verification before GitHub switches hosted actions to Node 24 by default on 2026-06-16.
 2. Add a Landfall fix so synthesis-only/manual-tag setup generates exactly one trigger, avoiding duplicate LLM spend.
-3. Add fleet app classification before attempting bulk adoption across the remaining 73 repositories.
-4. Provision `GH_RELEASE_TOKEN` and `OPENROUTER_API_KEY` only after narrowing the target set to real applications.
-5. Keep using real downstream release runs as the acceptance oracle for Landfall action changes; local CLI tests are necessary but not sufficient.
+3. Run the updated fleet plan against the active repositories, then choose a
+   small first wave by `integration_mode` and repository kind.
+4. Provision `GH_RELEASE_TOKEN` and `OPENROUTER_API_KEY` only for repositories
+   intentionally entering `github-full` or `github-synthesis-only` mode.
+5. Merge one downstream PR at a time, monitor the release run or generic CI
+   artifact path named in `open-prs.json`, then continue the rollout.
+6. Keep using real downstream release runs as the acceptance oracle for Landfall action changes; local CLI tests are necessary but not sufficient.

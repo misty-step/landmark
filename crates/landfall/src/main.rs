@@ -586,6 +586,8 @@ struct FleetOpenPrsArgs {
     output_dir: PathBuf,
     #[arg(long = "dry-run")]
     dry_run: bool,
+    #[arg(long = "confirm-remote")]
+    confirm_remote: bool,
     #[arg(long = "max-prs", default_value_t = 0)]
     max_prs: usize,
     #[arg(long = "format", default_value = "text")]
@@ -2067,6 +2069,10 @@ struct FleetRepository {
     owner: String,
     name: String,
     name_with_owner: String,
+    #[serde(default)]
+    repository_kind: String,
+    #[serde(default)]
+    release_surface: String,
     private: bool,
     archived: bool,
     pushed_at: String,
@@ -2100,13 +2106,18 @@ struct FleetPlan {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct FleetRepositoryPlan {
     repository: String,
+    repository_kind: String,
+    release_surface: String,
     rank: u64,
     default_branch: String,
     recommended_mode: String,
+    integration_mode: String,
+    integration_rationale: Vec<String>,
     workflow: String,
     status: String,
     skip_reason: String,
     risk_flags: Vec<String>,
+    required_secrets: Vec<String>,
     missing_secrets: Vec<String>,
     unavailable_secret_metadata: Vec<String>,
     migration_notes: Vec<String>,
@@ -2125,9 +2136,14 @@ struct FleetRepositoryPrPlan {
     repository: String,
     branch: String,
     title: String,
+    commit_message: String,
     files: Vec<String>,
     skipped: bool,
     reason: String,
+    disposition: String,
+    rollback: String,
+    monitor_status: String,
+    evidence_dir: String,
 }
 
 fn setup(args: SetupArgs) -> Result<()> {
@@ -2285,9 +2301,15 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
     if !matches!(args.format.as_str(), "text" | "json") {
         return Err("--format must be text or json".into());
     }
-    if !args.dry_run {
+    if !args.dry_run && !args.confirm_remote {
         return Err(
-            "fleet open-prs currently requires --dry-run; refusing to mutate remote repositories"
+            "fleet open-prs non-dry-run requires --confirm-remote; refusing unconfirmed rollout"
+                .into(),
+        );
+    }
+    if !args.dry_run && args.max_prs != 1 {
+        return Err(
+            "fleet open-prs confirmed rollout requires --max-prs 1 so downstream monitoring gates the next repository"
                 .into(),
         );
     }
@@ -2314,18 +2336,21 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
                 repository: repo.repository.clone(),
                 branch: String::new(),
                 title: String::new(),
+                commit_message: String::new(),
                 files: vec!["SKIPPED.md".into()],
                 skipped: true,
                 reason,
+                disposition: "skipped".into(),
+                rollback: String::new(),
+                monitor_status: "not-applicable".into(),
+                evidence_dir: repo_dir.display().to_string(),
             });
             continue;
         }
         opened += 1;
         let manifest = render_manifest_yaml(&repo.manifest)?;
         fs::write(repo_dir.join(".landfall.yml"), &manifest)?;
-        let workflow = if repo.recommended_mode == "manifest-only" {
-            None
-        } else {
+        let workflow = if fleet_pr_should_write_workflow(repo) {
             let workflow = fleet_workflow_for_plan(repo);
             fs::create_dir_all(repo_dir.join(".github/workflows"))?;
             fs::write(
@@ -2333,6 +2358,8 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
                 &workflow,
             )?;
             Some(workflow)
+        } else {
+            None
         };
         let diff = render_fleet_pr_diff(repo, &manifest, workflow.as_deref());
         fs::write(repo_dir.join("diff.md"), diff)?;
@@ -2340,22 +2367,48 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         if workflow.is_some() {
             files.insert(1, ".github/workflows/landfall-release.yml".into());
         }
+        let branch = format!("landfall/adopt-{}", repo.repository.replace('/', "-"));
+        let title: String = if repo.recommended_mode == "manifest-only" {
+            "chore(release): configure Landfall manifest".into()
+        } else {
+            "chore(release): adopt Landfall".into()
+        };
+        let commit_message = if repo.recommended_mode == "manifest-only" {
+            "chore(release): configure Landfall manifest".into()
+        } else {
+            format!("chore(release): adopt Landfall {}", repo.integration_mode)
+        };
+        if !args.dry_run {
+            fs::write(
+                repo_dir.join("APPLY.md"),
+                render_fleet_apply_markdown(repo, &branch, &title, &commit_message, &files),
+            )?;
+            files.push("APPLY.md".into());
+        }
         rendered.push(FleetRepositoryPrPlan {
             repository: repo.repository.clone(),
-            branch: format!("landfall/adopt-{}", repo.repository.replace('/', "-")),
-            title: if repo.recommended_mode == "manifest-only" {
-                "chore(release): configure Landfall manifest".into()
-            } else {
-                "chore(release): adopt Landfall".into()
-            },
+            branch: branch.clone(),
+            title,
+            commit_message,
             files,
             skipped: false,
             reason: String::new(),
+            disposition: if args.dry_run {
+                "dry-run-rendered".into()
+            } else {
+                "confirmed-operator-apply-required; APPLY.md contains the branch, commit, push, PR, rollback, and monitor commands".into()
+            },
+            rollback: format!(
+                "if applied, close the PR and delete branch {}",
+                branch
+            ),
+            monitor_status: "pending: merge one repository, monitor downstream release, then continue rollout".into(),
+            evidence_dir: repo_dir.display().to_string(),
         });
     }
     let pr_plan = FleetPrPlan {
         generated_at: Utc::now().to_rfc3339(),
-        dry_run: true,
+        dry_run: args.dry_run,
         repositories: rendered,
     };
     fs::write(
@@ -2366,7 +2419,12 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&pr_plan)?);
     } else {
         println!(
-            "fleet dry-run wrote {} ({} repositories)",
+            "fleet {} wrote {} ({} repositories)",
+            if pr_plan.dry_run {
+                "dry-run"
+            } else {
+                "rollout receipt"
+            },
             args.output_dir.join("open-prs.json").display(),
             pr_plan.repositories.len()
         );
@@ -2523,6 +2581,12 @@ fn scan_fleet_repository(
     let tags = provider.tags(&name_with_owner)?;
     let tag_format = fleet_tag_format(&tags, &package_topology);
     let release_tool = fleet_release_tool(&release_files, &workflows, &workflow_texts, &tags);
+    let repository_kind = if archived {
+        "archived".into()
+    } else {
+        classify_fleet_repository_kind(name, &package_topology, &release_files)
+    };
+    let release_surface = classify_fleet_release_surface(&release_tool, &tags, &workflow_texts);
     let existing_landfall = release_files.iter().any(|file| file == ".landfall.yml")
         || workflows
             .iter()
@@ -2555,6 +2619,8 @@ fn scan_fleet_repository(
         owner: owner.to_string(),
         name: name.to_string(),
         name_with_owner,
+        repository_kind,
+        release_surface,
         private,
         archived,
         pushed_at,
@@ -2641,21 +2707,219 @@ fn fleet_tag_format(tags: &[String], packages: &[String]) -> String {
     }
 }
 
+fn classify_fleet_repository_kind(
+    name: &str,
+    package_topology: &[String],
+    release_files: &[String],
+) -> String {
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("docs")
+        || lower.contains("documentation")
+        || lower.contains("config")
+        || lower.contains("dotfiles")
+        || lower.contains("template")
+        || lower.contains("prompt")
+        || (package_topology.is_empty() && release_files.is_empty())
+    {
+        "non-release".into()
+    } else if lower.contains("experiment")
+        || lower.contains("prototype")
+        || lower.contains("scratch")
+        || lower.contains("demo")
+    {
+        "experiment".into()
+    } else if lower.contains("infra")
+        || lower.contains("terraform")
+        || lower.contains("deploy")
+        || lower.contains("ops")
+    {
+        "infrastructure".into()
+    } else if lower.contains("lib")
+        || lower.contains("sdk")
+        || lower.contains("crate")
+        || package_topology.iter().any(|path| path == "Cargo.toml")
+            && !release_files.iter().any(|file| file.contains("semantic"))
+    {
+        "library".into()
+    } else {
+        "application".into()
+    }
+}
+
+fn classify_fleet_release_surface(
+    release_tool: &str,
+    tags: &[String],
+    workflow_texts: &[(String, String)],
+) -> String {
+    if workflow_texts.iter().any(|(_, text)| {
+        let lower = text.to_ascii_lowercase();
+        lower.contains("cargo publish") || lower.contains("npm publish")
+    }) {
+        "package-registry".into()
+    } else if release_tool == "no-release-tool" && tags.is_empty() {
+        "none".into()
+    } else if release_tool == "semantic-release" {
+        "github-release+semantic-release".into()
+    } else if matches!(release_tool, "release-please" | "changesets" | "manual-tag") {
+        "github-release".into()
+    } else if !tags.is_empty() {
+        "git-tags".into()
+    } else {
+        "local-artifacts".into()
+    }
+}
+
+fn normalized_repo_kind(repo: &FleetRepository) -> String {
+    trimmed_option(&repo.repository_kind)
+        .unwrap_or_else(|| {
+            classify_fleet_repository_kind(&repo.name, &repo.package_topology, &repo.release_files)
+        })
+        .to_ascii_lowercase()
+}
+
+fn normalized_release_surface(repo: &FleetRepository) -> String {
+    trimmed_option(&repo.release_surface)
+        .unwrap_or_else(|| classify_fleet_release_surface(&repo.release_tool, &[], &[]))
+        .to_ascii_lowercase()
+}
+
+fn fleet_integration_mode(
+    repo: &FleetRepository,
+    repository_kind: &str,
+) -> (String, String, Vec<String>, u64) {
+    if repo.archived {
+        return (
+            "skipped".into(),
+            "none".into(),
+            vec!["repository is archived".into()],
+            0,
+        );
+    }
+    if repo.existing_landfall {
+        return (
+            "manifest-only".into(),
+            "manual-tag".into(),
+            vec!["existing Landfall manifest or workflow detected".into()],
+            65,
+        );
+    }
+    if repository_kind == "non-release" {
+        return (
+            "skipped".into(),
+            "none".into(),
+            vec!["repository kind should not publish releases".into()],
+            0,
+        );
+    }
+    if repository_kind == "infrastructure" {
+        return (
+            "generic-ci".into(),
+            "generic-ci".into(),
+            vec!["infrastructure repository should publish portable local artifacts before GitHub release mutation".into()],
+            55,
+        );
+    }
+    if repository_kind == "experiment" {
+        return (
+            "local".into(),
+            "local".into(),
+            vec!["experiment repository should start with zero-secret local previews".into()],
+            45,
+        );
+    }
+    match repo.release_tool.as_str() {
+        "semantic-release" => (
+            "github-full".into(),
+            "semantic-release".into(),
+            vec!["semantic-release can let Landfall own full GitHub Action release mode".into()],
+            100,
+        ),
+        "release-please" => (
+            "github-synthesis-only".into(),
+            "release-please".into(),
+            vec!["release-please already owns versioning; Landfall should synthesize after release creation".into()],
+            85,
+        ),
+        "changesets" => (
+            "github-synthesis-only".into(),
+            "changesets".into(),
+            vec!["Changesets already owns package publication; Landfall should synthesize per published release".into()],
+            80,
+        ),
+        "manual-tag" => (
+            "github-synthesis-only".into(),
+            "manual-tag".into(),
+            vec!["manual GitHub releases should trigger one synthesis-only Landfall run".into()],
+            60,
+        ),
+        "no-release-tool" => (
+            "backfill-first".into(),
+            "manual-tag".into(),
+            vec!["no release automation detected; plan historical artifacts before adding release mutation".into()],
+            20,
+        ),
+        _ => (
+            "blocked".into(),
+            "manual-tag".into(),
+            vec!["unknown release tooling".into()],
+            10,
+        ),
+    }
+}
+
+fn fleet_required_secret_names(integration_mode: &str) -> Vec<String> {
+    match integration_mode {
+        "github-full" | "github-synthesis-only" => {
+            vec!["GH_RELEASE_TOKEN".into(), "OPENROUTER_API_KEY".into()]
+        }
+        _ => Vec::new(),
+    }
+}
+
 fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     let mut risk_flags = Vec::new();
     let mut migration_notes = Vec::new();
-    let missing_secrets = repo
+    let repository_kind = normalized_repo_kind(repo);
+    let release_surface = normalized_release_surface(repo);
+    let (integration_mode, workflow, mut integration_rationale, rank_base) =
+        fleet_integration_mode(repo, &repository_kind);
+    let required_secrets = fleet_required_secret_names(&integration_mode);
+    let observed_secret_names = repo
         .required_secrets
         .iter()
+        .map(|secret| secret.name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut missing_secrets = repo
+        .required_secrets
+        .iter()
+        .filter(|secret| {
+            required_secrets
+                .iter()
+                .any(|required| required == &secret.name)
+        })
         .filter(|secret| secret.status == "missing")
         .map(|secret| secret.name.clone())
         .collect::<Vec<_>>();
-    let unavailable_secret_metadata = repo
+    let mut unavailable_secret_metadata = repo
         .required_secrets
         .iter()
+        .filter(|secret| {
+            required_secrets
+                .iter()
+                .any(|required| required == &secret.name)
+        })
         .filter(|secret| secret.status == "unavailable")
         .map(|secret| secret.name.clone())
         .collect::<Vec<_>>();
+    for required in &required_secrets {
+        if !observed_secret_names.contains(required) {
+            unavailable_secret_metadata.push(required.clone());
+        }
+    }
+    missing_secrets.sort();
+    missing_secrets.dedup();
+    unavailable_secret_metadata.sort();
+    unavailable_secret_metadata.dedup();
     if repo.private {
         risk_flags
             .push("private repository; verify token and secret policy before opening PR".into());
@@ -2691,35 +2955,34 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         None
     };
 
-    let (status, recommended_mode, workflow, skip_reason, rank) = if repo.archived {
-        ("skipped", "skipped", "none", "repository is archived", 0u64)
+    let (status, recommended_mode, skip_reason, rank) = if repo.archived {
+        ("skipped", "skipped", "repository is archived", 0u64)
+    } else if repository_kind == "non-release" {
+        (
+            "skipped",
+            "skipped",
+            "repository is classified as non-release",
+            0u64,
+        )
     } else if let Some(reason) = secret_blocker.as_deref() {
-        ("blocked", "blocked", "manual-tag", reason, 15u64)
+        ("blocked", integration_mode.as_str(), reason, 15u64)
     } else if repo.existing_landfall {
         migration_notes.push(
             "Landfall-like workflow or manifest already exists; inspect before replacing".into(),
         );
-        ("ready", "manifest-only", "manual-tag", "", 65u64)
+        ("ready", "manifest-only", "", 65u64)
     } else {
-        match repo.release_tool.as_str() {
-            "semantic-release" => ("ready", "full", "semantic-release", "", 100u64),
-            "release-please" => ("ready", "synthesis-only", "release-please", "", 85u64),
-            "changesets" => ("ready", "synthesis-only", "changesets", "", 80u64),
-            "manual-tag" => ("ready", "synthesis-only", "manual-tag", "", 60u64),
-            "no-release-tool" => (
+        match integration_mode.as_str() {
+            "github-full" | "github-synthesis-only" | "generic-ci" | "local" => {
+                ("ready", integration_mode.as_str(), "", rank_base)
+            }
+            "backfill-first" => (
                 "blocked",
                 "backfill-first",
-                "manual-tag",
                 "no release tool or release tags detected",
-                20u64,
+                rank_base,
             ),
-            _ => (
-                "blocked",
-                "blocked",
-                "manual-tag",
-                "unknown release tooling",
-                10u64,
-            ),
+            _ => ("blocked", "blocked", "unknown release tooling", 10u64),
         }
     };
     if repo.release_tool == "no-release-tool" {
@@ -2734,19 +2997,26 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         risk_flags.push("multi-package repository; validate tag format and artifact paths".into());
     }
     migration_notes.push(format!(
-        "Detected release tool: {}; tag format: {}; default branch: {}",
-        repo.release_tool, repo.tag_format, repo.default_branch
+        "Detected kind: {}; release surface: {}; release tool: {}; tag format: {}; default branch: {}",
+        repository_kind, release_surface, repo.release_tool, repo.tag_format, repo.default_branch
     ));
+    integration_rationale.push(format!("repository kind: {repository_kind}"));
+    integration_rationale.push(format!("release surface: {release_surface}"));
     let manifest = fleet_manifest(repo, recommended_mode);
     FleetRepositoryPlan {
         repository: repo.name_with_owner.clone(),
+        repository_kind,
+        release_surface,
         rank,
         default_branch: repo.default_branch.clone(),
         recommended_mode: recommended_mode.into(),
-        workflow: workflow.into(),
+        integration_mode: integration_mode.clone(),
+        integration_rationale,
+        workflow,
         status: status.into(),
         skip_reason: skip_reason.into(),
         risk_flags,
+        required_secrets,
         missing_secrets,
         unavailable_secret_metadata,
         migration_notes,
@@ -2777,7 +3047,7 @@ fn fleet_manifest(repo: &FleetRepository, mode: &str) -> LandfallManifest {
         },
         release: ReleaseManifest {
             profile: Some(
-                if mode == "full" {
+                if mode == "full" || mode == "github-full" {
                     "full"
                 } else {
                     "synthesis-only"
@@ -2807,14 +3077,32 @@ fn render_fleet_plan_markdown(plan: &FleetPlan) -> String {
     out.push_str("\n## Repositories\n\n");
     for repo in &plan.repositories {
         out.push_str(&format!(
-            "### {}\n\n- Rank: {}\n- Status: {}\n- Recommended mode: {}\n- Workflow: {}\n",
-            repo.repository, repo.rank, repo.status, repo.recommended_mode, repo.workflow
+            "### {}\n\n- Rank: {}\n- Status: {}\n- Repository kind: {}\n- Release surface: {}\n- Integration mode: {}\n- Workflow: {}\n",
+            repo.repository,
+            repo.rank,
+            repo.status,
+            repo.repository_kind,
+            repo.release_surface,
+            repo.integration_mode,
+            repo.workflow
         ));
         if !repo.skip_reason.is_empty() {
             out.push_str(&format!("- Skip reason: {}\n", repo.skip_reason));
         }
+        if !repo.required_secrets.is_empty() {
+            out.push_str(&format!(
+                "- Required secrets: {}\n",
+                repo.required_secrets.join(", ")
+            ));
+        }
         if !repo.risk_flags.is_empty() {
             out.push_str(&format!("- Risk flags: {}\n", repo.risk_flags.join("; ")));
+        }
+        if !repo.integration_rationale.is_empty() {
+            out.push_str(&format!(
+                "- Rationale: {}\n",
+                repo.integration_rationale.join("; ")
+            ));
         }
         out.push('\n');
     }
@@ -2852,6 +3140,63 @@ fn fleet_workflow_for_plan(repo: &FleetRepositoryPlan) -> String {
         .or_else(|| workflows.values().next())
         .map(|candidate| candidate.content.clone())
         .unwrap_or_else(|| workflow_manual_tag(Some(&repo.manifest)))
+}
+
+fn fleet_pr_should_write_workflow(repo: &FleetRepositoryPlan) -> bool {
+    matches!(
+        repo.integration_mode.as_str(),
+        "github-full" | "github-synthesis-only"
+    ) && repo.recommended_mode != "manifest-only"
+}
+
+fn render_fleet_apply_markdown(
+    repo: &FleetRepositoryPlan,
+    branch: &str,
+    title: &str,
+    commit_message: &str,
+    files: &[String],
+) -> String {
+    let mut out = format!(
+        "# Apply Landfall Fleet PR\n\nRepository: `{}`\nBranch: `{}`\nBase: `{}`\nTitle: `{}`\n\n",
+        repo.repository, branch, repo.default_branch, title
+    );
+    out.push_str(
+        "Run these commands from a disposable directory after inspecting `diff.md`. They intentionally do not print secret values.\n\n",
+    );
+    out.push_str("```bash\n");
+    out.push_str(&format!(
+        "gh repo clone {} repo\n",
+        shell_quote(&repo.repository)
+    ));
+    out.push_str("cd repo\n");
+    out.push_str(&format!(
+        "git checkout -b {} origin/{}\n",
+        shell_quote(branch),
+        shell_quote(&repo.default_branch)
+    ));
+    for file in files.iter().filter(|file| file.as_str() != "diff.md") {
+        out.push_str(&format!("# copy rendered `{file}` into this checkout\n"));
+    }
+    out.push_str("git add .landfall.yml .github/workflows/landfall-release.yml 2>/dev/null || git add .landfall.yml\n");
+    out.push_str(&format!("git commit -m {}\n", shell_quote(commit_message)));
+    out.push_str(&format!("git push -u origin {}\n", shell_quote(branch)));
+    out.push_str(&format!(
+        "gh pr create --repo {} --base {} --head {} --title {} --body 'Adopt Landfall using the reviewed fleet rollout receipt. Merge this PR, monitor the downstream release run, then continue the fleet rollout.'\n",
+        shell_quote(&repo.repository),
+        shell_quote(&repo.default_branch),
+        shell_quote(branch),
+        shell_quote(title)
+    ));
+    out.push_str("gh pr checks --watch\n");
+    out.push_str("```\n\n");
+    out.push_str(
+        "Rollback: close the PR and delete the remote branch before continuing the fleet.\n",
+    );
+    out
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn render_fleet_pr_diff(
@@ -8128,8 +8473,8 @@ fn scenario_agent_native_contracts(tmp_root: &Path) -> Result<Value> {
         repositories: vec![fleet_fixture_repo(
             "phrazzld/semantic-app",
             "semantic-release",
-            false,
-            false,
+            ("application", "github-release+semantic-release"),
+            (false, false),
             "unprotected-or-unavailable",
             &[],
             &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10267,6 +10612,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     let scan_output = tmp_root.join("fleet.json");
     let plan_dir = tmp_root.join("fleet-plan");
     let pr_dir = plan_dir.join("prs");
+    let confirmed_pr_dir = plan_dir.join("prs-confirmed");
     let scan = FleetScan {
         generated_at: "2026-06-13T00:00:00Z".into(),
         owners: vec!["phrazzld".into(), "misty-step".into()],
@@ -10275,8 +10621,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "phrazzld/semantic-app",
                 "semantic-release",
-                false,
-                false,
+                ("application", "github-release+semantic-release"),
+                (false, false),
                 "unprotected-or-unavailable",
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10284,8 +10630,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "misty-step/release-please-app",
                 "release-please",
-                false,
-                false,
+                ("application", "github-release"),
+                (false, false),
                 "protected",
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10293,8 +10639,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "misty-step/changesets-app",
                 "changesets",
-                false,
-                false,
+                ("library", "github-release"),
+                (false, false),
                 "unprotected-or-unavailable",
                 &["package.json", "Cargo.toml"],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10302,8 +10648,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "phrazzld/manual-app",
                 "manual-tag",
-                false,
-                false,
+                ("application", "github-release"),
+                (false, false),
                 "unprotected-or-unavailable",
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10311,8 +10657,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "phrazzld/no-release-app",
                 "no-release-tool",
-                false,
-                false,
+                ("application", "none"),
+                (false, false),
                 "unprotected-or-unavailable",
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10320,8 +10666,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "misty-step/archived-app",
                 "semantic-release",
-                true,
-                false,
+                ("archived", "github-release+semantic-release"),
+                (true, false),
                 "unprotected-or-unavailable",
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10329,8 +10675,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "misty-step/private-app",
                 "release-please",
-                false,
-                true,
+                ("application", "github-release"),
+                (false, true),
                 "unavailable: no GitHub token supplied",
                 &[],
                 &[],
@@ -10338,12 +10684,40 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             fleet_fixture_repo(
                 "phrazzld/protected-app",
                 "manual-tag",
-                false,
-                false,
+                ("application", "github-release"),
+                (false, false),
                 "protected",
                 &[],
                 &["GH_RELEASE_TOKEN"],
             ),
+            fleet_fixture_repo(
+                "misty-step/terraform-infra",
+                "no-release-tool",
+                ("infrastructure", "local-artifacts"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["go.mod"],
+                &[],
+            ),
+            fleet_fixture_repo(
+                "phrazzld/search-experiment",
+                "no-release-tool",
+                ("experiment", "local-artifacts"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["Cargo.toml"],
+                &[],
+            ),
+            fleet_fixture_repo(
+                "misty-step/docs-site",
+                "no-release-tool",
+                ("non-release", "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &[],
+                &[],
+            ),
+            fleet_incomplete_secret_fixture(),
             fleet_existing_landfall_fixture(),
             fleet_existing_landfall_workflow_fixture(),
         ],
@@ -10397,21 +10771,77 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     if !dry_run.status.success() {
         return Err(String::from_utf8_lossy(&dry_run.stderr).to_string().into());
     }
+    let unconfirmed = Command::new(current_exe())
+        .args([
+            "fleet",
+            "open-prs",
+            "--plan-dir",
+            plan_dir.to_str().unwrap(),
+            "--output-dir",
+            confirmed_pr_dir.to_str().unwrap(),
+        ])
+        .output()?;
+    if unconfirmed.status.success()
+        || !String::from_utf8_lossy(&unconfirmed.stderr).contains("--confirm-remote")
+    {
+        return Err("fleet open-prs non-dry-run should require --confirm-remote".into());
+    }
+    let confirmed = Command::new(current_exe())
+        .args([
+            "fleet",
+            "open-prs",
+            "--confirm-remote",
+            "--max-prs",
+            "1",
+            "--plan-dir",
+            plan_dir.to_str().unwrap(),
+            "--output-dir",
+            confirmed_pr_dir.to_str().unwrap(),
+        ])
+        .output()?;
+    if !confirmed.status.success() {
+        return Err(String::from_utf8_lossy(&confirmed.stderr)
+            .to_string()
+            .into());
+    }
     let plan: FleetPlan = serde_json::from_str(&fs::read_to_string(plan_dir.join("plan.json"))?)?;
     let pr_plan: FleetPrPlan =
         serde_json::from_str(&fs::read_to_string(pr_dir.join("open-prs.json"))?)?;
+    let confirmed_plan: FleetPrPlan =
+        serde_json::from_str(&fs::read_to_string(confirmed_pr_dir.join("open-prs.json"))?)?;
+    if confirmed_plan.dry_run
+        || !confirmed_plan
+            .repositories
+            .iter()
+            .any(|repo| repo.disposition.contains("operator-apply"))
+    {
+        return Err("confirmed fleet open-prs receipt did not record guarded rollout".into());
+    }
+    if !confirmed_pr_dir
+        .join("phrazzld__semantic-app")
+        .join("APPLY.md")
+        .is_file()
+    {
+        return Err("confirmed fleet open-prs did not write an apply packet".into());
+    }
     let mut modes = BTreeMap::new();
     let mut statuses = BTreeMap::new();
+    let mut kinds = BTreeMap::new();
     for repo in &plan.repositories {
-        modes.insert(repo.repository.clone(), repo.recommended_mode.clone());
+        modes.insert(repo.repository.clone(), repo.integration_mode.clone());
         statuses.insert(repo.repository.clone(), repo.status.clone());
+        kinds.insert(repo.repository.clone(), repo.repository_kind.clone());
     }
     for (repo, expected) in [
-        ("phrazzld/semantic-app", "full"),
-        ("misty-step/release-please-app", "synthesis-only"),
-        ("misty-step/changesets-app", "synthesis-only"),
-        ("phrazzld/manual-app", "synthesis-only"),
+        ("phrazzld/semantic-app", "github-full"),
+        ("misty-step/release-please-app", "github-synthesis-only"),
+        ("misty-step/changesets-app", "github-synthesis-only"),
+        ("phrazzld/manual-app", "github-synthesis-only"),
         ("phrazzld/no-release-app", "backfill-first"),
+        ("misty-step/terraform-infra", "generic-ci"),
+        ("phrazzld/search-experiment", "local"),
+        ("misty-step/docs-site", "skipped"),
+        ("phrazzld/incomplete-secret-app", "github-full"),
         ("misty-step/archived-app", "skipped"),
         ("misty-step/existing-landfall-app", "manifest-only"),
         ("phrazzld/existing-landfall-workflow", "manifest-only"),
@@ -10422,6 +10852,43 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     }
     if statuses.get("phrazzld/no-release-app").map(String::as_str) != Some("blocked") {
         return Err("no-release-tool repository should be blocked".into());
+    }
+    for (repo, expected) in [
+        ("phrazzld/semantic-app", "application"),
+        ("misty-step/changesets-app", "library"),
+        ("misty-step/terraform-infra", "infrastructure"),
+        ("phrazzld/search-experiment", "experiment"),
+        ("misty-step/docs-site", "non-release"),
+        ("misty-step/archived-app", "archived"),
+    ] {
+        if kinds.get(repo).map(String::as_str) != Some(expected) {
+            return Err(format!("{repo} expected kind {expected}").into());
+        }
+    }
+    let infra = plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "misty-step/terraform-infra")
+        .ok_or("infrastructure fixture missing")?;
+    if !infra.required_secrets.is_empty() || !infra.missing_secrets.is_empty() {
+        return Err(
+            "generic-ci infrastructure fixture should not require GitHub Action secrets".into(),
+        );
+    }
+    if !infra
+        .integration_rationale
+        .iter()
+        .any(|reason| reason.contains("infrastructure"))
+    {
+        return Err("infrastructure fixture missing integration rationale".into());
+    }
+    let incomplete = plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "phrazzld/incomplete-secret-app")
+        .ok_or("incomplete-secret fixture missing")?;
+    if incomplete.status != "blocked" || incomplete.unavailable_secret_metadata.len() != 2 {
+        return Err("incomplete secret metadata should block GitHub integration".into());
     }
     let protected = plan
         .repositories
@@ -10466,6 +10933,29 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     {
         return Err("manifest-only dry-run wrote a duplicate workflow file".into());
     }
+    for repo in ["misty-step__terraform-infra", "phrazzld__search-experiment"] {
+        if pr_dir
+            .join(repo)
+            .join(".github/workflows/landfall-release.yml")
+            .exists()
+        {
+            return Err(format!("{repo} dry-run wrote a GitHub workflow").into());
+        }
+    }
+    let semantic_receipt = pr_plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "phrazzld/semantic-app")
+        .ok_or("semantic receipt missing")?;
+    if semantic_receipt.branch != "landfall/adopt-phrazzld-semantic-app"
+        || !semantic_receipt.commit_message.contains("github-full")
+        || !semantic_receipt.rollback.contains("delete branch")
+        || !semantic_receipt
+            .monitor_status
+            .contains("monitor downstream release")
+    {
+        return Err("fleet PR receipt missing branch/commit/rollback/monitoring data".into());
+    }
     let scan_text = fs::read_to_string(&scan_output)?;
     if scan_text.contains("super-secret") || scan_text.contains("ghp_") {
         return Err("fleet scan leaked a secret-looking value".into());
@@ -10475,6 +10965,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         "dry_run_prs": pr_plan.repositories.iter().filter(|repo| !repo.skipped).count(),
         "modes": modes,
         "statuses": statuses,
+        "kinds": kinds,
         "evidence": {
             "scan": scan_output,
             "plan": plan_dir.join("plan.json"),
@@ -10486,13 +10977,15 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
 fn fleet_fixture_repo(
     name_with_owner: &str,
     release_tool: &str,
-    archived: bool,
-    private: bool,
+    classification: (&str, &str),
+    visibility: (bool, bool),
     branch_protected: &str,
     extra_packages: &[&str],
     present_secrets: &[&str],
 ) -> FleetRepository {
     let (owner, name) = name_with_owner.split_once('/').unwrap();
+    let (repository_kind, release_surface) = classification;
+    let (archived, private) = visibility;
     let mut package_topology = vec!["package.json".to_string()];
     package_topology.extend(extra_packages.iter().map(|value| (*value).to_string()));
     package_topology.sort();
@@ -10537,6 +11030,8 @@ fn fleet_fixture_repo(
         owner: owner.into(),
         name: name.into(),
         name_with_owner: name_with_owner.into(),
+        repository_kind: repository_kind.into(),
+        release_surface: release_surface.into(),
         private,
         archived,
         pushed_at: "2026-06-13T00:00:00Z".into(),
@@ -10557,8 +11052,8 @@ fn fleet_existing_landfall_fixture() -> FleetRepository {
     let mut repo = fleet_fixture_repo(
         "misty-step/existing-landfall-app",
         "manual-tag",
-        false,
-        false,
+        ("application", "github-release"),
+        (false, false),
         "unprotected-or-unavailable",
         &[],
         &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10574,8 +11069,8 @@ fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
     let mut repo = fleet_fixture_repo(
         "phrazzld/existing-landfall-workflow",
         "manual-tag",
-        false,
-        false,
+        ("application", "github-release"),
+        (false, false),
         "unprotected-or-unavailable",
         &[],
         &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
@@ -10584,6 +11079,20 @@ fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
     repo.workflows = vec!["release.yml".into()];
     repo.signals
         .push("release.yml invokes misty-step/landfall".into());
+    repo
+}
+
+fn fleet_incomplete_secret_fixture() -> FleetRepository {
+    let mut repo = fleet_fixture_repo(
+        "phrazzld/incomplete-secret-app",
+        "semantic-release",
+        ("application", "github-release+semantic-release"),
+        (false, false),
+        "unprotected-or-unavailable",
+        &[],
+        &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+    );
+    repo.required_secrets.clear();
     repo
 }
 
@@ -10963,6 +11472,46 @@ mod tests {
                 &["v1.2.3".into()]
             ),
             "manual-tag"
+        );
+    }
+
+    #[test]
+    fn fleet_classifiers_distinguish_rollout_kinds_and_surfaces() {
+        assert_eq!(
+            classify_fleet_repository_kind("release-docs", &[], &[]),
+            "non-release"
+        );
+        assert_eq!(
+            classify_fleet_repository_kind("terraform-infra", &["go.mod".into()], &[]),
+            "infrastructure"
+        );
+        assert_eq!(
+            classify_fleet_repository_kind("search-experiment", &["Cargo.toml".into()], &[]),
+            "experiment"
+        );
+        assert_eq!(
+            classify_fleet_repository_kind("widget-crate", &["Cargo.toml".into()], &[]),
+            "library"
+        );
+        assert_eq!(
+            classify_fleet_repository_kind("billing-app", &["package.json".into()], &[]),
+            "application"
+        );
+        assert_eq!(
+            classify_fleet_release_surface(
+                "changesets",
+                &[],
+                &[("release.yml".into(), "npm publish".into())],
+            ),
+            "package-registry"
+        );
+        assert_eq!(
+            classify_fleet_release_surface("semantic-release", &[], &[]),
+            "github-release+semantic-release"
+        );
+        assert_eq!(
+            classify_fleet_release_surface("no-release-tool", &[], &[]),
+            "none"
         );
     }
 
