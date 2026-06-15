@@ -2168,6 +2168,14 @@ struct FleetSecretStatus {
     detail: String,
 }
 
+#[derive(Clone, Debug, Default)]
+struct FleetSecretNames {
+    names: BTreeSet<String>,
+    repo_names: BTreeSet<String>,
+    org_names: BTreeSet<String>,
+    org_unavailable: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct FleetPlan {
     generated_at: String,
@@ -2731,6 +2739,38 @@ fn unavailable_secret_statuses(required: &[&str], detail: &str) -> Vec<FleetSecr
             status: "unavailable".into(),
             detail: detail.into(),
         })
+        .collect()
+}
+
+fn secret_names_from_array(value: &Value) -> BTreeSet<String> {
+    value["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|secret| secret["name"].as_str())
+        .map(str::to_string)
+        .collect()
+}
+
+fn org_secret_names_for_repo(value: &Value, repository: &str, repo_name: &str) -> BTreeSet<String> {
+    value["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|secret| match secret["visibility"].as_str().unwrap_or("") {
+            "all" => true,
+            "selected" => secret["selected_repositories"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|selected| {
+                    selected["full_name"].as_str() == Some(repository)
+                        || selected["name"].as_str() == Some(repo_name)
+                }),
+            _ => false,
+        })
+        .filter_map(|secret| secret["name"].as_str())
+        .map(str::to_string)
         .collect()
 }
 
@@ -3574,7 +3614,7 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           mode: full
-          healthcheck: "true"
+          healthcheck: 'true'
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
@@ -3617,7 +3657,7 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
-          healthcheck: "true"
+          healthcheck: 'true'
           release-tag: ${{{{ needs.release-please.outputs.tag_name }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
@@ -3679,7 +3719,7 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
-          healthcheck: "true"
+          healthcheck: 'true'
           release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
@@ -3730,7 +3770,7 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
-          healthcheck: "true"
+          healthcheck: 'true'
           release-tag: v${{{{ fromJson(needs.release.outputs.published_packages)[0].version }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
@@ -3764,7 +3804,7 @@ jobs:
       - uses: misty-step/landfall@v1
         with:
           mode: synthesis-only
-          healthcheck: "true"
+          healthcheck: 'true'
           release-tag: ${{{{ github.event.release.tag_name }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
@@ -4674,7 +4714,52 @@ impl GitHubProvider {
                 "secret metadata requires a GitHub token with repository access",
             );
         };
-        let response = match curl_json(
+        let response = match self.secret_names(repository, token) {
+            Ok(response) => response,
+            Err(error) => return unavailable_secret_statuses(required, &error.to_string()),
+        };
+        required
+            .iter()
+            .map(|name| FleetSecretStatus {
+                name: (*name).to_string(),
+                status: if response.names.contains(*name) {
+                    "present".into()
+                } else if response.org_unavailable.is_some() {
+                    "unavailable".into()
+                } else {
+                    "missing".into()
+                },
+                detail: if response.repo_names.contains(*name) {
+                    "repo secret metadata only; value not read".into()
+                } else if response.org_names.contains(*name) {
+                    "org secret metadata only; value not read".into()
+                } else if let Some(error) = &response.org_unavailable {
+                    format!("org secret metadata unavailable: {error}")
+                } else {
+                    "required secret name is absent from Actions secret metadata".into()
+                },
+            })
+            .collect()
+    }
+
+    fn secret_names(&self, repository: &str, token: &str) -> Result<FleetSecretNames> {
+        let repo_names = self.repo_secret_names(repository, token)?;
+        let (org_names, org_unavailable) = match self.org_secret_names(repository, token) {
+            Ok(Some(names)) => (names, None),
+            Ok(None) => (BTreeSet::new(), None),
+            Err(error) => (BTreeSet::new(), Some(error.to_string())),
+        };
+        let names = repo_names.union(&org_names).cloned().collect();
+        Ok(FleetSecretNames {
+            names,
+            repo_names,
+            org_names,
+            org_unavailable,
+        })
+    }
+
+    fn repo_secret_names(&self, repository: &str, token: &str) -> Result<BTreeSet<String>> {
+        let response = curl_json(
             "GET",
             &format!(
                 "{}/repos/{repository}/actions/secrets?per_page=100",
@@ -4682,56 +4767,47 @@ impl GitHubProvider {
             ),
             Some(token),
             None,
-        ) {
-            Ok(response) => response,
-            Err(error) => {
-                return unavailable_secret_statuses(
-                    required,
-                    &format!("secret metadata unavailable: {error}"),
-                );
-            }
-        };
+        )
+        .map_err(|error| format!("secret metadata unavailable: {error}"))?;
         if !(200..300).contains(&response.status) {
-            return unavailable_secret_statuses(
-                required,
-                &format!(
-                    "GitHub returned HTTP {} for secret metadata",
-                    response.status
-                ),
-            );
+            return Err(format!(
+                "GitHub returned HTTP {} for secret metadata",
+                response.status
+            )
+            .into());
         }
-        let value: Value = match serde_json::from_str(&response.body) {
-            Ok(value) => value,
-            Err(error) => {
-                return unavailable_secret_statuses(
-                    required,
-                    &format!("secret metadata parse failed: {error}"),
-                );
-            }
-        };
-        let names: BTreeSet<String> = value["secrets"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|secret| secret["name"].as_str())
-            .map(str::to_string)
-            .collect();
-        required
-            .iter()
-            .map(|name| FleetSecretStatus {
-                name: (*name).to_string(),
-                status: if names.contains(*name) {
-                    "present".into()
-                } else {
-                    "missing".into()
-                },
-                detail: if names.contains(*name) {
-                    "metadata only; value not read".into()
-                } else {
-                    "required secret name is absent from Actions secret metadata".into()
-                },
-            })
-            .collect()
+        let value: Value = serde_json::from_str(&response.body)
+            .map_err(|error| format!("secret metadata parse failed: {error}"))?;
+        Ok(secret_names_from_array(&value))
+    }
+
+    fn org_secret_names(&self, repository: &str, token: &str) -> Result<Option<BTreeSet<String>>> {
+        let (owner, repo_name) = repository
+            .split_once('/')
+            .ok_or_else(|| format!("invalid repository {repository}"))?;
+        let response = curl_json(
+            "GET",
+            &format!(
+                "{}/orgs/{owner}/actions/secrets?per_page=100",
+                self.api_base_url
+            ),
+            Some(token),
+            None,
+        )?;
+        if response.status == 404 {
+            return Ok(None);
+        }
+        if !(200..300).contains(&response.status) {
+            return Err(format!(
+                "GitHub returned HTTP {} for org secret metadata",
+                response.status
+            )
+            .into());
+        }
+        let value: Value = serde_json::from_str(&response.body)?;
+        Ok(Some(org_secret_names_for_repo(
+            &value, repository, repo_name,
+        )))
     }
 
     fn find_failure_issues(&self, repository: &str, release_tag: &str) -> Result<Vec<Value>> {
@@ -11886,7 +11962,7 @@ mod tests {
         assert!(!changesets.contains("python3"));
         let workflow = &workflows["changesets-monorepo"].content;
         assert!(workflow.contains("strategy:"));
-        assert!(workflow.contains("healthcheck: \"true\""));
+        assert!(workflow.contains("healthcheck: 'true'"));
         assert!(workflow.contains("pull-requests: write"));
         assert!(workflow.contains("NPM_TOKEN"));
     }
@@ -11904,8 +11980,30 @@ mod tests {
         assert_eq!(recommend_setup(&diagnosis, None).mode, "full");
         let workflow = &setup_workflows(&diagnosis, None)["semantic-release"].content;
         assert!(workflow.contains("mode: full"));
-        assert!(workflow.contains("healthcheck: \"true\""));
+        assert!(workflow.contains("healthcheck: 'true'"));
         assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    }
+
+    #[test]
+    fn org_secret_visibility_all_counts_for_fleet_secret_metadata() {
+        let metadata = json!({
+            "secrets": [
+                {"name": "GH_RELEASE_TOKEN", "visibility": "all"},
+                {"name": "OPENROUTER_API_KEY", "visibility": "selected", "selected_repositories": [
+                    {"full_name": "misty-step/landfall", "name": "landfall"}
+                ]},
+                {"name": "UNRELATED", "visibility": "private"}
+            ]
+        });
+
+        let names = org_secret_names_for_repo(&metadata, "misty-step/landfall", "landfall");
+        assert!(names.contains("GH_RELEASE_TOKEN"));
+        assert!(names.contains("OPENROUTER_API_KEY"));
+        assert!(!names.contains("UNRELATED"));
+
+        let other = org_secret_names_for_repo(&metadata, "misty-step/other", "other");
+        assert!(other.contains("GH_RELEASE_TOKEN"));
+        assert!(!other.contains("OPENROUTER_API_KEY"));
     }
 
     #[test]

@@ -195,7 +195,7 @@ permissions, package topology, recent conventional-commit usage, and any
 checked-in `.landfall.yml`. It prints a JSON report with a recommended Landfall
 mode and writes workflow candidates for semantic-release, release-please,
 changesets, changesets monorepos, and manual-tag repositories. Every generated
-workflow includes `healthcheck: "true"`, `GH_RELEASE_TOKEN`,
+workflow includes `healthcheck: 'true'`, `GH_RELEASE_TOKEN`,
 `OPENROUTER_API_KEY`, and the `contents`, `issues`, and `pull-requests`
 permissions Landfall needs.
 
