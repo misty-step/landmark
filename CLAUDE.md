@@ -1,4 +1,4 @@
-# Landfall — Focused Release Pipeline
+# Landmark — Focused Release Pipeline
 
 ## What This Is
 A reusable GitHub Action that handles the complete release pipeline:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://landfall.dev/schemas/release-entry.v1.schema.json",
-  "title": "Landfall release entry",
+  "title": "Landmark release entry",
   "type": "object",
   "additionalProperties": false,
   "x-landfall-artifact": "release notes JSON entry",

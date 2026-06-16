@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://landfall.dev/schemas/landfall-manifest.v1.schema.json",
-  "title": "Landfall manifest",
+  "title": "Landmark manifest",
   "type": "object",
   "additionalProperties": false,
   "x-landfall-artifact": ".landfall.yml",

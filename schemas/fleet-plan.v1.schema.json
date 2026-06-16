@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://landfall.dev/schemas/fleet-plan.v1.schema.json",
-  "title": "Landfall fleet plan",
+  "title": "Landmark fleet plan",
   "type": "object",
   "additionalProperties": false,
   "x-landfall-artifact": "fleet plan",

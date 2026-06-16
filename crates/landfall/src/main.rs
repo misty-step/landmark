@@ -28,7 +28,7 @@ const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 
 #[derive(Parser)]
 #[command(name = "landfall", version)]
-#[command(about = "Rust runtime for the Landfall release action")]
+#[command(about = "Rust runtime for the Landmark release action")]
 struct Cli {
     #[arg(long = "error-format", global = true, default_value = "text")]
     error_format: String,
@@ -543,7 +543,7 @@ enum FleetCommand {
 
 #[derive(Args)]
 #[command(
-    after_help = "Token note: if --github-token is omitted, Landfall reads GITHUB_TOKEN from the environment. Prefer the environment to avoid token-bearing argv."
+    after_help = "Token note: if --github-token is omitted, Landmark reads GITHUB_TOKEN from the environment. Prefer the environment to avoid token-bearing argv."
 )]
 struct FleetScanArgs {
     #[arg(long)]
@@ -810,7 +810,7 @@ fn classify_failure(message: &str) -> FailureClass {
             code: "command_failed",
             stage: "runtime",
             retryable: false,
-            user_action: "Inspect the command context and Landfall evidence packet.",
+            user_action: "Inspect the command context and Landmark evidence packet.",
         }
     }
 }
@@ -878,7 +878,7 @@ struct CommandContract {
 
 fn describe(args: DescribeArgs) -> Result<()> {
     if !args.json {
-        println!("Run `landfall describe --json` for the machine-readable Landfall contract.");
+        println!("Run `landfall describe --json` for the machine-readable Landmark contract.");
         return Ok(());
     }
     let command = Cli::command();
@@ -1216,7 +1216,7 @@ fn command_contracts() -> Vec<CommandContract> {
             command: "close-resolved-failures",
             mode: "github-adapter",
             mutates: true,
-            preview: "not available; closes matching Landfall failure issues when resolved",
+            preview: "not available; closes matching Landmark failure issues when resolved",
             stdout: "none",
             stderr: "logs and errors only",
             json_output: false,
@@ -1409,7 +1409,7 @@ where
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
-struct LandfallManifest {
+struct LandmarkManifest {
     product: ProductManifest,
     audience: Option<String>,
     voice: Option<String>,
@@ -1719,7 +1719,7 @@ fn manifest_defaults(args: ManifestDefaultsArgs) -> Result<()> {
     Ok(())
 }
 
-fn infer_manifest(root: &Path) -> LandfallManifest {
+fn infer_manifest(root: &Path) -> LandmarkManifest {
     let package = read_package_json(root);
     let package_name = package
         .as_ref()
@@ -1738,7 +1738,7 @@ fn infer_manifest(root: &Path) -> LandfallManifest {
         .or_else(|| readme_description(root));
     let mut signals = Vec::new();
     let release_tool = detect_release_tool(root, package.as_ref(), &mut signals);
-    LandfallManifest {
+    LandmarkManifest {
         product: ProductManifest {
             name: product_name,
             description,
@@ -1775,11 +1775,11 @@ fn infer_manifest(root: &Path) -> LandfallManifest {
     }
 }
 
-fn render_manifest_yaml(manifest: &LandfallManifest) -> Result<String> {
+fn render_manifest_yaml(manifest: &LandmarkManifest) -> Result<String> {
     Ok(serde_yaml::to_string(manifest)?)
 }
 
-fn load_manifest(root: &Path) -> Result<Option<LandfallManifest>> {
+fn load_manifest(root: &Path) -> Result<Option<LandmarkManifest>> {
     let path = root.join(".landfall.yml");
     if !path.is_file() {
         return Ok(None);
@@ -1790,7 +1790,7 @@ fn load_manifest(root: &Path) -> Result<Option<LandfallManifest>> {
     if !shape_errors.is_empty() {
         return Err(shape_errors.join("\n").into());
     }
-    let manifest: LandfallManifest = serde_yaml::from_str(&text)?;
+    let manifest: LandmarkManifest = serde_yaml::from_str(&text)?;
     let errors = validate_manifest(&manifest);
     if errors.is_empty() {
         Ok(Some(manifest))
@@ -1892,7 +1892,7 @@ fn validate_yaml_mapping_keys(
     }
 }
 
-fn validate_manifest(manifest: &LandfallManifest) -> Vec<String> {
+fn validate_manifest(manifest: &LandmarkManifest) -> Vec<String> {
     let mut errors = Vec::new();
     for (name, value) in manifest_scalar_fields(manifest) {
         if value.contains('\n') || value.contains('\r') {
@@ -1940,7 +1940,7 @@ fn validate_manifest(manifest: &LandfallManifest) -> Vec<String> {
     errors
 }
 
-fn validate_manifest_completeness(manifest: &LandfallManifest) -> Vec<String> {
+fn validate_manifest_completeness(manifest: &LandmarkManifest) -> Vec<String> {
     let mut errors = Vec::new();
     if manifest
         .product
@@ -1949,7 +1949,7 @@ fn validate_manifest_completeness(manifest: &LandfallManifest) -> Vec<String> {
         .and_then(trimmed_option)
         .is_none()
     {
-        errors.push("manifest product.name is required for a complete Landfall manifest".into());
+        errors.push("manifest product.name is required for a complete Landmark manifest".into());
     }
     if manifest
         .product
@@ -1963,7 +1963,7 @@ fn validate_manifest_completeness(manifest: &LandfallManifest) -> Vec<String> {
     errors
 }
 
-fn manifest_scalar_fields(manifest: &LandfallManifest) -> Vec<(&'static str, &str)> {
+fn manifest_scalar_fields(manifest: &LandmarkManifest) -> Vec<(&'static str, &str)> {
     let mut fields = Vec::new();
     push_scalar(
         &mut fields,
@@ -2098,7 +2098,7 @@ struct SetupReport {
     required_permissions: BTreeMap<String, String>,
     required_secrets: Vec<String>,
     workflows: BTreeMap<String, WorkflowCandidate>,
-    manifest: Option<LandfallManifest>,
+    manifest: Option<LandmarkManifest>,
     backfill: String,
 }
 
@@ -2202,7 +2202,7 @@ struct FleetRepositoryPlan {
     missing_secrets: Vec<String>,
     unavailable_secret_metadata: Vec<String>,
     migration_notes: Vec<String>,
-    manifest: LandfallManifest,
+    manifest: LandmarkManifest,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2450,14 +2450,14 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         }
         let branch = format!("landfall/adopt-{}", repo.repository.replace('/', "-"));
         let title: String = if repo.recommended_mode == "manifest-only" {
-            "chore(release): configure Landfall manifest".into()
+            "chore(release): configure Landmark manifest".into()
         } else {
-            "chore(release): adopt Landfall".into()
+            "chore(release): adopt Landmark".into()
         };
         let commit_message = if repo.recommended_mode == "manifest-only" {
-            "chore(release): configure Landfall manifest".into()
+            "chore(release): configure Landmark manifest".into()
         } else {
-            format!("chore(release): adopt Landfall {}", repo.integration_mode)
+            format!("chore(release): adopt Landmark {}", repo.integration_mode)
         };
         if !args.dry_run {
             fs::write(
@@ -2912,7 +2912,7 @@ fn fleet_integration_mode(
         return (
             "manifest-only".into(),
             "manual-tag".into(),
-            vec!["existing Landfall manifest or workflow detected".into()],
+            vec!["existing Landmark manifest or workflow detected".into()],
             65,
         );
     }
@@ -2944,25 +2944,25 @@ fn fleet_integration_mode(
         "semantic-release" => (
             "github-full".into(),
             "semantic-release".into(),
-            vec!["semantic-release can let Landfall own full GitHub Action release mode".into()],
+            vec!["semantic-release can let Landmark own full GitHub Action release mode".into()],
             100,
         ),
         "release-please" => (
             "github-synthesis-only".into(),
             "release-please".into(),
-            vec!["release-please already owns versioning; Landfall should synthesize after release creation".into()],
+            vec!["release-please already owns versioning; Landmark should synthesize after release creation".into()],
             85,
         ),
         "changesets" => (
             "github-synthesis-only".into(),
             "changesets".into(),
-            vec!["Changesets already owns package publication; Landfall should synthesize per published release".into()],
+            vec!["Changesets already owns package publication; Landmark should synthesize per published release".into()],
             80,
         ),
         "manual-tag" => (
             "github-synthesis-only".into(),
             "manual-tag".into(),
-            vec!["manual GitHub releases should trigger one synthesis-only Landfall run".into()],
+            vec!["manual GitHub releases should trigger one synthesis-only Landmark run".into()],
             60,
         ),
         "no-release-tool" => (
@@ -3081,7 +3081,7 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         ("blocked", integration_mode.as_str(), reason, 15u64)
     } else if repo.existing_landfall {
         migration_notes.push(
-            "Landfall-like workflow or manifest already exists; inspect before replacing".into(),
+            "Landmark-like workflow or manifest already exists; inspect before replacing".into(),
         );
         ("ready", "manifest-only", "", 65u64)
     } else {
@@ -3100,7 +3100,7 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     };
     if repo.release_tool == "no-release-tool" {
         migration_notes
-            .push("Choose release semantics before installing Landfall automation".into());
+            .push("Choose release semantics before installing Landmark automation".into());
     } else if !repo.existing_landfall && repo.release_tool != "unknown" {
         migration_notes.push(
             "Preview historical migration with `landfall backfill --repo-root . --since <oldest-managed-tag> --dry-run`; write artifacts before considering release-body updates".into(),
@@ -3137,8 +3137,8 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     }
 }
 
-fn fleet_manifest(repo: &FleetRepository, mode: &str) -> LandfallManifest {
-    LandfallManifest {
+fn fleet_manifest(repo: &FleetRepository, mode: &str) -> LandmarkManifest {
+    LandmarkManifest {
         product: ProductManifest {
             name: Some(display_name_from_package(&repo.name)),
             description: Some(format!(
@@ -3182,7 +3182,7 @@ fn fleet_manifest(repo: &FleetRepository, mode: &str) -> LandfallManifest {
 }
 
 fn render_fleet_plan_markdown(plan: &FleetPlan) -> String {
-    let mut out = String::from("# Landfall Fleet Adoption Plan\n\n");
+    let mut out = String::from("# Landmark Fleet Adoption Plan\n\n");
     out.push_str("## Summary\n\n");
     for (status, count) in &plan.summary {
         out.push_str(&format!("- {status}: {count}\n"));
@@ -3270,7 +3270,7 @@ fn render_fleet_apply_markdown(
     files: &[String],
 ) -> String {
     let mut out = format!(
-        "# Apply Landfall Fleet PR\n\nRepository: `{}`\nBranch: `{}`\nBase: `{}`\nTitle: `{}`\n\n",
+        "# Apply Landmark Fleet PR\n\nRepository: `{}`\nBranch: `{}`\nBase: `{}`\nTitle: `{}`\n\n",
         repo.repository, branch, repo.default_branch, title
     );
     out.push_str(
@@ -3294,7 +3294,7 @@ fn render_fleet_apply_markdown(
     out.push_str(&format!("git commit -m {}\n", shell_quote(commit_message)));
     out.push_str(&format!("git push -u origin {}\n", shell_quote(branch)));
     out.push_str(&format!(
-        "gh pr create --repo {} --base {} --head {} --title {} --body 'Adopt Landfall using the reviewed fleet rollout receipt. Merge this PR, monitor the downstream release run, then continue the fleet rollout.'\n",
+        "gh pr create --repo {} --base {} --head {} --title {} --body 'Adopt Landmark using the reviewed fleet rollout receipt. Merge this PR, monitor the downstream release run, then continue the fleet rollout.'\n",
         shell_quote(&repo.repository),
         shell_quote(&repo.default_branch),
         shell_quote(branch),
@@ -3498,7 +3498,7 @@ fn diagnose_conventional_commits(root: &Path) -> String {
 
 fn recommend_setup(
     diagnosis: &SetupDiagnosis,
-    manifest: Option<&LandfallManifest>,
+    manifest: Option<&LandmarkManifest>,
 ) -> SetupRecommendation {
     let workflow = match diagnosis.release_tool.as_str() {
         "semantic-release" => "semantic-release",
@@ -3535,7 +3535,7 @@ fn recommend_setup(
 
 fn setup_workflows(
     diagnosis: &SetupDiagnosis,
-    manifest: Option<&LandfallManifest>,
+    manifest: Option<&LandmarkManifest>,
 ) -> BTreeMap<String, WorkflowCandidate> {
     let branch = &diagnosis.default_branch;
     let mut workflows = BTreeMap::new();
@@ -3578,7 +3578,7 @@ fn setup_workflows(
                 release_tool: tool.into(),
                 mode: mode.into(),
                 rationale: vec![
-                    "includes Landfall healthcheck before the release attempt".into(),
+                    "includes Landmark healthcheck before the release attempt".into(),
                     "declares contents/issues/pull-requests write permissions".into(),
                 ],
                 content,
@@ -3588,7 +3588,7 @@ fn setup_workflows(
     workflows
 }
 
-fn workflow_semantic_release(branch: &str, manifest: Option<&LandfallManifest>) -> String {
+fn workflow_semantic_release(branch: &str, manifest: Option<&LandmarkManifest>) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, None);
     format!(
         r#"name: Release
@@ -3622,7 +3622,7 @@ jobs:
     )
 }
 
-fn workflow_release_please(branch: &str, manifest: Option<&LandfallManifest>) -> String {
+fn workflow_release_please(branch: &str, manifest: Option<&LandmarkManifest>) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     format!(
         r#"name: Release
@@ -3669,7 +3669,7 @@ jobs:
 fn workflow_changesets(
     branch: &str,
     monorepo: bool,
-    manifest: Option<&LandfallManifest>,
+    manifest: Option<&LandmarkManifest>,
 ) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     if monorepo {
@@ -3780,7 +3780,7 @@ jobs:
     }
 }
 
-fn workflow_manual_tag(manifest: Option<&LandfallManifest>) -> String {
+fn workflow_manual_tag(manifest: Option<&LandmarkManifest>) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("auto"));
     format!(
         r#"name: Synthesize Release Notes
@@ -3814,7 +3814,7 @@ jobs:
 }
 
 fn render_manifest_action_inputs(
-    manifest: Option<&LandfallManifest>,
+    manifest: Option<&LandmarkManifest>,
     indent: usize,
     default_changelog_source: Option<&str>,
 ) -> String {
@@ -4023,7 +4023,7 @@ fn build_action_binary(repo_root: &Path, target: &str) -> Result<PathBuf> {
         })?;
     if !output.status.success() {
         return Err(format!(
-            "failed to build Landfall self-release action binary for {target}; install the Rust target and linker for {target}, then retry: {}",
+            "failed to build Landmark self-release action binary for {target}; install the Rust target and linker for {target}, then retry: {}",
             String::from_utf8_lossy(&output.stderr)
         )
         .into());
@@ -6548,7 +6548,7 @@ fn render_local_technical_changelog(release: &RunReleaseContext) -> String {
     markdown
 }
 
-fn render_local_public_notes(manifest: &LandfallManifest, release: &RunReleaseContext) -> String {
+fn render_local_public_notes(manifest: &LandmarkManifest, release: &RunReleaseContext) -> String {
     let product = manifest
         .product
         .name
@@ -6595,7 +6595,7 @@ fn humanize_commit_subject(subject: &str) -> String {
 
 fn write_run_artifacts(
     args: &RunArgs,
-    manifest: &LandfallManifest,
+    manifest: &LandmarkManifest,
     repository: &str,
     release_tag: &str,
     release_url_base: &str,
@@ -6841,7 +6841,7 @@ fn backfill(args: BackfillArgs) -> Result<()> {
         if release.body.contains("## What's New") {
             skipped_tags.push(BackfillSkipRecord {
                 tag: tag.tag,
-                reason: "release body already contains Landfall notes".into(),
+                reason: "release body already contains Landmark notes".into(),
             });
             continue;
         }
@@ -7645,7 +7645,7 @@ fn close_resolved_failures(args: FailureLifecycleArgs) -> Result<()> {
         provider.comment_issue(
             &args.repository,
             number,
-            &format!("Landfall synthesis recovered for {}.", args.release_tag),
+            &format!("Landmark synthesis recovered for {}.", args.release_tag),
         )?;
         provider.close_issue(&args.repository, number)?;
     }
@@ -7663,7 +7663,7 @@ fn report_synthesis_failure(args: ReportFailureArgs) -> Result<()> {
     }
     let title = failure_issue_title(&args.release_tag);
     let body = format!(
-        "Landfall could not synthesize user-facing release notes for `{}`.\n\n- Workflow: {}\n- Run: {}\n- Stage: {}\n- Message: {}\n",
+        "Landmark could not synthesize user-facing release notes for `{}`.\n\n- Workflow: {}\n- Run: {}\n- Stage: {}\n- Message: {}\n",
         args.release_tag,
         args.workflow_name,
         args.workflow_run_url,
@@ -7674,7 +7674,7 @@ fn report_synthesis_failure(args: ReportFailureArgs) -> Result<()> {
 }
 
 fn failure_issue_title(release_tag: &str) -> String {
-    format!("Landfall release-note synthesis failed for {release_tag}")
+    format!("Landmark release-note synthesis failed for {release_tag}")
 }
 
 fn update_version_metadata(args: UpdateVersionArgs) -> Result<()> {
@@ -8181,7 +8181,7 @@ fn validate_manifest_action_precedence_contract(action: &str) -> Vec<String> {
         "inputs.llm-model || steps.manifest_defaults.outputs.llm_model",
         "steps.manifest_defaults.outputs.model_policy",
         "MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}",
-        "Landfall LLM healthcheck skipped because model.policy=off disables synthesis.",
+        "Landmark LLM healthcheck skipped because model.policy=off disables synthesis.",
         "inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models",
         "inputs.audience || steps.manifest_defaults.outputs.audience",
         "inputs.changelog-source || steps.manifest_defaults.outputs.changelog_source",
@@ -10958,7 +10958,7 @@ fn init_self_release_fixture(path: &Path) -> Result<()> {
     fs::create_dir_all(path.join("crates/landfall/src"))?;
     fs::create_dir_all(path.join("dist"))?;
     run_ok("git", ["init", "-q"], path)?;
-    run_ok("git", ["config", "user.name", "Landfall Replay"], path)?;
+    run_ok("git", ["config", "user.name", "Landmark Replay"], path)?;
     run_ok(
         "git",
         ["config", "user.email", "replay@example.invalid"],
@@ -11446,7 +11446,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         .repositories
         .iter()
         .find(|repo| repo.repository == "phrazzld/existing-landfall-workflow")
-        .ok_or("existing Landfall workflow dry-run missing")?;
+        .ok_or("existing Landmark workflow dry-run missing")?;
     if manifest_only
         .files
         .iter()
@@ -11627,7 +11627,7 @@ fn fleet_incomplete_secret_fixture() -> FleetRepository {
 fn init_fixture_repo(path: &Path, release_tag: &str) -> Result<()> {
     fs::create_dir_all(path)?;
     run_ok("git", ["init", "-q"], path)?;
-    run_ok("git", ["config", "user.name", "Landfall Replay"], path)?;
+    run_ok("git", ["config", "user.name", "Landmark Replay"], path)?;
     run_ok(
         "git",
         ["config", "user.email", "replay@example.invalid"],
@@ -12075,7 +12075,7 @@ mod tests {
         .unwrap();
         fs::write(
             repo.path().join("README.md"),
-            "# Atlas\n\nLandfall-managed release automation.\n",
+            "# Atlas\n\nLandmark-managed release automation.\n",
         )
         .unwrap();
 
@@ -12105,9 +12105,9 @@ mod tests {
             packages: vec!["landfall".into()],
             signals: Vec::new(),
         };
-        let manifest = LandfallManifest {
+        let manifest = LandmarkManifest {
             product: ProductManifest {
-                name: Some("Landfall".into()),
+                name: Some("Landmark".into()),
                 description: Some("Release notes and changelog automation.".into()),
             },
             audience: Some("enterprise".into()),
@@ -12228,7 +12228,7 @@ model:
         args.model = String::new();
         args.audience = None;
         args.changelog_source = None;
-        let mut manifest: LandfallManifest =
+        let mut manifest: LandmarkManifest =
             serde_yaml::from_str(&fs::read_to_string(repo.path().join(".landfall.yml")).unwrap())
                 .unwrap();
         manifest.model.primary = None;
@@ -12288,7 +12288,7 @@ model:
 
     #[test]
     fn manifest_validation_rejects_multiline_action_scalars() {
-        let manifest = LandfallManifest {
+        let manifest = LandmarkManifest {
             product: ProductManifest {
                 name: Some("Demo".into()),
                 description: Some("first line\nsecond line".into()),
@@ -12309,7 +12309,7 @@ model:
 
     #[test]
     fn manifest_validation_rejects_unsupported_policy_and_profile() {
-        let manifest = LandfallManifest {
+        let manifest = LandmarkManifest {
             product: ProductManifest {
                 name: Some("Demo".into()),
                 description: Some("Demo app".into()),
@@ -12483,7 +12483,7 @@ model:
         let repo = tempfile::tempdir().unwrap();
         fs::create_dir_all(repo.path().join("crates/landfall")).unwrap();
         run_ok("git", ["init", "-q"], repo.path()).unwrap();
-        run_ok("git", ["config", "user.name", "Landfall Test"], repo.path()).unwrap();
+        run_ok("git", ["config", "user.name", "Landmark Test"], repo.path()).unwrap();
         run_ok(
             "git",
             ["config", "user.email", "landfall@example.invalid"],

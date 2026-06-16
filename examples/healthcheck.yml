@@ -1,4 +1,4 @@
-# Weekly Landfall LLM API key validation.
+# Weekly Landmark LLM API key validation.
 # Catches stale or revoked keys before they cause release failures.
 name: LLM Key Health Check
 

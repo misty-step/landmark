@@ -1,11 +1,11 @@
 # Release pipeline using Changesets for versioning
-# and Landfall for user-facing note synthesis.
+# and Landmark for user-facing note synthesis.
 #
 # How it works:
 #   1. Developers add changeset files via `npx changeset`
 #   2. changesets/action opens a "Version Packages" PR collecting pending changesets
 #   3. Merging that PR publishes packages and creates GitHub Releases
-#   4. Landfall synthesizes user-facing notes for the new release
+#   4. Landmark synthesizes user-facing notes for the new release
 #
 # Requirements:
 #   - Repository secrets: GH_RELEASE_TOKEN, OPENROUTER_API_KEY
@@ -15,7 +15,7 @@
 # Docs:
 #   - Changesets: https://github.com/changesets/changesets
 #   - changesets/action: https://github.com/changesets/action
-#   - Landfall: https://github.com/misty-step/landfall
+#   - Landmark: https://github.com/misty-step/landfall
 
 name: Release
 
@@ -50,7 +50,7 @@ jobs:
         uses: changesets/action@v1
         with:
           # Your publish command. Should create GitHub Releases
-          # for Landfall to find and enhance.
+          # for Landmark to find and enhance.
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -77,5 +77,5 @@ jobs:
           # audience: developer
           # changelog-source: release-body
 
-# Monorepos should use examples/changesets-monorepo.yml, which runs Landfall
+# Monorepos should use examples/changesets-monorepo.yml, which runs Landmark
 # once per published package with a first-class matrix.

@@ -1,6 +1,6 @@
-# Landfall
+# Landmark
 
-Landfall is a portable release-intelligence runtime for repositories that use
+Landmark is a portable release-intelligence runtime for repositories that use
 conventional commits. It can run as a GitHub Action, but the product boundary
 is the Rust CLI: local scripts, generic CI systems, and agents can invoke the
 same runtime to produce version decisions, technical changelogs, public release
@@ -8,7 +8,7 @@ notes, feeds, and machine-readable evidence.
 
 ## What It Does
 
-1. Uses a checked-in Rust runtime for Landfall-owned release behavior
+1. Uses a checked-in Rust runtime for Landmark-owned release behavior
 2. Sets up Node.js only when full semantic-release mode is requested
 3. Installs `semantic-release` and release plugins
 4. Runs `semantic-release` (version bump, changelog update, release creation)
@@ -18,7 +18,7 @@ notes, feeds, and machine-readable evidence.
 
 ## Adoption Modes
 
-Landfall's product boundary is the Rust CLI. Start locally, then choose the
+Landmark's product boundary is the Rust CLI. Start locally, then choose the
 smallest integration mode that matches the release system you already have.
 
 ### Local CLI Preview
@@ -69,7 +69,7 @@ allowed to mutate an existing GitHub Release.
 
 ### GitHub Action Full Mode
 
-Use full mode when Landfall should run `semantic-release`, create the release,
+Use full mode when Landmark should run `semantic-release`, create the release,
 then synthesize and publish notes:
 
 ```yaml
@@ -106,9 +106,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Landfall: Automated semantic-release pipeline
+      # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landfall
-      - name: Run Landfall
+      - name: Run Landmark
         uses: misty-step/landfall@v1
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
@@ -118,7 +118,7 @@ jobs:
           # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
 ```
 
-Landfall is language-agnostic. Your repo does not need `package.json` or Node.js
+Landmark is language-agnostic. Your repo does not need `package.json` or Node.js
 unless full mode is running `semantic-release`; the action handles its own Node
 24 runtime setup.
 
@@ -181,7 +181,7 @@ For the full cold-agent contract, see `docs/agent-integration.md`.
 
 ## Adoption Dry Run
 
-Before wiring a release workflow, run Landfall's setup analyzer from a checkout:
+Before wiring a release workflow, run Landmark's setup analyzer from a checkout:
 
 ```bash
 dist/landfall init --repo-root . --output .landfall.yml --dry-run
@@ -192,16 +192,16 @@ dist/landfall setup --repo-root . --output-dir .landfall/setup
 release-tool signals, and the repository name. `setup` then inspects
 release-tool signals, default branch, tag format, required secrets,
 permissions, package topology, recent conventional-commit usage, and any
-checked-in `.landfall.yml`. It prints a JSON report with a recommended Landfall
+checked-in `.landfall.yml`. It prints a JSON report with a recommended Landmark
 mode and writes workflow candidates for semantic-release, release-please,
 changesets, changesets monorepos, and manual-tag repositories. Every generated
 workflow includes `healthcheck: 'true'`, `GH_RELEASE_TOKEN`,
 `OPENROUTER_API_KEY`, and the `contents`, `issues`, and `pull-requests`
-permissions Landfall needs.
+permissions Landmark needs.
 
 ## Fleet Adoption
 
-Landfall can plan adoption across many GitHub repositories before opening any
+Landmark can plan adoption across many GitHub repositories before opening any
 branches:
 
 ```bash
@@ -222,7 +222,7 @@ dist/landfall fleet open-prs \
 
 `fleet scan` is read-only. It lists repository activity, default branch,
 archive/private state, detected release tooling, tag format, package topology,
-workflow files, Landfall presence, branch-protection availability, and required
+workflow files, Landmark presence, branch-protection availability, and required
 secret metadata. Secret values are never requested or printed. If GitHub hides
 secret or branch-protection metadata for a repository, the scan records
 `unavailable` with the missing scope or access boundary instead of guessing.
@@ -243,7 +243,7 @@ secret blockers.
 
 `fleet open-prs --dry-run` renders the exact `.landfall.yml`, optional
 `.github/workflows/landfall-release.yml`, `diff.md`, and `open-prs.json`
-receipt Landfall would propose for each eligible repository under
+receipt Landmark would propose for each eligible repository under
 `.landfall/fleet-plan/prs/`. Local, generic CI, backfill-first, and
 manifest-only modes do not get a GitHub release workflow. Confirmed rollout
 requires `--confirm-remote --max-prs 1`; the receipt records branch names,
@@ -254,18 +254,18 @@ continue the fleet rollout deliberately.
 
 ## Product Manifest
 
-Landfall reads `.landfall.yml` from the repository root before synthesis. It
+Landmark reads `.landfall.yml` from the repository root before synthesis. It
 keeps product context, audience, voice, changelog source, artifact outputs, and
 model policy in the repo instead of requiring every workflow to repeat them.
 Non-empty action inputs still win over manifest values.
-When `model.primary` is omitted, `model.policy` selects Landfall's built-in
+When `model.primary` is omitted, `model.policy` selects Landmark's built-in
 default model tier: `cheap` uses `openai/gpt-4o-mini`, while `balanced` and
 `rich` use `anthropic/claude-sonnet-4`. `off` disables LLM synthesis while
 still publishing the technical release.
 
 ```yaml
 product:
-  name: Landfall
+  name: Landmark
   description: Versioning, changelog, and release-note automation.
 audience: developer # general, developer, end-user, enterprise
 voice: Clear, concrete, and release-operator friendly.
@@ -359,12 +359,12 @@ not skip the LLM call.
 
 ## Release Integrity Policy
 
-Landfall separates the semantic-release publish step from its owned synthesis and
+Landmark separates the semantic-release publish step from its owned synthesis and
 distribution steps:
 
 - `synthesis-required: "true"` treats failed or degraded synthesis as a hard
   failure and blocks release-body mutation and floating-tag movement.
-- Optional synthesis still allows the release to exist, but partial Landfall
+- Optional synthesis still allows the release to exist, but partial Landmark
   failures are reported through `synthesis-succeeded: false` and protected
   outputs such as floating tags do not move unless synthesis and release-body
   update both succeed.
@@ -454,7 +454,7 @@ dist/landfall backfill \
 For private repos where GitHub Releases aren't publicly visible, use artifact outputs to make notes portable:
 
 ```yaml
-- name: Run Landfall
+- name: Run Landmark
   id: landfall
   uses: misty-step/landfall@v1
   with:
@@ -531,7 +531,7 @@ The `synthesis-status` output is a compact JSON object for automation:
       "commits": [{ "subject": "feat(cli): add import", "short_hash": "abc1234" }],
       "tags": ["v1.1.0"],
       "changed_files": ["src/import.rs"],
-      "docs": [{ "path": "README.md", "title": "Landfall" }],
+      "docs": [{ "path": "README.md", "title": "Landmark" }],
       "artifacts": {
         "internal_technical_changelog": "landfall.internal-technical-changelog.v1",
         "public_release_notes": "landfall.public-release-notes.v1:developer"
@@ -589,7 +589,7 @@ To publish a simple RSS 2.0 release feed (for feed readers, docs sites, etc.), s
     rss-max-entries: "50"
 ```
 
-Landfall updates the feed on each synthesized release and commits the file back to your repo.
+Landmark updates the feed on each synthesized release and commits the file back to your repo.
 
 For automatic Slack notifications, set `slack-webhook-url`.
 
@@ -602,9 +602,9 @@ The `release-notes` output is still available for custom notifications:
     echo "${{ steps.landfall.outputs.release-notes }}" | post-to-slack
 ```
 
-## Dogfooding Landfall
+## Dogfooding Landmark
 
-Landfall releases itself without pushing generated release commits directly to
+Landmark releases itself without pushing generated release commits directly to
 protected `master`. The repository workflow has two phases:
 
 - `prepare-release-pr` runs `./dist/landfall prepare-self-release`, updates
@@ -617,9 +617,9 @@ protected `master`. The repository workflow has two phases:
   is authoritative for non-Linux developers.
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
   Release only when landed metadata is ahead of the latest semver tag, then
-  runs Landfall in `synthesis-only` mode to update the release body and floating
+  runs Landmark in `synthesis-only` mode to update the release body and floating
   major tag. That synthesis pass is non-blocking because the release has already
-  been published; failed or degraded synthesis is surfaced through Landfall
+  been published; failed or degraded synthesis is surfaced through Landmark
   outputs without turning a published release into a failed deployment.
 
 The local replay oracle for this path is:
@@ -630,7 +630,7 @@ dist/landfall replay-action \
   --scenario self_release_pr_path
 ```
 
-### Metadata Version Sync (Landfall Repo)
+### Metadata Version Sync (Landmark Repo)
 
 This repository keeps `package.json` and the Rust crate version aligned to release tags:
 
@@ -644,17 +644,17 @@ This repository keeps `package.json` and the Rust crate version aligned to relea
   `dist/landfall.sha256`.
 - CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
-### Action Contract Validation (Landfall Repo)
+### Action Contract Validation (Landmark Repo)
 
 The public action contract is checked from `action.yml`:
 
 - `cargo run --locked -- check-action-contract` fails when the README inputs table diverges from action metadata.
-- The same command scans examples, project docs, and release workflows for unknown or deprecated Landfall inputs.
+- The same command scans examples, project docs, and release workflows for unknown or deprecated Landmark inputs.
 - CI runs the contract check before tests so stale consumer instructions fail fast.
 
-### Consumer Replay Harness (Landfall Repo)
+### Consumer Replay Harness (Landmark Repo)
 
-Landfall's replay harness creates disposable git fixture repositories and fake
+Landmark's replay harness creates disposable git fixture repositories and fake
 local GitHub/LLM endpoints, then exercises synthesis, release-body updates,
 artifact writing, failure policy, and floating-tag behavior without production
 secrets:
@@ -676,11 +676,11 @@ bin/gate
 
 ## Custom semantic-release Config
 
-Landfall ships a default config at `configs/.releaserc.json`. If your repo has its own semantic-release config file (`.releaserc`, `.releaserc.json`, `.releaserc.yml`, `.releaserc.yaml`, `release.config.js`, `release.config.cjs`, or `release.config.mjs`), Landfall uses it instead of the bundled defaults.
+Landmark ships a default config at `configs/.releaserc.json`. If your repo has its own semantic-release config file (`.releaserc`, `.releaserc.json`, `.releaserc.yml`, `.releaserc.yaml`, `release.config.js`, `release.config.cjs`, or `release.config.mjs`), Landmark uses it instead of the bundled defaults.
 
 This lets you customize branches, plugins, commit-analyzer rules, or anything else semantic-release supports.
 
-If no config file is found, Landfall falls back to its bundled config with:
+If no config file is found, Landmark falls back to its bundled config with:
 
 - `@semantic-release/commit-analyzer`
 - `@semantic-release/release-notes-generator`
@@ -692,11 +692,11 @@ If no config file is found, Landfall falls back to its bundled config with:
 
 ## Custom Prompt Templates
 
-Landfall resolves the synthesis prompt template in this order:
+Landmark resolves the synthesis prompt template in this order:
 
 1. **Explicit input** — `prompt-template-path: my-templates/release.md`
 2. **Convention** — `.landfall/synthesis-prompt.md` in your repo root
-3. **Bundled audience variant** — Landfall's built-in template selected by `audience` (default `general`)
+3. **Bundled audience variant** — Landmark's built-in template selected by `audience` (default `general`)
 
 Built-in audience variants:
 
@@ -753,4 +753,4 @@ Synthesized `## What's New` section (prepended):
 - Webhook deliveries now retry more reliably when signatures expire.
 ```
 
-Landfall intentionally omits internal-only changes (CI/tooling) from user-facing summaries.
+Landmark intentionally omits internal-only changes (CI/tooling) from user-facing summaries.

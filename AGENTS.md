@@ -1,7 +1,7 @@
-# Landfall Agent Contract
+# Landmark Agent Contract
 
 ## Product Boundary
-Landfall is a portable release-intelligence runtime. The GitHub Action is one
+Landmark is a portable release-intelligence runtime. The GitHub Action is one
 packaging layer, not the product boundary. Keep release analysis, synthesis,
 artifact writing, feed generation, notifications, and provider policy in the
 Rust CLI. Keep GitHub-specific behavior behind explicit adapter seams.
@@ -20,7 +20,7 @@ Rust CLI. Keep GitHub-specific behavior behind explicit adapter seams.
   for release behavior.
 
 ## Portability Direction
-- A non-GitHub caller must be able to drive Landfall through CLI commands,
+- A non-GitHub caller must be able to drive Landmark through CLI commands,
   manifest files, JSON artifacts, and local git state.
 - `synthesis-only`, `backfill --mode artifacts-only`, `write-artifacts`,
   `update-feed`, and webhook/Slack notification paths are the portable core.

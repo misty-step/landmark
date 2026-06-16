@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://landfall.dev/schemas/run-evidence.v1.schema.json",
-  "title": "Landfall run evidence",
+  "title": "Landmark run evidence",
   "type": "object",
   "additionalProperties": false,
   "x-landfall-artifact": "landfall run evidence packet",

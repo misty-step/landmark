@@ -1,10 +1,10 @@
 # Release pipeline using Google's release-please for versioning
-# and Landfall for user-facing note synthesis.
+# and Landmark for user-facing note synthesis.
 #
 # How it works:
 #   1. release-please analyzes conventional commits and opens a "Release PR"
 #   2. When that PR merges, release-please creates the GitHub Release and tag
-#   3. Landfall synthesizes user-facing notes and updates the release body
+#   3. Landmark synthesizes user-facing notes and updates the release body
 #
 # Requirements:
 #   - Repository secrets: GH_RELEASE_TOKEN, OPENROUTER_API_KEY
@@ -12,7 +12,7 @@
 #
 # Docs:
 #   - release-please: https://github.com/googleapis/release-please-action
-#   - Landfall: https://github.com/misty-step/landfall
+#   - Landmark: https://github.com/misty-step/landfall
 
 name: Release
 
@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Landfall synthesis-only mode: skips semantic-release entirely,
+      # Landmark synthesis-only mode: skips semantic-release entirely,
       # only runs LLM synthesis for the tag release-please just created.
       - uses: misty-step/landfall@v1
         with:

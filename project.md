@@ -1,4 +1,4 @@
-# Project: Landfall
+# Project: Landmark
 
 ## Vision
 Automated release pipeline GitHub Action — semantic-release + LLM synthesis — that turns conventional commits into user-facing release notes without manual effort.
@@ -35,7 +35,7 @@ Automated release pipeline GitHub Action — semantic-release + LLM synthesis �
 
 - **Milestone:** Post-backlog reset
 - **Backlog source:** `backlog.d/`
-- **Theme:** Make Landfall trustworthy as reusable infrastructure: self-validating docs/contracts, explicit release integrity policy, live consumer replay, and lower-friction ecosystem adoption.
+- **Theme:** Make Landmark trustworthy as reusable infrastructure: self-validating docs/contracts, explicit release integrity policy, live consumer replay, and lower-friction ecosystem adoption.
 
 ## Quality Bar
 
@@ -78,7 +78,7 @@ exit 0   # NOT exit 1
 ```
 
 ### Rust Runtime Conventions
-- One CLI owns Landfall behavior behind stable subcommands
+- One CLI owns Landmark behavior behind stable subcommands
 - Structured diagnostics stay actionable in GitHub Actions logs
 - HTTP calls use bounded failure semantics
 - Tests live with the Rust crate; replay verifies action-level behavior

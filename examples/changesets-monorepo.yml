@@ -1,5 +1,5 @@
 # Release pipeline using Changesets for a multi-package workspace.
-# Each published package gets its own Landfall synthesis-only run.
+# Each published package gets its own Landmark synthesis-only run.
 name: Release
 
 on:

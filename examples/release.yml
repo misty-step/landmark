@@ -36,12 +36,12 @@ jobs:
         with:
           # semantic-release inspects full git history and tags.
           fetch-depth: 0
-          # Landfall sets an authenticated remote URL during release.
+          # Landmark sets an authenticated remote URL during release.
           persist-credentials: false
 
-      # Landfall: Automated semantic-release pipeline
+      # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landfall
-      - name: Run Landfall
+      - name: Run Landmark
         uses: misty-step/landfall@v1
         with:
           # Personal access token with repository write access.

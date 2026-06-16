@@ -1,4 +1,4 @@
-name: Landfall
+name: Landmark
 description: Focused release pipeline using semantic-release with optional LLM-powered synthesis.
 
 inputs:
@@ -180,7 +180,7 @@ runs:
       run: |
         set -euo pipefail
         if [ "$(printf '%s' "${MODEL_POLICY}" | tr '[:upper:]' '[:lower:]')" = "off" ] || [ "$(printf '%s' "${LLM_MODEL}" | tr '[:upper:]' '[:lower:]')" = "off" ]; then
-          echo "::notice::Landfall LLM healthcheck skipped because model.policy=off disables synthesis."
+          echo "::notice::Landmark LLM healthcheck skipped because model.policy=off disables synthesis."
           exit 0
         fi
         WARN_ONLY_ARGS=()
@@ -466,7 +466,7 @@ runs:
           > "${notes_file}" \
           2> "${synth_log}"; then
           details="$(tail -n 5 "${synth_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
-          message="Landfall synthesis failed; publishing release without a What's New section."
+          message="Landmark synthesis failed; publishing release without a What's New section."
           if [ -n "${details}" ]; then
             message="${message} Details: ${details}"
           fi
@@ -478,7 +478,7 @@ runs:
         fi
 
         if [ -f "${quality_file}" ] && [ "$(cat "${quality_file}")" = "skipped" ]; then
-          message="Landfall synthesis skipped by cost/significance policy."
+          message="Landmark synthesis skipped by cost/significance policy."
           echo "::notice::${message}"
           set_output "quality" "skipped"
           set_output "failure_stage" "skipped"
@@ -487,7 +487,7 @@ runs:
         fi
 
         if [ ! -s "${notes_file}" ]; then
-          message="Landfall synthesis returned empty notes; skipping release update."
+          message="Landmark synthesis returned empty notes; skipping release update."
           echo "::warning::${message}"
           set_output "failure_stage" "synthesis_empty"
           set_output "failure_message" "$(sanitize_text "${message}")"
@@ -587,7 +587,7 @@ runs:
           > /dev/null \
           2> "${update_log}"; then
           details="$(tail -n 5 "${update_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
-          message="Landfall could not update the release body; release remains published."
+          message="Landmark could not update the release body; release remains published."
           if [ -n "${details}" ]; then
             message="${message} Details: ${details}"
           fi
@@ -652,7 +652,7 @@ runs:
             set_output "succeeded" "true"
           else
             details="$(tail -n 5 "${artifacts_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
-            message="Landfall could not write release notes artifacts."
+            message="Landmark could not write release notes artifacts."
             if [ -n "${details}" ]; then
               message="${message} Details: ${details}"
             fi
@@ -662,7 +662,7 @@ runs:
             set_output "failure_message" "${message}"
           fi
         else
-          message="Landfall could not write release notes artifacts; notes file is missing."
+          message="Landmark could not write release notes artifacts; notes file is missing."
           echo "::warning::${message}"
           set_output "failure_stage" "artifact_write"
           set_output "failure_message" "$(sanitize_text "${message}")"
@@ -758,7 +758,7 @@ runs:
         fi
 
         details="$(tail -n 5 "${rss_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
-        message="Landfall could not update the RSS release feed."
+        message="Landmark could not update the RSS release feed."
         if [ -n "${details}" ]; then
           message="${message} Details: ${details}"
         fi
@@ -969,7 +969,7 @@ runs:
           --release-tag "${RELEASE_TAG}"; then
           set_output "action" "closed"
         else
-          echo "::warning::Landfall could not close resolved failure issues."
+          echo "::warning::Landmark could not close resolved failure issues."
           set_output "action" "failed"
         fi
 
@@ -1000,7 +1000,7 @@ runs:
           --failure-message "${FAILURE_MESSAGE}"; then
           set_output "action" "reported"
         else
-          echo "::warning::Landfall could not create a synthesis failure issue."
+          echo "::warning::Landmark could not create a synthesis failure issue."
           set_output "action" "failed"
         fi
 
@@ -1021,5 +1021,5 @@ runs:
         if [ "${SYNTHESIS_SUCCEEDED}" = "true" ]; then
           exit 0
         fi
-        echo "::error::Landfall synthesis required but failed at stage '${FAILURE_STAGE}'. ${FAILURE_MESSAGE}"
+        echo "::error::Landmark synthesis required but failed at stage '${FAILURE_STAGE}'. ${FAILURE_MESSAGE}"
         exit 1

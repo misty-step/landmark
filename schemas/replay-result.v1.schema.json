@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://landfall.dev/schemas/replay-result.v1.schema.json",
-  "title": "Landfall replay result",
+  "title": "Landmark replay result",
   "type": "object",
   "additionalProperties": false,
   "x-landfall-artifact": "replay-action evidence",
