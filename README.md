@@ -107,9 +107,9 @@ jobs:
           persist-credentials: false
 
       # Landmark: Automated semantic-release pipeline
-      # https://github.com/misty-step/landfall
+      # https://github.com/misty-step/landmark
       - name: Run Landmark
-        uses: misty-step/landfall@v1
+        uses: misty-step/landmark@v1
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -128,7 +128,7 @@ Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a
 custom pipeline already creates the version and release:
 
 ```yaml
-- uses: misty-step/landfall@v1
+- uses: misty-step/landmark@v1
   with:
     mode: synthesis-only
     release-tag: ${{ steps.release.outputs.tag_name }}
@@ -386,7 +386,7 @@ distribution steps:
 ### OpenRouter (default)
 
 ```yaml
-- uses: misty-step/landfall@v1
+- uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -395,7 +395,7 @@ distribution steps:
 ### OpenAI
 
 ```yaml
-- uses: misty-step/landfall@v1
+- uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -406,7 +406,7 @@ distribution steps:
 ### Custom OpenAI-Compatible Provider
 
 ```yaml
-- uses: misty-step/landfall@v1
+- uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.PROVIDER_API_KEY }}
@@ -456,7 +456,7 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
 ```yaml
 - name: Run Landmark
   id: landfall
-  uses: misty-step/landfall@v1
+  uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -581,7 +581,7 @@ The `synthesis-status` output is a compact JSON object for automation:
 To publish a simple RSS 2.0 release feed (for feed readers, docs sites, etc.), set `rss-feed-file`:
 
 ```yaml
-- uses: misty-step/landfall@v1
+- uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}

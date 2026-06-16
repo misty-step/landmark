@@ -12,7 +12,7 @@
 #   - Repository secrets: GH_RELEASE_TOKEN, OPENROUTER_API_KEY
 #   - A published GitHub Release (Landmark reads its body as input)
 #
-# Docs: https://github.com/misty-step/landfall
+# Docs: https://github.com/misty-step/landmark
 
 name: Synthesize Release Notes
 
@@ -32,7 +32,7 @@ jobs:
 
       # Landmark synthesis-only mode skips semantic-release entirely and
       # synthesizes user-facing notes for the published release.
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           release-tag: ${{ github.event.release.tag_name }}

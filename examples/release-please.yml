@@ -12,7 +12,7 @@
 #
 # Docs:
 #   - release-please: https://github.com/googleapis/release-please-action
-#   - Landmark: https://github.com/misty-step/landfall
+#   - Landmark: https://github.com/misty-step/landmark
 
 name: Release
 
@@ -52,7 +52,7 @@ jobs:
 
       # Landmark synthesis-only mode: skips semantic-release entirely,
       # only runs LLM synthesis for the tag release-please just created.
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           release-tag: ${{ needs.release-please.outputs.tag_name }}

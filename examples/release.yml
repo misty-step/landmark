@@ -40,9 +40,9 @@ jobs:
           persist-credentials: false
 
       # Landmark: Automated semantic-release pipeline
-      # https://github.com/misty-step/landfall
+      # https://github.com/misty-step/landmark
       - name: Run Landmark
-        uses: misty-step/landfall@v1
+        uses: misty-step/landmark@v1
         with:
           # Personal access token with repository write access.
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
