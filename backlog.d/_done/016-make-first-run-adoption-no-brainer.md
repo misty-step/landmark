@@ -3,7 +3,7 @@
 Priority: P1 · Status: done · Estimate: XL
 
 ## Goal
-Let a new human or agent get useful Landfall output quickly on macOS, Linux,
+Let a new human or agent get useful Landmark output quickly on macOS, Linux,
 GitHub Actions, or arbitrary CI without first solving secrets, triggers, and
 binary compatibility.
 
@@ -16,7 +16,7 @@ binary compatibility.
 - [x] Docs consistency checks fail on stale command names, nonexistent files, bad model IDs, or mismatched examples.
 
 ## Completion Evidence
-- `cargo run --locked -- replay-action --scenario first_run_local_preview --evidence-dir .landfall/replay-016-first-run` passed and wrote local evidence/artifacts for a disposable checkout with no secrets.
+- `cargo run --locked -- replay-action --scenario first_run_local_preview --evidence-dir .landmark/replay-016-first-run` passed and wrote local evidence/artifacts for a disposable checkout with no secrets.
 - `cargo test --locked setup_` passed for generated workflow trigger/runtime regression coverage.
 - `cargo run --locked -- check-action-contract` passed with first-run docs, Node 24, model ID, command name, and linked-file checks.
 - `bin/gate` passed.
@@ -30,6 +30,6 @@ binary compatibility.
 6. Extend docs contract checks beyond action inputs.
 
 ## Notes
-- Evidence: `dist/landfall` is a Linux action binary; local macOS users should use Cargo or a local build.
+- Evidence: `dist/landmark` is a Linux action binary; local macOS users should use Cargo or a local build.
 - Evidence: dogfood found missing secrets and trigger ambiguity across downstream repos.
-- Why: if first contact is slow or confusing, Landfall will not become the default release system.
+- Why: if first contact is slow or confusing, Landmark will not become the default release system.

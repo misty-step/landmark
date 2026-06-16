@@ -3,7 +3,7 @@
 Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
-Ensure `bin/gate` and replay evidence prove Landfall's documented reliability,
+Ensure `bin/gate` and replay evidence prove Landmark's documented reliability,
 security, and side-effect behavior before releases ship.
 
 ## Oracle
@@ -11,12 +11,12 @@ security, and side-effect behavior before releases ship.
 - [x] No secret-bearing token or API key is passed through argv in the runtime hot path.
 - [x] Error, log, status, and evidence outputs redact configured secrets.
 - [x] Replay scenarios cover every side-effecting action subcommand: release mutation, artifact writes, RSS/feed commit, webhook, Slack, failure issue close/report, floating-tag movement, and synthesis status emission.
-- [x] A meta-test fails when `action.yml` invokes a `dist/landfall` subcommand that has no replay coverage.
+- [x] A meta-test fails when `action.yml` invokes a `dist/landmark` subcommand that has no replay coverage.
 - [x] README reliability/security claims are tied to executable checks.
 
 ## Completion Evidence
-- `cargo run --locked -- replay-action --scenario http_resilience_policy --scenario action_side_effect_coverage --evidence-dir .landfall/replay-015-verification` passed.
-- `.landfall/replay-015-verification/replay-result.json` records argv-secret-free curl config, configured-secret redaction, 429 retry, 5xx retry, slow-provider timeout, and action subcommand replay coverage.
+- `cargo run --locked -- replay-action --scenario http_resilience_policy --scenario action_side_effect_coverage --evidence-dir .landmark/replay-015-verification` passed.
+- `.landmark/replay-015-verification/replay-result.json` records argv-secret-free curl config, configured-secret redaction, 429 retry, 5xx retry, slow-provider timeout, and action subcommand replay coverage.
 - `cargo run --locked -- check-action-contract` passed with README release-integrity tokens tied to executable scenarios.
 
 ## Children
@@ -31,4 +31,4 @@ security, and side-effect behavior before releases ship.
 - Evidence: `curl_json` currently passes `Authorization` as a curl argv header and has no timeout/retry flags.
 - Evidence: README says external GitHub and LLM calls use bounded timeouts and retry policy.
 - Evidence: current replay coverage focuses on release/LLM paths and does not cover all side-effecting action steps.
-- Why: portability increases the chance Landfall runs on shared or long-lived hosts, where secrets and hung providers are higher-impact.
+- Why: portability increases the chance Landmark runs on shared or long-lived hosts, where secrets and hung providers are higher-impact.

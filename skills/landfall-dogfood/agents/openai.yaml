@@ -1,4 +1,0 @@
-interface:
-  display_name: "Landfall Dogfood"
-  short_description: "Dogfood fleet release adoption"
-  default_prompt: "Use $landfall-dogfood to dogfood Landfall fleet adoption across GitHub repositories."

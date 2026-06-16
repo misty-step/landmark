@@ -3,12 +3,12 @@
 Priority: P2 · Status: done · Estimate: L
 
 ## Goal
-Let Landfall dogfood automatic self-release without requiring direct pushes to
+Let Landmark dogfood automatic self-release without requiring direct pushes to
 protected `master`.
 
 ## Oracle
 - [x] A release run can generate `CHANGELOG.md`, `package.json`,
-      `crates/landfall/Cargo.toml`, and `Cargo.lock` changes on a release
+      `crates/landmark/Cargo.toml`, and `Cargo.lock` changes on a release
       branch.
 - [x] The generated release branch opens or updates a pull request whose checks
       include `merge-gate`.
@@ -22,7 +22,7 @@ protected `master`.
   `12441ec32afb35156e1c00eb62a3c32514919b8d` failed when
   `@semantic-release/git` tried to push `HEAD:master`; GitHub rejected it
   because `master` requires the `merge-gate` status check.
-- Current mitigation: Landfall's own release workflow is manual so normal
+- Current mitigation: Landmark's own release workflow is manual so normal
   `master` pushes do not run a release job that cannot pass under current branch
   protection.
 
@@ -31,10 +31,10 @@ protected `master`.
 - Added Rust-owned `prepare-self-release` and `publish-self-release` commands.
   The prepare phase computes the next version from release-worthy conventional
   commits, prepends `CHANGELOG.md`, updates `package.json`,
-  `crates/landfall/Cargo.toml`, and `Cargo.lock`, and emits GitHub Action
+  `crates/landmark/Cargo.toml`, and `Cargo.lock`, and emits GitHub Action
   outputs for the release PR.
 - Replaced the manual-only release workflow with a two-phase protected-branch
-  flow: `prepare-release-pr` opens/updates `landfall/self-release` through
+  flow: `prepare-release-pr` opens/updates `landmark/self-release` through
   `peter-evans/create-pull-request`, and `publish-landed-release` creates the
   GitHub Release only when landed metadata is ahead of the latest semver tag.
 - Added the `self_release_pr_path` replay scenario. It creates a disposable repo,
@@ -42,4 +42,4 @@ protected `master`.
   metadata, then publishes through a fake GitHub Releases API.
 - Verification: `cargo test --locked`, `cargo run --locked --
   check-action-contract`, `cargo run --locked -- replay-action --evidence-dir
-  .landfall/replay`, checked-in musl binary rebuild/checksum, and `bin/gate`.
+  .landmark/replay`, checked-in musl binary rebuild/checksum, and `bin/gate`.

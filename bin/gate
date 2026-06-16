@@ -16,8 +16,8 @@ if git remote get-url origin >/dev/null 2>&1; then
 fi
 cargo run --locked -- check-version-sync --reference "${tag_ref}"
 cargo run --locked -- check-action-contract
-cargo run --locked -- setup --repo-root . --output-dir .landfall/setup
-cargo run --locked -- replay-action --evidence-dir .landfall/replay
+cargo run --locked -- setup --repo-root . --output-dir .landmark/setup
+cargo run --locked -- replay-action --evidence-dir .landmark/replay
 if command -v rustup >/dev/null 2>&1; then
   rustup target add x86_64-unknown-linux-musl
 fi
@@ -26,8 +26,8 @@ if [ "$(uname -s)" = "Linux" ]; then
 else
   echo "non-Linux host: byte-for-byte Linux action binary parity is enforced by hosted CI"
 fi
-test -x dist/landfall
-shasum -a 256 -c dist/landfall.sha256
+test -x dist/landmark
+shasum -a 256 -c dist/landmark.sha256
 
 if command -v actionlint >/dev/null 2>&1; then
   actionlint

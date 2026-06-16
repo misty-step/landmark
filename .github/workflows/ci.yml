@@ -62,7 +62,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          RELEASE_BRANCH: landfall/self-release
+          RELEASE_BRANCH: landmark/self-release
         run: |
           set -euo pipefail
           tag_ref="HEAD"
@@ -82,7 +82,7 @@ jobs:
 
       - name: Verify adoption setup analyzer
         shell: bash
-        run: cargo run --locked -- setup --repo-root . --output-dir .landfall/setup
+        run: cargo run --locked -- setup --repo-root . --output-dir .landmark/setup
 
       - name: Run tests
         shell: bash
@@ -98,26 +98,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: landfall-linux-action-binary
-          path: target/x86_64-unknown-linux-musl/release/landfall
+          name: landmark-linux-action-binary
+          path: target/x86_64-unknown-linux-musl/release/landmark
           if-no-files-found: ignore
 
       - name: Verify checked-in Linux action binary
         shell: bash
         run: |
           set -euo pipefail
-          test -x dist/landfall
-          cmp target/x86_64-unknown-linux-musl/release/landfall dist/landfall
-          shasum -a 256 -c dist/landfall.sha256
-          dist/landfall --help >/dev/null
+          test -x dist/landmark
+          cmp target/x86_64-unknown-linux-musl/release/landmark dist/landmark
+          shasum -a 256 -c dist/landmark.sha256
+          dist/landmark --help >/dev/null
 
-      - name: Replay Landfall action behavior
+      - name: Replay Landmark action behavior
         shell: bash
         run: |
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-            dist/landfall replay-action \
-              --evidence-dir .landfall/replay \
+            dist/landmark replay-action \
+              --evidence-dir .landmark/replay \
               --scenario action_static_contract \
               --scenario consumer_full_mode_success \
               --scenario consumer_synthesis_only_success \
@@ -126,15 +126,15 @@ jobs:
               --scenario consumer_floating_tag_behavior \
               --scenario self_release_pr_path
           else
-            dist/landfall replay-action --evidence-dir .landfall/replay
+            dist/landmark replay-action --evidence-dir .landmark/replay
           fi
 
       - name: Upload replay evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: landfall-replay-evidence
-          path: .landfall/replay/
+          name: landmark-replay-evidence
+          path: .landmark/replay/
           if-no-files-found: ignore
 
       - name: Validate action metadata

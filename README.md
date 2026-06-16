@@ -31,12 +31,12 @@ cargo run --locked -- run --provider local --repo-root .
 ```
 
 The command reads git tags and conventional commits, chooses the next semantic
-version when `--release-tag` is omitted, writes `.landfall/run/evidence.json`,
+version when `--release-tag` is omitted, writes `.landmark/run/evidence.json`,
 generates a technical changelog, and writes markdown, plaintext, HTML, JSON, and
 RSS release artifacts under `docs/releases/`.
 
 Source build is the portable install path today: use `cargo run --locked -- ...`
-or a locally built `target/debug/landfall`. dist/landfall is the checked-in
+or a locally built `target/debug/landmark`. dist/landmark is the checked-in
 Linux x86_64 action binary used by the GitHub Action; do not use it as the
 macOS install path. Packaged binaries are not published yet, so downstream
 projects should use Cargo or their own locally built binary outside GitHub
@@ -57,7 +57,7 @@ the same Rust runtime directly:
 cargo run --locked -- run \
   --provider local \
   --repo-root . \
-  --output-dir .landfall/run \
+  --output-dir .landmark/run \
   --output-file docs/releases/{version}.md \
   --output-json docs/releases/releases.json \
   --rss-feed-file docs/releases/feed.xml
@@ -151,7 +151,7 @@ Agents should start with the self-description document instead of scraping this
 README:
 
 ```bash
-landfall describe --json
+landmark describe --json
 ```
 
 The describe payload exposes commands, modes, providers, inputs, outputs,
@@ -163,18 +163,18 @@ taxonomy. stdout carries JSON payloads; stderr carries logs and errors. Use
 The cold-agent integration oracle is:
 
 ```bash
-landfall replay-action --scenario agent_native_contracts --format json
+landmark replay-action --scenario agent_native_contracts --format json
 ```
 
 The checked schema registry lives in `schemas/`:
 
-- `schemas/landfall-manifest.v1.schema.json` for `.landfall.yml`
+- `schemas/landmark-manifest.v1.schema.json` for `.landmark.yml`
 - `schemas/synthesis-status.v1.schema.json` for synthesis status output
 - `schemas/release-context.v1.schema.json` for deterministic release context packets
 - `schemas/replay-result.v1.schema.json` for replay evidence
 - `schemas/fleet-plan.v1.schema.json` for fleet adoption plans
 - `schemas/release-entry.v1.schema.json` for release-note JSON entries
-- `schemas/run-evidence.v1.schema.json` for `landfall run` evidence packets
+- `schemas/run-evidence.v1.schema.json` for `landmark run` evidence packets
 - `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
 
 For the full cold-agent contract, see `docs/agent-integration.md`.
@@ -184,15 +184,15 @@ For the full cold-agent contract, see `docs/agent-integration.md`.
 Before wiring a release workflow, run Landmark's setup analyzer from a checkout:
 
 ```bash
-dist/landfall init --repo-root . --output .landfall.yml --dry-run
-dist/landfall setup --repo-root . --output-dir .landfall/setup
+dist/landmark init --repo-root . --output .landmark.yml --dry-run
+dist/landmark setup --repo-root . --output-dir .landmark/setup
 ```
 
-`init` infers a first `.landfall.yml` from package metadata, README content,
+`init` infers a first `.landmark.yml` from package metadata, README content,
 release-tool signals, and the repository name. `setup` then inspects
 release-tool signals, default branch, tag format, required secrets,
 permissions, package topology, recent conventional-commit usage, and any
-checked-in `.landfall.yml`. It prints a JSON report with a recommended Landmark
+checked-in `.landmark.yml`. It prints a JSON report with a recommended Landmark
 mode and writes workflow candidates for semantic-release, release-please,
 changesets, changesets monorepos, and manual-tag repositories. Every generated
 workflow includes `healthcheck: 'true'`, `GH_RELEASE_TOKEN`,
@@ -205,19 +205,19 @@ Landmark can plan adoption across many GitHub repositories before opening any
 branches:
 
 ```bash
-dist/landfall fleet scan \
+dist/landmark fleet scan \
   --owner phrazzld \
   --owner misty-step \
-  --output .landfall/fleet.json
+  --output .landmark/fleet.json
 
-dist/landfall fleet plan \
-  --input .landfall/fleet.json \
-  --output-dir .landfall/fleet-plan
+dist/landmark fleet plan \
+  --input .landmark/fleet.json \
+  --output-dir .landmark/fleet-plan
 
-dist/landfall fleet open-prs \
+dist/landmark fleet open-prs \
   --dry-run \
-  --plan-dir .landfall/fleet-plan \
-  --output-dir .landfall/fleet-plan/prs
+  --plan-dir .landmark/fleet-plan \
+  --output-dir .landmark/fleet-plan/prs
 ```
 
 `fleet scan` is read-only. It lists repository activity, default branch,
@@ -234,17 +234,17 @@ when you want GitHub to verify branch protection and Actions secret names.
 `non-release` repositories that should not publish release artifacts, then ranks
 it into an integration mode: `local`, `generic-ci`, `github-full`,
 `github-synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, or
-`skipped`. It writes `.landfall/fleet-plan/plan.json` and a Markdown operator
+`skipped`. It writes `.landmark/fleet-plan/plan.json` and a Markdown operator
 dashboard with repository kind, release surface, integration rationale, risk
 flags, required secret names, missing secrets, skip reasons, and migration
 notes. GitHub secrets are required only for GitHub integration modes; local,
 generic CI, manifest-only, backfill-first, and skipped non-release plans avoid
 secret blockers.
 
-`fleet open-prs --dry-run` renders the exact `.landfall.yml`, optional
-`.github/workflows/landfall-release.yml`, `diff.md`, and `open-prs.json`
+`fleet open-prs --dry-run` renders the exact `.landmark.yml`, optional
+`.github/workflows/landmark-release.yml`, `diff.md`, and `open-prs.json`
 receipt Landmark would propose for each eligible repository under
-`.landfall/fleet-plan/prs/`. Local, generic CI, backfill-first, and
+`.landmark/fleet-plan/prs/`. Local, generic CI, backfill-first, and
 manifest-only modes do not get a GitHub release workflow. Confirmed rollout
 requires `--confirm-remote --max-prs 1`; the receipt records branch names,
 commit messages, rollback/disposition guidance, evidence directories, and an
@@ -254,7 +254,7 @@ continue the fleet rollout deliberately.
 
 ## Product Manifest
 
-Landmark reads `.landfall.yml` from the repository root before synthesis. It
+Landmark reads `.landmark.yml` from the repository root before synthesis. It
 keeps product context, audience, voice, changelog source, artifact outputs, and
 model policy in the repo instead of requiring every workflow to repeat them.
 Non-empty action inputs still win over manifest values.
@@ -291,12 +291,12 @@ budget:
   max_usd: 0.25
 ```
 
-Use `dist/landfall doctor --repo-root .` to validate manifest enums before a
-workflow run. Use `dist/landfall setup --repo-root . --output-dir
-.landfall/setup` after editing the manifest to regenerate workflow candidates
+Use `dist/landmark doctor --repo-root .` to validate manifest enums before a
+workflow run. Use `dist/landmark setup --repo-root . --output-dir
+.landmark/setup` after editing the manifest to regenerate workflow candidates
 that reflect the durable defaults.
 
-Use `dist/landfall synthesize --dry-run-cost ...` to inspect the release context
+Use `dist/landmark synthesize --dry-run-cost ...` to inspect the release context
 packet without calling an LLM. The dry run reports deterministic repo facts,
 estimated input/output tokens, model tier, selected model, skip/use/escalation
 decision, cost estimate, release classification, and the final context sources
@@ -304,7 +304,7 @@ included in the prompt. In `balanced` mode, docs-only, chore-only,
 dependency-only, and internal-tooling releases are skipped; breaking, security,
 and migration-heavy releases escalate to the rich tier.
 
-Use `dist/landfall backfill --repo-root . --since <tag> --dry-run` to preview
+Use `dist/landmark backfill --repo-root . --since <tag> --dry-run` to preview
 historical artifact migration for repositories that already have release tags.
 
 ## Inputs
@@ -377,7 +377,7 @@ distribution steps:
   429/5xx). `replay-action --scenario http_resilience_policy` exercises slow,
   throttled, and failing providers, and
   `replay-action --scenario action_side_effect_coverage` fails if `action.yml`
-  invokes a `dist/landfall` subcommand without replay coverage.
+  invokes a `dist/landmark` subcommand without replay coverage.
 - Generated `release-notes` output uses a collision-resistant GitHub output
   delimiter so synthesized content cannot truncate the output payload.
 
@@ -421,13 +421,13 @@ Backfill is a Rust-owned CLI path for mature repositories that already have tags
 Preview the migration from an existing tag:
 
 ```bash
-dist/landfall backfill --repo-root . --since v1.0.0 --dry-run
+dist/landmark backfill --repo-root . --since v1.0.0 --dry-run
 ```
 
 Write portable artifacts only, which is the default safe migration mode:
 
 ```bash
-dist/landfall backfill \
+dist/landmark backfill \
   --repo-root . \
   --since v1.0.0 \
   --mode artifacts-only \
@@ -438,7 +438,7 @@ dist/landfall backfill \
 Preview GitHub Release body updates before considering mutation:
 
 ```bash
-dist/landfall backfill \
+dist/landmark backfill \
   --repo-root . \
   --since v1.0.0 \
   --mode release-body \
@@ -455,7 +455,7 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
 
 ```yaml
 - name: Run Landmark
-  id: landfall
+  id: landmark
   uses: misty-step/landmark@v1
   with:
     github-token: ${{ secrets.GH_RELEASE_TOKEN }}
@@ -533,8 +533,8 @@ The `synthesis-status` output is a compact JSON object for automation:
       "changed_files": ["src/import.rs"],
       "docs": [{ "path": "README.md", "title": "Landmark" }],
       "artifacts": {
-        "internal_technical_changelog": "landfall.internal-technical-changelog.v1",
-        "public_release_notes": "landfall.public-release-notes.v1:developer"
+        "internal_technical_changelog": "landmark.internal-technical-changelog.v1",
+        "public_release_notes": "landmark.public-release-notes.v1:developer"
       }
     },
     "sources": [
@@ -597,9 +597,9 @@ The `release-notes` output is still available for custom notifications:
 
 ```yaml
 - name: Custom Notify Slack
-  if: steps.landfall.outputs.released == 'true'
+  if: steps.landmark.outputs.released == 'true'
   run: |
-    echo "${{ steps.landfall.outputs.release-notes }}" | post-to-slack
+    echo "${{ steps.landmark.outputs.release-notes }}" | post-to-slack
 ```
 
 ## Dogfooding Landmark
@@ -607,13 +607,13 @@ The `release-notes` output is still available for custom notifications:
 Landmark releases itself without pushing generated release commits directly to
 protected `master`. The repository workflow has two phases:
 
-- `prepare-release-pr` runs `./dist/landfall prepare-self-release`, updates
-  `CHANGELOG.md`, `package.json`, `crates/landfall/Cargo.toml`, and
+- `prepare-release-pr` runs `./dist/landmark prepare-self-release`, updates
+  `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, and
   `Cargo.lock`, then rebuilds the checked-in Linux action binary and rewrites
-  `dist/landfall.sha256` on `landfall/self-release`. It then opens or updates
+  `dist/landmark.sha256` on `landmark/self-release`. It then opens or updates
   a release PR, which must pass the normal `merge-gate` before it can land.
   Hosted Quality Checks rebuild the binary in Ubuntu, upload the fresh binary
-  as evidence, and byte-compare it to `dist/landfall`; that hosted comparison
+  as evidence, and byte-compare it to `dist/landmark`; that hosted comparison
   is authoritative for non-Linux developers.
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
   Release only when landed metadata is ahead of the latest semver tag, then
@@ -625,8 +625,8 @@ protected `master`. The repository workflow has two phases:
 The local replay oracle for this path is:
 
 ```bash
-dist/landfall replay-action \
-  --evidence-dir .landfall/replay \
+dist/landmark replay-action \
+  --evidence-dir .landmark/replay \
   --scenario self_release_pr_path
 ```
 
@@ -635,13 +635,13 @@ dist/landfall replay-action \
 This repository keeps `package.json` and the Rust crate version aligned to release tags:
 
 - `prepare-self-release` updates `package.json`,
-  `crates/landfall/Cargo.toml`, `Cargo.lock`, `dist/landfall`, and
-  `dist/landfall.sha256` before opening the release PR.
-- `.releaserc.json` still runs `./dist/landfall update-version-metadata` for
+  `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, and
+  `dist/landmark.sha256` before opening the release PR.
+- `.releaserc.json` still runs `./dist/landmark update-version-metadata` for
   consumers using full semantic-release mode.
 - The release commit includes `CHANGELOG.md`, `package.json`,
-  `crates/landfall/Cargo.toml`, `Cargo.lock`, `dist/landfall`, and
-  `dist/landfall.sha256`.
+  `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, and
+  `dist/landmark.sha256`.
 - CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
 ### Action Contract Validation (Landmark Repo)
@@ -660,10 +660,10 @@ artifact writing, failure policy, and floating-tag behavior without production
 secrets:
 
 ```bash
-bin/replay-action --evidence-dir .landfall/replay
+bin/replay-action --evidence-dir .landmark/replay
 ```
 
-The command writes `.landfall/replay/replay-result.json` with action outputs,
+The command writes `.landmark/replay/replay-result.json` with action outputs,
 generated notes, release body before/after state, git tags, structured logs, and
 fake service requests. CI runs a bounded replay on pull requests, the full replay
 on `master`, and uploads the evidence packet for inspection.
@@ -695,7 +695,7 @@ If no config file is found, Landmark falls back to its bundled config with:
 Landmark resolves the synthesis prompt template in this order:
 
 1. **Explicit input** — `prompt-template-path: my-templates/release.md`
-2. **Convention** — `.landfall/synthesis-prompt.md` in your repo root
+2. **Convention** — `.landmark/synthesis-prompt.md` in your repo root
 3. **Bundled audience variant** — Landmark's built-in template selected by `audience` (default `general`)
 
 Built-in audience variants:

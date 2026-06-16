@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://landfall.dev/schemas/synthesis-status.v1.schema.json",
+  "$id": "https://landmark.dev/schemas/synthesis-status.v1.schema.json",
   "title": "Landmark synthesis status",
   "type": "object",
   "additionalProperties": false,
-  "x-landfall-artifact": "synthesis-status output",
+  "x-landmark-artifact": "synthesis-status output",
   "required": ["synthesis_enabled", "released", "succeeded", "quality", "failure_stage", "failure_message", "model_attempts", "context", "destinations"],
   "properties": {
     "synthesis_enabled": { "type": "boolean" },

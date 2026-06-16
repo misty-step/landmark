@@ -26,11 +26,11 @@ Consolidate release-note rendering, notification payloads, and machine-readable 
 - Evidence: `close-resolved-failures.py`, `report-synthesis-failure.py`, `extract-prs.py`, and `update-release.py` each build GitHub request headers separately despite sharing retry/logging helpers.
 - Evidence: `action.yml` opens and closes synthesis failure issues from the core release action, expanding permissions and stateful side effects beyond release-note publishing.
 - Evidence: product review found platform consumers need machine-readable synthesis health signals beyond warning text and simple booleans.
-- Why: simplification and platform perspectives converge here: Landfall's value is the note artifact, but that artifact is not yet modeled deeply.
+- Why: simplification and platform perspectives converge here: Landmark's value is the note artifact, but that artifact is not yet modeled deeply.
 
 ## Delivery
 - Added `ReleaseNoteArtifact` as the shared Rust model for markdown, plaintext, HTML, Slack, RSS, webhook JSON, stored JSON, sections, bullets, and safe links.
 - Added `SynthesisStatus` JSON as the `synthesis-status` action output with quality, failure stage/message, model attempts, and release body/artifact/RSS/webhook/Slack destination outcomes.
 - Added `synthesis-failure-issue-action` as the explicit companion output channel for failure issue close/report/failure/skipped states.
 - Preserved existing scalar outputs and stored JSON compatibility, including dedupe by both current `tag` and older `version` entries.
-- Verification: `bin/gate`; `cargo test --locked` with 6 tests including typed artifact rendering and status JSON coverage; adversarial Grok review: no blockers; Claude QA: pass; `shasum -a 256 -c dist/landfall.sha256`.
+- Verification: `bin/gate`; `cargo test --locked` with 6 tests including typed artifact rendering and status JSON coverage; adversarial Grok review: no blockers; Claude QA: pass; `shasum -a 256 -c dist/landmark.sha256`.

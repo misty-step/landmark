@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://landfall.dev/schemas/failure-envelope.v1.schema.json",
+  "$id": "https://landmark.dev/schemas/failure-envelope.v1.schema.json",
   "title": "Landmark failure envelope",
   "type": "object",
   "additionalProperties": false,
-  "x-landfall-artifact": "--error-format json stderr",
+  "x-landmark-artifact": "--error-format json stderr",
   "required": ["error"],
   "properties": {
     "error": {

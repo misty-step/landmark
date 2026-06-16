@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://landfall.dev/schemas/replay-result.v1.schema.json",
+  "$id": "https://landmark.dev/schemas/replay-result.v1.schema.json",
   "title": "Landmark replay result",
   "type": "object",
   "additionalProperties": false,
-  "x-landfall-artifact": "replay-action evidence",
+  "x-landmark-artifact": "replay-action evidence",
   "required": ["verdict", "scenario_count", "scenarios"],
   "properties": {
     "verdict": { "type": "string", "enum": ["passed", "failed"] },

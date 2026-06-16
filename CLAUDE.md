@@ -23,13 +23,13 @@ Composite GitHub Action with these steps:
 
 ## File Structure
 ```
-landfall/
+landmark/
 ├── action.yml              # Reusable GitHub Action (called by repos)
 ├── crates/
-│   └── landfall/           # Rust runtime
+│   └── landmark/           # Rust runtime
 ├── dist/
-│   ├── landfall            # Linux action binary
-│   └── landfall.sha256     # Checksum
+│   ├── landmark            # Linux action binary
+│   └── landmark.sha256     # Checksum
 ├── templates/
 │   └── synthesis-prompt.md # Prompt template for LLM
 ├── configs/

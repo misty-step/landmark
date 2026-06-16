@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Landfall 016 First-Run Adoption Plan</title>
+  <title>Landmark 016 First-Run Adoption Plan</title>
   <style>
     body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #162018; background: #f7f8f4; }
     main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 56px; }
@@ -21,7 +21,7 @@
 <body>
 <main>
   <h1>Ticket 016: First-Run Adoption</h1>
-  <p><span class="tag">Goal</span> Make a new human or agent get useful Landfall output in about a minute without secrets, GitHub coupling, or platform confusion.</p>
+  <p><span class="tag">Goal</span> Make a new human or agent get useful Landmark output in about a minute without secrets, GitHub coupling, or platform confusion.</p>
 
   <div class="grid">
     <section class="panel">
@@ -46,7 +46,7 @@
   <table>
     <thead><tr><th>Slice</th><th>Change</th><th>Oracle</th></tr></thead>
     <tbody>
-      <tr><td>Local quickstart</td><td>Add a canonical <code>first_run_local_preview</code> replay using <code>landfall run --provider local</code> with default artifact outputs.</td><td>Evidence JSON has provider <code>local</code>, a semantic version decision, technical changelog hash, artifacts, and no remote publication.</td></tr>
+      <tr><td>Local quickstart</td><td>Add a canonical <code>first_run_local_preview</code> replay using <code>landmark run --provider local</code> with default artifact outputs.</td><td>Evidence JSON has provider <code>local</code>, a semantic version decision, technical changelog hash, artifacts, and no remote publication.</td></tr>
       <tr><td>Docs IA</td><td>Restructure README adoption into four modes: local CLI, generic CI, GitHub full, GitHub synthesis-only, with explicit macOS/Linux install paths and action-binary caveat.</td><td>Docs contract requires the mode headings, valid command names, existing linked examples, and known model IDs.</td></tr>
       <tr><td>Setup triggers</td><td>Change manual-tag setup to one blessed default trigger and document release-published as the default manual release event.</td><td>Unit test fails if manual setup contains both tag push and release published triggers.</td></tr>
       <tr><td>Node 24</td><td>Pin action and generated Node setup examples to Node 24 and make CI/action contract verify it.</td><td>Contract check requires action/workflow/example/setup-generated Node versions to be 24.</td></tr>

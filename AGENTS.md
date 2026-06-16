@@ -7,13 +7,13 @@ artifact writing, feed generation, notifications, and provider policy in the
 Rust CLI. Keep GitHub-specific behavior behind explicit adapter seams.
 
 ## Architecture
-- `crates/landfall/src/main.rs` owns the Rust runtime and current CLI surface.
-- `action.yml` is a composite GitHub Action wrapper around `dist/landfall` plus
+- `crates/landmark/src/main.rs` owns the Rust runtime and current CLI surface.
+- `action.yml` is a composite GitHub Action wrapper around `dist/landmark` plus
   `semantic-release` for full GitHub release mode.
-- `dist/landfall` is the checked-in Linux x86_64 musl binary consumed by the
+- `dist/landmark` is the checked-in Linux x86_64 musl binary consumed by the
   action. On macOS, ARM64 Linux, or any other non-Linux-x86_64 platform, use
-  `cargo run --locked -p landfall -- ...` or a locally built
-  `target/debug/landfall`; do not execute `dist/landfall` locally.
+  `cargo run --locked -p landmark -- ...` or a locally built
+  `target/debug/landmark`; do not execute `dist/landmark` locally.
 - Node is only for `semantic-release` in full mode. Do not add new Node or
   shell orchestration unless the platform boundary requires it.
 - Python is not part of the active runtime. Do not reintroduce Python scripts

@@ -3,7 +3,7 @@
 Priority: P1 · Status: done · Estimate: L
 
 ## Goal
-Keep Landfall's README, action metadata, examples, and project notes generated or checked from one source of truth so consumers never follow stale release-action contracts.
+Keep Landmark's README, action metadata, examples, and project notes generated or checked from one source of truth so consumers never follow stale release-action contracts.
 
 ## Oracle
 - [x] A local command fails when README input defaults diverge from `action.yml`.
@@ -26,5 +26,5 @@ Keep Landfall's README, action metadata, examples, and project notes generated o
 ## Delivery
 - Added `scripts/check-action-contract.py` as the local and CI contract validation command.
 - The checker validates README input names, order, required flags, and defaults against `action.yml`.
-- The checker scans README/CLAUDE/project docs, examples, and release workflows for unknown or deprecated Landfall inputs in usage blocks.
+- The checker scans README/CLAUDE/project docs, examples, and release workflows for unknown or deprecated Landmark inputs in usage blocks.
 - Verification: `python scripts/check-action-contract.py`; `python -m pytest -q tests/test_check_action_contract.py`.

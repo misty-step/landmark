@@ -1,0 +1,4 @@
+interface:
+  display_name: "Landmark Dogfood"
+  short_description: "Dogfood fleet release adoption"
+  default_prompt: "Use $landmark-dogfood to dogfood Landmark fleet adoption across GitHub repositories."

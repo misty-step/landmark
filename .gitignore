@@ -1,6 +1,6 @@
 __pycache__/
 *.py[cod]
 node_modules/
-.landfall/
+.landmark/
 .pi/
 target/

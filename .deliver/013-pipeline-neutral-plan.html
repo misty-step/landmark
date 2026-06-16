@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Landfall 013 Pipeline-Neutral Delivery Plan</title>
+  <title>Landmark 013 Pipeline-Neutral Delivery Plan</title>
   <style>
     :root {
       --bg: #111318;
@@ -74,7 +74,7 @@
   <header>
     <section>
       <p class="eyebrow">Plan review</p>
-      <h1>Deliver 013: Pipeline-Neutral Landfall</h1>
+      <h1>Deliver 013: Pipeline-Neutral Landmark</h1>
       <p class="lede">Make GitHub one provider path by adding a local, tokenless
         release run that uses the same Rust runtime and replay evidence model as
         the GitHub Action.</p>
@@ -99,7 +99,7 @@
     <article class="panel span-4">
       <h2>Definition Of Done</h2>
       <ul>
-        <li><code>landfall run --provider local</code> produces release evidence and artifacts from a disposable git repo.</li>
+        <li><code>landmark run --provider local</code> produces release evidence and artifacts from a disposable git repo.</li>
         <li>Replay has a canonical local-provider scenario.</li>
         <li>README and backlog explain the non-GitHub path.</li>
         <li>PR is reviewed, green, squash-merged, and master is monitored.</li>
@@ -131,7 +131,7 @@
       </div>
       <div>
         <h3>Proof Surface</h3>
-        <p><code>cargo test --locked</code>, <code>landfall replay-action --scenario local_provider_run</code>,
+        <p><code>cargo test --locked</code>, <code>landmark replay-action --scenario local_provider_run</code>,
           <code>bin/gate</code>, fresh reviewer, PR checks, post-merge runs.</p>
       </div>
     </div>
@@ -149,9 +149,9 @@
     <article class="panel span-6">
       <h2>Repo Anchors</h2>
       <ul>
-        <li><code>crates/landfall/src/main.rs</code> - CLI, backfill source, replay harness.</li>
+        <li><code>crates/landmark/src/main.rs</code> - CLI, backfill source, replay harness.</li>
         <li><code>README.md</code> - public integration contract.</li>
-        <li><code>backlog.d/013-make-landfall-pipeline-neutral.md</code> - acceptance oracle.</li>
+        <li><code>backlog.d/013-make-landmark-pipeline-neutral.md</code> - acceptance oracle.</li>
         <li><code>bin/gate</code> - release verification loop.</li>
       </ul>
     </article>

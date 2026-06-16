@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landmark.dev/schemas/landmark-manifest.v1.schema.json",
+  "title": "Landmark manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landmark-artifact": ".landmark.yml",
+  "properties": {
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "audience": { "type": "string", "enum": ["general", "developer", "end-user", "enterprise"] },
+    "voice": { "type": "string" },
+    "changelog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "enum": ["auto", "changelog", "release-body", "prs"] }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "markdown": { "type": "string" },
+        "plaintext": { "type": "string" },
+        "html": { "type": "string" },
+        "json": { "type": "string" },
+        "rss": { "type": "string" }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string", "enum": ["full", "synthesis-only"] }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": { "type": "string", "enum": ["cheap", "balanced", "rich", "off"] },
+        "primary": { "type": "string" },
+        "fallbacks": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_input_tokens": { "type": "integer", "minimum": 0 },
+        "max_output_tokens": { "type": "integer", "minimum": 0 },
+        "max_usd": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
