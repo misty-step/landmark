@@ -51,12 +51,12 @@ Automated release pipeline GitHub Action â€” semantic-release + LLM synthesis â€
 ### Shell Safety (action.yml run blocks)
 ```yaml
 # NEVER interpolate inputs directly
-run: landfall synthesize --api-key "${{ inputs.llm-api-key }}"  # BAD
+run: landmark synthesize --api-key "${{ inputs.llm-api-key }}"  # BAD
 
 # ALWAYS use env: block
 env:
   API_KEY: ${{ inputs.llm-api-key }}
-run: landfall synthesize --api-key "${API_KEY}"                  # GOOD
+run: landmark synthesize --api-key "${API_KEY}"                  # GOOD
 ```
 
 ### Output Writing

@@ -1,6 +1,6 @@
-# Build Landfall — Focused Release Pipeline GitHub Action
+# Build Landmark — Focused Release Pipeline GitHub Action
 
-Read CLAUDE.md for full context. Build a working prototype of the Landfall GitHub Action.
+Read CLAUDE.md for full context. Build a working prototype of the Landmark GitHub Action.
 
 ## What to Build
 
@@ -16,7 +16,7 @@ Inputs:
 
 Steps:
 1. Setup Node.js
-2. Use the checked-in Rust runtime for Landfall-owned behavior
+2. Use the checked-in Rust runtime for Landmark-owned behavior
 3. Install dependencies (semantic-release + plugins)
 4. Run semantic-release (generates changelog, bumps version, creates release)
 5. If synthesis=true: Run the Rust runtime to generate user-facing notes
@@ -50,7 +50,7 @@ Steps:
 
 ### 7. README.md
 - Clear, concise documentation
-- Quick start: how to add Landfall to a repo
+- Quick start: how to add Landmark to a repo
 - Configuration options
 - Example output (before/after: technical vs user-facing notes)
 

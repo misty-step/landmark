@@ -3,7 +3,7 @@
 Priority: P1 · Status: done · Estimate: XL
 
 ## Goal
-Prove Landfall behavior in realistic consumer repositories before release, not only through script unit tests and string checks.
+Prove Landmark behavior in realistic consumer repositories before release, not only through script unit tests and string checks.
 
 ## Oracle
 - [x] One local command creates disposable fixture repositories and replays full mode, synthesis-only mode, failure paths, and floating-tag behavior without real secrets.
@@ -37,5 +37,5 @@ Prove Landfall behavior in realistic consumer repositories before release, not o
 - Replay evidence now includes action outputs, generated notes, release body
   before/after, git tags, artifacts, structured logs, and fake service requests.
 - CI runs a bounded replay on pull requests, the full replay on `master`, and
-  uploads `.landfall/replay/` as an artifact.
+  uploads `.landmark/replay/` as an artifact.
 - Added `bin/gate` as the local one-command verification loop.

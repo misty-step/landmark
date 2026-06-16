@@ -27,7 +27,7 @@ const INVALID_NOTES: &str = "hello, here are the release notes";
 const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 
 #[derive(Parser)]
-#[command(name = "landfall", version)]
+#[command(name = "landmark", version)]
 #[command(about = "Rust runtime for the Landmark release action")]
 struct Cli {
     #[arg(long = "error-format", global = true, default_value = "text")]
@@ -78,7 +78,7 @@ struct DescribeArgs {
 struct InitArgs {
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
-    #[arg(long, default_value = ".landfall.yml")]
+    #[arg(long, default_value = ".landmark.yml")]
     output: PathBuf,
     #[arg(long = "dry-run")]
     dry_run: bool,
@@ -368,14 +368,14 @@ struct RunArgs {
     dry_run: bool,
     #[arg(long = "notes-file", default_value = "")]
     notes_file: String,
-    #[arg(long = "output-dir", default_value = ".landfall/run")]
+    #[arg(long = "output-dir", default_value = ".landmark/run")]
     output_dir: PathBuf,
     #[arg(
         long = "technical-changelog-file",
-        default_value = ".landfall/run/technical-changelog.md"
+        default_value = ".landmark/run/technical-changelog.md"
     )]
     technical_changelog_file: String,
-    #[arg(long = "evidence-file", default_value = ".landfall/run/evidence.json")]
+    #[arg(long = "evidence-file", default_value = ".landmark/run/evidence.json")]
     evidence_file: String,
     #[arg(long = "output-file", default_value = "docs/releases/{version}.md")]
     output_file: String,
@@ -513,7 +513,7 @@ struct BackfillArgs {
     rss_max_entries: usize,
     #[arg(
         long = "resume-file",
-        default_value = ".landfall/backfill-manifest.json"
+        default_value = ".landmark/backfill-manifest.json"
     )]
     resume_file: PathBuf,
 }
@@ -548,7 +548,7 @@ enum FleetCommand {
 struct FleetScanArgs {
     #[arg(long)]
     owner: Vec<String>,
-    #[arg(long, default_value = ".landfall/fleet.json")]
+    #[arg(long, default_value = ".landmark/fleet.json")]
     output: PathBuf,
     #[arg(long = "max-repos", default_value_t = 0)]
     max_repos: usize,
@@ -570,9 +570,9 @@ struct FleetScanArgs {
 
 #[derive(Args)]
 struct FleetPlanArgs {
-    #[arg(long, default_value = ".landfall/fleet.json")]
+    #[arg(long, default_value = ".landmark/fleet.json")]
     input: PathBuf,
-    #[arg(long = "output-dir", default_value = ".landfall/fleet-plan")]
+    #[arg(long = "output-dir", default_value = ".landmark/fleet-plan")]
     output_dir: PathBuf,
     #[arg(long = "format", default_value = "text")]
     format: String,
@@ -580,9 +580,9 @@ struct FleetPlanArgs {
 
 #[derive(Args)]
 struct FleetOpenPrsArgs {
-    #[arg(long = "plan-dir", default_value = ".landfall/fleet-plan")]
+    #[arg(long = "plan-dir", default_value = ".landmark/fleet-plan")]
     plan_dir: PathBuf,
-    #[arg(long = "output-dir", default_value = ".landfall/fleet-plan/prs")]
+    #[arg(long = "output-dir", default_value = ".landmark/fleet-plan/prs")]
     output_dir: PathBuf,
     #[arg(long = "dry-run")]
     dry_run: bool,
@@ -600,7 +600,7 @@ struct PrepareSelfReleaseArgs {
     repo_root: PathBuf,
     #[arg(long, default_value = "misty-step/landmark")]
     repository: String,
-    #[arg(long = "release-branch", default_value = "landfall/self-release")]
+    #[arg(long = "release-branch", default_value = "landmark/self-release")]
     release_branch: String,
     #[arg(long = "dist-target", default_value = LINUX_ACTION_TARGET)]
     dist_target: String,
@@ -878,7 +878,7 @@ struct CommandContract {
 
 fn describe(args: DescribeArgs) -> Result<()> {
     if !args.json {
-        println!("Run `landfall describe --json` for the machine-readable Landmark contract.");
+        println!("Run `landmark describe --json` for the machine-readable Landmark contract.");
         return Ok(());
     }
     let command = Cli::command();
@@ -887,8 +887,8 @@ fn describe(args: DescribeArgs) -> Result<()> {
         .map(describe_clap_command)
         .collect();
     let document = json!({
-        "schema_version": "landfall.describe.v1",
-        "landfall_version": env!("CARGO_PKG_VERSION"),
+        "schema_version": "landmark.describe.v1",
+        "landmark_version": env!("CARGO_PKG_VERSION"),
         "product_boundary": "Rust CLI runtime; GitHub Action is an adapter wrapper",
         "providers": ["local", "github"],
         "modes": ["full", "synthesis-only", "artifacts-only", "release-body"],
@@ -904,15 +904,15 @@ fn describe(args: DescribeArgs) -> Result<()> {
         "examples": [
             {
                 "name": "local dry-run release evidence",
-                "command": "landfall run --provider local --repo-root . --dry-run"
+                "command": "landmark run --provider local --repo-root . --dry-run"
             },
             {
                 "name": "machine-readable failure",
-                "command": "landfall --error-format json run --provider unsupported --dry-run"
+                "command": "landmark --error-format json run --provider unsupported --dry-run"
             },
             {
                 "name": "cold-agent replay oracle",
-                "command": "landfall replay-action --scenario agent_native_contracts --format json"
+                "command": "landmark replay-action --scenario agent_native_contracts --format json"
             }
         ]
     });
@@ -954,58 +954,58 @@ fn describe_clap_command(command: &clap::Command) -> Value {
 fn schema_descriptors() -> Vec<SchemaDescriptor> {
     vec![
         SchemaDescriptor {
-            name: "landfall_manifest",
-            path: "schemas/landfall-manifest.v1.schema.json",
-            id: "https://landfall.dev/schemas/landfall-manifest.v1.schema.json",
+            name: "landmark_manifest",
+            path: "schemas/landmark-manifest.v1.schema.json",
+            id: "https://landmark.dev/schemas/landmark-manifest.v1.schema.json",
             version: "v1",
-            artifact: ".landfall.yml",
+            artifact: ".landmark.yml",
         },
         SchemaDescriptor {
             name: "synthesis_status",
             path: "schemas/synthesis-status.v1.schema.json",
-            id: "https://landfall.dev/schemas/synthesis-status.v1.schema.json",
+            id: "https://landmark.dev/schemas/synthesis-status.v1.schema.json",
             version: "v1",
             artifact: "synthesis-status output",
         },
         SchemaDescriptor {
             name: "release_context",
             path: "schemas/release-context.v1.schema.json",
-            id: "https://landfall.dev/schemas/release-context.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-context.v1.schema.json",
             version: "v1",
             artifact: "release context packet",
         },
         SchemaDescriptor {
             name: "replay_result",
             path: "schemas/replay-result.v1.schema.json",
-            id: "https://landfall.dev/schemas/replay-result.v1.schema.json",
+            id: "https://landmark.dev/schemas/replay-result.v1.schema.json",
             version: "v1",
             artifact: "replay-action evidence",
         },
         SchemaDescriptor {
             name: "fleet_plan",
             path: "schemas/fleet-plan.v1.schema.json",
-            id: "https://landfall.dev/schemas/fleet-plan.v1.schema.json",
+            id: "https://landmark.dev/schemas/fleet-plan.v1.schema.json",
             version: "v1",
             artifact: "fleet plan",
         },
         SchemaDescriptor {
             name: "release_entry",
             path: "schemas/release-entry.v1.schema.json",
-            id: "https://landfall.dev/schemas/release-entry.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-entry.v1.schema.json",
             version: "v1",
             artifact: "release notes JSON entry",
         },
         SchemaDescriptor {
             name: "run_evidence",
             path: "schemas/run-evidence.v1.schema.json",
-            id: "https://landfall.dev/schemas/run-evidence.v1.schema.json",
+            id: "https://landmark.dev/schemas/run-evidence.v1.schema.json",
             version: "v1",
-            artifact: "landfall run evidence packet",
+            artifact: "landmark run evidence packet",
         },
         SchemaDescriptor {
             name: "failure_envelope",
             path: "schemas/failure-envelope.v1.schema.json",
-            id: "https://landfall.dev/schemas/failure-envelope.v1.schema.json",
+            id: "https://landmark.dev/schemas/failure-envelope.v1.schema.json",
             version: "v1",
             artifact: "--error-format json stderr",
         },
@@ -1027,7 +1027,7 @@ fn command_contracts() -> Vec<CommandContract> {
             command: "init",
             mode: "configuration-bootstrap",
             mutates: true,
-            preview: "--dry-run prints inferred manifest without writing .landfall.yml",
+            preview: "--dry-run prints inferred manifest without writing .landmark.yml",
             stdout: "manifest YAML with --dry-run, otherwise no payload",
             stderr: "logs and errors only",
             json_output: false,
@@ -1617,7 +1617,7 @@ fn doctor(args: DoctorArgs) -> Result<()> {
     if !matches!(args.format.as_str(), "text" | "json") {
         return Err("--format must be text or json".into());
     }
-    let manifest = load_manifest(&args.repo_root)?.ok_or(".landfall.yml is missing")?;
+    let manifest = load_manifest(&args.repo_root)?.ok_or(".landmark.yml is missing")?;
     let mut errors = validate_manifest(&manifest);
     errors.extend(validate_manifest_completeness(&manifest));
     if errors.is_empty() {
@@ -1626,12 +1626,12 @@ fn doctor(args: DoctorArgs) -> Result<()> {
                 "{}",
                 serde_json::to_string_pretty(&json!({
                     "verdict": "passed",
-                    "schema": "schemas/landfall-manifest.v1.schema.json",
-                    "manifest": ".landfall.yml"
+                    "schema": "schemas/landmark-manifest.v1.schema.json",
+                    "manifest": ".landmark.yml"
                 }))?
             );
         } else {
-            println!("manifest ok (schema schemas/landfall-manifest.v1.schema.json)");
+            println!("manifest ok (schema schemas/landmark-manifest.v1.schema.json)");
         }
         Ok(())
     } else {
@@ -1780,7 +1780,7 @@ fn render_manifest_yaml(manifest: &LandmarkManifest) -> Result<String> {
 }
 
 fn load_manifest(root: &Path) -> Result<Option<LandmarkManifest>> {
-    let path = root.join(".landfall.yml");
+    let path = root.join(".landmark.yml");
     if !path.is_file() {
         return Ok(None);
     }
@@ -2156,7 +2156,7 @@ struct FleetRepository {
     package_topology: Vec<String>,
     release_files: Vec<String>,
     workflows: Vec<String>,
-    existing_landfall: bool,
+    existing_landmark: bool,
     required_secrets: Vec<FleetSecretStatus>,
     signals: Vec<String>,
 }
@@ -2238,7 +2238,7 @@ fn setup(args: SetupArgs) -> Result<()> {
         for candidate in workflows.values() {
             let filename = Path::new(&candidate.path)
                 .file_name()
-                .unwrap_or_else(|| OsStr::new("landfall-release.yml"));
+                .unwrap_or_else(|| OsStr::new("landmark-release.yml"));
             fs::write(output_dir.join(filename), &candidate.content)?;
         }
     }
@@ -2253,7 +2253,7 @@ fn setup(args: SetupArgs) -> Result<()> {
         required_secrets: vec!["GH_RELEASE_TOKEN".into(), "OPENROUTER_API_KEY".into()],
         workflows,
         manifest,
-        backfill: "available: run `landfall backfill --repo-root . --since <tag> --dry-run` to plan historical artifacts; use `--mode artifacts-only` for safe migration output and preview `--mode release-body --dry-run` before any release-body update".into(),
+        backfill: "available: run `landmark backfill --repo-root . --since <tag> --dry-run` to plan historical artifacts; use `--mode artifacts-only` for safe migration output and preview `--mode release-body --dry-run` before any release-body update".into(),
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
@@ -2430,12 +2430,12 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         }
         opened += 1;
         let manifest = render_manifest_yaml(&repo.manifest)?;
-        fs::write(repo_dir.join(".landfall.yml"), &manifest)?;
+        fs::write(repo_dir.join(".landmark.yml"), &manifest)?;
         let workflow = if fleet_pr_should_write_workflow(repo) {
             let workflow = fleet_workflow_for_plan(repo);
             fs::create_dir_all(repo_dir.join(".github/workflows"))?;
             fs::write(
-                repo_dir.join(".github/workflows/landfall-release.yml"),
+                repo_dir.join(".github/workflows/landmark-release.yml"),
                 &workflow,
             )?;
             Some(workflow)
@@ -2444,11 +2444,11 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         };
         let diff = render_fleet_pr_diff(repo, &manifest, workflow.as_deref());
         fs::write(repo_dir.join("diff.md"), diff)?;
-        let mut files = vec![".landfall.yml".into(), "diff.md".into()];
+        let mut files = vec![".landmark.yml".into(), "diff.md".into()];
         if workflow.is_some() {
-            files.insert(1, ".github/workflows/landfall-release.yml".into());
+            files.insert(1, ".github/workflows/landmark-release.yml".into());
         }
-        let branch = format!("landfall/adopt-{}", repo.repository.replace('/', "-"));
+        let branch = format!("landmark/adopt-{}", repo.repository.replace('/', "-"));
         let title: String = if repo.recommended_mode == "manifest-only" {
             "chore(release): configure Landmark manifest".into()
         } else {
@@ -2641,7 +2641,7 @@ fn scan_fleet_repository(
         ".releaserc",
         ".releaserc.json",
         "release-please-config.json",
-        ".landfall.yml",
+        ".landmark.yml",
     ] {
         if path_set.contains(file) {
             if matches!(
@@ -2668,15 +2668,15 @@ fn scan_fleet_repository(
         classify_fleet_repository_kind(name, &package_topology, &release_files)
     };
     let release_surface = classify_fleet_release_surface(&release_tool, &tags, &workflow_texts);
-    let existing_landfall = release_files.iter().any(|file| file == ".landfall.yml")
+    let existing_landmark = release_files.iter().any(|file| file == ".landmark.yml")
         || workflows
             .iter()
-            .any(|workflow| workflow.to_ascii_lowercase().contains("landfall"))
+            .any(|workflow| workflow.to_ascii_lowercase().contains("landmark"))
         || workflow_texts
             .iter()
-            .any(|(_, text)| workflow_invokes_landfall(text));
+            .any(|(_, text)| workflow_invokes_landmark(text));
     for (workflow, text) in &workflow_texts {
-        if workflow_invokes_landfall(text) {
+        if workflow_invokes_landmark(text) {
             signals.push(format!("{workflow} invokes Landmark action"));
         }
     }
@@ -2712,7 +2712,7 @@ fn scan_fleet_repository(
         package_topology,
         release_files,
         workflows,
-        existing_landfall,
+        existing_landmark,
         required_secrets,
         signals,
     })
@@ -2774,13 +2774,13 @@ fn org_secret_names_for_repo(value: &Value, repository: &str, repo_name: &str) -
         .collect()
 }
 
-fn workflow_invokes_landfall(text: &str) -> bool {
+fn workflow_invokes_landmark(text: &str) -> bool {
     workflow_invokes_landmark_action(text)
 }
 
 fn workflow_invokes_landmark_action(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
-    lower.contains("misty-step/landmark") || lower.contains("misty-step/landfall")
+    lower.contains("misty-step/landmark") || lower.contains("misty-step/landmark")
 }
 
 fn fleet_release_tool(
@@ -2913,7 +2913,7 @@ fn fleet_integration_mode(
             0,
         );
     }
-    if repo.existing_landfall {
+    if repo.existing_landmark {
         return (
             "manifest-only".into(),
             "manual-tag".into(),
@@ -3084,7 +3084,7 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         )
     } else if let Some(reason) = secret_blocker.as_deref() {
         ("blocked", integration_mode.as_str(), reason, 15u64)
-    } else if repo.existing_landfall {
+    } else if repo.existing_landmark {
         migration_notes.push(
             "Landmark-like workflow or manifest already exists; inspect before replacing".into(),
         );
@@ -3106,9 +3106,9 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     if repo.release_tool == "no-release-tool" {
         migration_notes
             .push("Choose release semantics before installing Landmark automation".into());
-    } else if !repo.existing_landfall && repo.release_tool != "unknown" {
+    } else if !repo.existing_landmark && repo.release_tool != "unknown" {
         migration_notes.push(
-            "Preview historical migration with `landfall backfill --repo-root . --since <oldest-managed-tag> --dry-run`; write artifacts before considering release-body updates".into(),
+            "Preview historical migration with `landmark backfill --repo-root . --since <oldest-managed-tag> --dry-run`; write artifacts before considering release-body updates".into(),
         );
     }
     if repo.package_topology.len() > 1 {
@@ -3295,7 +3295,7 @@ fn render_fleet_apply_markdown(
     for file in files.iter().filter(|file| file.as_str() != "diff.md") {
         out.push_str(&format!("# copy rendered `{file}` into this checkout\n"));
     }
-    out.push_str("git add .landfall.yml .github/workflows/landfall-release.yml 2>/dev/null || git add .landfall.yml\n");
+    out.push_str("git add .landmark.yml .github/workflows/landmark-release.yml 2>/dev/null || git add .landmark.yml\n");
     out.push_str(&format!("git commit -m {}\n", shell_quote(commit_message)));
     out.push_str(&format!("git push -u origin {}\n", shell_quote(branch)));
     out.push_str(&format!(
@@ -3323,14 +3323,14 @@ fn render_fleet_pr_diff(
     workflow: Option<&str>,
 ) -> String {
     let mut out = format!(
-        "# {}\n\nDry-run branch: `landfall/adopt-{}`\n\n## Files\n\n### .landfall.yml\n\n```yaml\n{}\n```\n\n",
+        "# {}\n\nDry-run branch: `landmark/adopt-{}`\n\n## Files\n\n### .landmark.yml\n\n```yaml\n{}\n```\n\n",
         repo.repository,
         repo.repository.replace('/', "-"),
         manifest
     );
     if let Some(workflow) = workflow {
         out.push_str(&format!(
-            "### .github/workflows/landfall-release.yml\n\n```yaml\n{}\n```\n\n",
+            "### .github/workflows/landmark-release.yml\n\n```yaml\n{}\n```\n\n",
             workflow
         ));
     }
@@ -3579,7 +3579,7 @@ fn setup_workflows(
         workflows.insert(
             name.to_string(),
             WorkflowCandidate {
-                path: format!(".github/workflows/landfall-{name}.yml"),
+                path: format!(".github/workflows/landmark-{name}.yml"),
                 release_tool: tool.into(),
                 mode: mode.into(),
                 rationale: vec![
@@ -3961,7 +3961,7 @@ fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
     })?;
     update_lock_package_version(
         &args.repo_root.join("Cargo.lock"),
-        "landfall",
+        "landmark",
         &next_version,
     )?;
     refresh_self_release_dist(&args.repo_root, &args.dist_target)?;
@@ -3978,10 +3978,10 @@ fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         changed_files: vec![
             "CHANGELOG.md".into(),
             "package.json".into(),
-            "crates/landfall/Cargo.toml".into(),
+            "crates/landmark/Cargo.toml".into(),
             "Cargo.lock".into(),
-            "dist/landfall".into(),
-            "dist/landfall.sha256".into(),
+            "dist/landmark".into(),
+            "dist/landmark.sha256".into(),
         ],
         changelog,
         commits,
@@ -3994,9 +3994,9 @@ fn refresh_self_release_dist(repo_root: &Path, target: &str) -> Result<()> {
     let binary = build_action_binary(repo_root, target)?;
     let dist_dir = repo_root.join("dist");
     fs::create_dir_all(&dist_dir)?;
-    let dest = dist_dir.join("landfall");
+    let dest = dist_dir.join("landmark");
     let temp = dist_dir.join(format!(
-        ".landfall-{}-{}.tmp",
+        ".landmark-{}-{}.tmp",
         std::process::id(),
         Utc::now().timestamp_nanos_opt().unwrap_or_default()
     ));
@@ -4006,8 +4006,8 @@ fn refresh_self_release_dist(repo_root: &Path, target: &str) -> Result<()> {
 
     let digest = hex::encode(Sha256::digest(fs::read(&dest)?));
     fs::write(
-        dist_dir.join("landfall.sha256"),
-        format!("{digest}  dist/landfall\n"),
+        dist_dir.join("landmark.sha256"),
+        format!("{digest}  dist/landmark\n"),
     )?;
     Ok(())
 }
@@ -4015,7 +4015,7 @@ fn refresh_self_release_dist(repo_root: &Path, target: &str) -> Result<()> {
 fn build_action_binary(repo_root: &Path, target: &str) -> Result<PathBuf> {
     if target == LINUX_ACTION_TARGET && !rustc_host_target()?.contains("linux") {
         return Err(
-            "refusing to build checked-in Linux action binary from a non-Linux host; run the release workflow or `bin/build-linux-action --write` so dist/landfall is produced in Linux, or pass --dist-target only for replay fixtures"
+            "refusing to build checked-in Linux action binary from a non-Linux host; run the release workflow or `bin/build-linux-action --write` so dist/landmark is produced in Linux, or pass --dist-target only for replay fixtures"
                 .to_string()
         .into());
     }
@@ -4037,7 +4037,7 @@ fn build_action_binary(repo_root: &Path, target: &str) -> Result<PathBuf> {
         .join("target")
         .join(target)
         .join("release")
-        .join("landfall");
+        .join("landmark");
     if !binary.is_file() {
         return Err(format!(
             "cargo build completed but {} was not created",
@@ -4072,11 +4072,11 @@ fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     validate_nonblank(&args.target_sha, "target-sha")?;
     let latest_version = latest_repo_version(&args.repo_root)?;
     let package_version = package_version(&args.repo_root)?;
-    let cargo = cargo_version(&args.repo_root.join("crates/landfall/Cargo.toml"))
-        .ok_or("crates/landfall/Cargo.toml missing package version")?;
+    let cargo = cargo_version(&args.repo_root.join("crates/landmark/Cargo.toml"))
+        .ok_or("crates/landmark/Cargo.toml missing package version")?;
     if cargo != package_version {
         return Err(format!(
-            "package.json has {package_version}, crates/landfall/Cargo.toml has {cargo}"
+            "package.json has {package_version}, crates/landmark/Cargo.toml has {cargo}"
         )
         .into());
     }
@@ -4487,7 +4487,7 @@ fn build_curl_invocation(
     let mut config = String::new();
     push_curl_config(&mut config, "request", method);
     push_curl_config(&mut config, "header", "Accept: application/vnd.github+json");
-    push_curl_config(&mut config, "header", "User-Agent: landfall");
+    push_curl_config(&mut config, "header", "User-Agent: landmark");
     push_curl_config(&mut config, "write-out", "\n%{http_code}");
     push_curl_config(&mut config, "url", url);
     if let Some(token) = token {
@@ -4820,7 +4820,7 @@ impl GitHubProvider {
         let response = curl_json(
             "GET",
             &format!(
-                "{}/repos/{repository}/issues?state=open&labels=landfall,release-notes&per_page=100",
+                "{}/repos/{repository}/issues?state=open&labels=landmark,release-notes&per_page=100",
                 self.api_base_url
             ),
             self.token(),
@@ -4842,7 +4842,7 @@ impl GitHubProvider {
             "POST",
             &format!("{}/repos/{repository}/issues", self.api_base_url),
             self.token(),
-            Some(&json!({"title": title, "body": body, "labels": ["landfall", "release-notes"]})),
+            Some(&json!({"title": title, "body": body, "labels": ["landmark", "release-notes"]})),
         )?;
         if (200..300).contains(&response.status) {
             Ok(())
@@ -5305,7 +5305,7 @@ fn deterministic_release_context(
         tags: context_tags(repo_root),
         changed_files: context_changed_files(repo_root, &args.version),
         manifest: ContextManifestSummary {
-            present: repo_root.join(".landfall.yml").is_file(),
+            present: repo_root.join(".landmark.yml").is_file(),
             product_name: config.product_name.clone(),
             audience: config.audience.clone(),
             model_policy: config.model_policy.clone(),
@@ -5316,8 +5316,8 @@ fn deterministic_release_context(
         pr_metadata: context_optional_source(&args.pr_changelog_file),
         release_body: context_optional_source(&args.release_body_file),
         artifacts: ContextArtifactAudiences {
-            internal_technical_changelog: "landfall.internal-technical-changelog.v1".into(),
-            public_release_notes: format!("landfall.public-release-notes.v1:{}", config.audience),
+            internal_technical_changelog: "landmark.internal-technical-changelog.v1".into(),
+            public_release_notes: format!("landmark.public-release-notes.v1:{}", config.audience),
         },
     }
 }
@@ -6660,14 +6660,14 @@ fn write_run_artifacts(
     Ok(RunArtifactRecord {
         technical_changelog: technical.display().to_string(),
         technical_changelog_audience: "internal-developer-operator".into(),
-        technical_changelog_schema: "landfall.internal-technical-changelog.v1".into(),
+        technical_changelog_schema: "landmark.internal-technical-changelog.v1".into(),
         markdown: markdown.display().to_string(),
         public_notes_audience: manifest
             .audience
             .as_deref()
             .and_then(trimmed_option)
             .unwrap_or_else(|| "general".into()),
-        public_notes_schema: "landfall.public-release-notes.v1".into(),
+        public_notes_schema: "landmark.public-release-notes.v1".into(),
         plaintext: plaintext.display().to_string(),
         html: html.display().to_string(),
         json: json_path.display().to_string(),
@@ -7578,7 +7578,7 @@ fn notify_webhook(args: NotifyWebhookArgs) -> Result<()> {
             "Content-Type: application/json",
         ])
         .arg("-H")
-        .arg("User-Agent: landfall")
+        .arg("User-Agent: landmark")
         .arg("--data")
         .arg(&body)
         .arg(&args.webhook_url);
@@ -7693,7 +7693,7 @@ fn update_version_metadata(args: UpdateVersionArgs) -> Result<()> {
             serde_json::to_string_pretty(&package)? + "\n",
         )?;
     }
-    let cargo_path = args.repo_root.join("crates/landfall/Cargo.toml");
+    let cargo_path = args.repo_root.join("crates/landmark/Cargo.toml");
     if cargo_path.is_file() {
         replace_toml_version(&cargo_path, &version)?;
     }
@@ -7717,7 +7717,7 @@ fn check_version_sync(args: CheckVersionArgs) -> Result<()> {
         serde_json::from_str(&fs::read_to_string(args.repo_root.join("package.json"))?)?;
     let package_version = package["version"].as_str().unwrap_or("");
     let cargo_version =
-        cargo_version(&args.repo_root.join("crates/landfall/Cargo.toml")).unwrap_or_default();
+        cargo_version(&args.repo_root.join("crates/landmark/Cargo.toml")).unwrap_or_default();
     let mut drift = Vec::new();
     if package_version != latest {
         drift.push(format!(
@@ -7726,7 +7726,7 @@ fn check_version_sync(args: CheckVersionArgs) -> Result<()> {
     }
     if !cargo_version.is_empty() && cargo_version != latest {
         drift.push(format!(
-            "crates/landfall/Cargo.toml has {cargo_version}, expected {latest}"
+            "crates/landmark/Cargo.toml has {cargo_version}, expected {latest}"
         ));
     }
     if drift.is_empty() {
@@ -7801,7 +7801,7 @@ fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
             continue;
         }
         let text = fs::read_to_string(&path)?;
-        errors.extend(validate_landfall_usage_inputs(&path, &text, &known));
+        errors.extend(validate_landmark_usage_inputs(&path, &text, &known));
     }
     errors.extend(validate_manifest_schema_contract(&readme));
     errors.extend(validate_manifest_action_precedence_contract(
@@ -7842,9 +7842,9 @@ fn validate_agent_native_contracts(repo_root: &Path) -> Result<Vec<String>> {
         if schema["$id"].as_str() != Some(descriptor.id) {
             errors.push(format!("schema `{}` has wrong $id", descriptor.path));
         }
-        if schema["x-landfall-artifact"].as_str() != Some(descriptor.artifact) {
+        if schema["x-landmark-artifact"].as_str() != Some(descriptor.artifact) {
             errors.push(format!(
-                "schema `{}` has wrong x-landfall-artifact",
+                "schema `{}` has wrong x-landmark-artifact",
                 descriptor.path
             ));
         }
@@ -7860,10 +7860,10 @@ fn validate_agent_native_contracts(repo_root: &Path) -> Result<Vec<String>> {
     }
     errors.extend(validate_command_contract_coverage());
     errors.extend(validate_manifest_schema_alignment(
-        &repo_root.join("schemas/landfall-manifest.v1.schema.json"),
+        &repo_root.join("schemas/landmark-manifest.v1.schema.json"),
     )?);
     for required in [
-        "landfall describe --json",
+        "landmark describe --json",
         "--error-format json",
         "replay-action --scenario agent_native_contracts",
         "stdout carries JSON payloads",
@@ -7937,7 +7937,7 @@ fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<Vec<String>>
         "### GitHub Action Full Mode",
         "### GitHub Action Synthesis-Only Mode",
         "cargo run --locked -- run --provider local --repo-root .",
-        "dist/landfall is the checked-in",
+        "dist/landmark is the checked-in",
         "Linux x86_64 action binary",
         "Packaged binaries are not published yet",
         "replay-action --scenario first_run_local_preview",
@@ -8050,13 +8050,13 @@ fn validate_readme_command_names(readme: &str) -> Vec<String> {
         ("release-policy", BTreeSet::from(["publication", "summary"])),
     ]);
     let command_re =
-        Regex::new(r"(?m)(?:^\s*|`)landfall\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?").unwrap();
+        Regex::new(r"(?m)(?:^\s*|`)landmark\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?").unwrap();
     let mut errors = Vec::new();
     for caps in command_re.captures_iter(readme) {
         let command = caps.get(1).unwrap().as_str();
         if !commands.contains(command) {
             errors.push(format!(
-                "README references unknown landfall command `{command}`"
+                "README references unknown landmark command `{command}`"
             ));
             continue;
         }
@@ -8066,7 +8066,7 @@ fn validate_readme_command_names(readme: &str) -> Vec<String> {
             && !subcommand.starts_with("--")
         {
             errors.push(format!(
-                "README references unknown landfall subcommand `{command} {subcommand}`"
+                "README references unknown landmark subcommand `{command} {subcommand}`"
             ));
         }
     }
@@ -8135,7 +8135,7 @@ fn validate_self_release_workflow_contract(repo_root: &Path) -> Result<Vec<Strin
 
 fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
     let required = [
-        ".landfall.yml",
+        ".landmark.yml",
         "product:",
         "description:",
         "audience:",
@@ -8158,7 +8158,7 @@ fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
         "max_input_tokens:",
         "max_output_tokens:",
         "max_usd:",
-        "dist/landfall doctor --repo-root .",
+        "dist/landmark doctor --repo-root .",
     ];
     required
         .iter()
@@ -8206,21 +8206,21 @@ fn validate_manifest_action_precedence_contract(action: &str) -> Vec<String> {
         .collect()
 }
 
-fn validate_landfall_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str>) -> Vec<String> {
+fn validate_landmark_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str>) -> Vec<String> {
     let mut errors = Vec::new();
     let key_re = Regex::new(r"^\s*([A-Za-z0-9_-]+):").unwrap();
-    let mut in_landfall_step = false;
+    let mut in_landmark_step = false;
     let mut in_with = false;
     let mut with_indent = 0usize;
 
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("uses:") || trimmed.starts_with("- uses:") {
-            in_landfall_step = workflow_invokes_landmark_action(trimmed) || trimmed == "uses: ./";
+            in_landmark_step = workflow_invokes_landmark_action(trimmed) || trimmed == "uses: ./";
             in_with = false;
             continue;
         }
-        if !in_landfall_step {
+        if !in_landmark_step {
             continue;
         }
 
@@ -8234,7 +8234,7 @@ fn validate_landfall_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str
         }
         if !trimmed.is_empty() && indent <= with_indent {
             in_with = false;
-            in_landfall_step = false;
+            in_landmark_step = false;
             continue;
         }
         if let Some(caps) = key_re.captures(line) {
@@ -8282,12 +8282,12 @@ fn replay_action(args: ReplayArgs) -> Result<()> {
         }
     }
     let evidence_dir = if args.evidence_dir.is_empty() {
-        env::temp_dir().join(format!("landfall-replay-{}", std::process::id()))
+        env::temp_dir().join(format!("landmark-replay-{}", std::process::id()))
     } else {
         PathBuf::from(&args.evidence_dir)
     };
     fs::create_dir_all(&evidence_dir)?;
-    let tmp_root = env::temp_dir().join(format!("landfall-replay-fixtures-{}", std::process::id()));
+    let tmp_root = env::temp_dir().join(format!("landmark-replay-fixtures-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp_root);
     fs::create_dir_all(&tmp_root)?;
     let mut results = Vec::new();
@@ -8594,7 +8594,7 @@ fn scenario_http_resilience_policy(_: &Path) -> Result<Value> {
 
 fn scenario_action_side_effect_coverage(_: &Path) -> Result<Value> {
     let action = fs::read_to_string("action.yml")?;
-    let invoked = action_landfall_subcommands(&action);
+    let invoked = action_landmark_subcommands(&action);
     let coverage = action_subcommand_replay_coverage();
     let scenarios = scenario_map();
     let mut missing = Vec::new();
@@ -8614,8 +8614,8 @@ fn scenario_action_side_effect_coverage(_: &Path) -> Result<Value> {
     }))
 }
 
-fn action_landfall_subcommands(action: &str) -> BTreeSet<String> {
-    let re = Regex::new(r#"dist/landfall"\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?"#).unwrap();
+fn action_landmark_subcommands(action: &str) -> BTreeSet<String> {
+    let re = Regex::new(r#"dist/landmark"\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?"#).unwrap();
     re.captures_iter(action)
         .map(|caps| {
             let command = caps.get(1).unwrap().as_str();
@@ -8704,7 +8704,7 @@ fn scenario_agent_native_contracts(tmp_root: &Path) -> Result<Value> {
     assert_json_eq(
         &describe_json,
         "/schema_version",
-        "landfall.describe.v1",
+        "landmark.describe.v1",
         "describe schema version",
     )?;
     let schema_paths: BTreeSet<String> = describe_json["schemas"]
@@ -9113,7 +9113,7 @@ fn scenario_backfill_release_history(tmp_root: &Path) -> Result<Value> {
         || repo.join("docs/releases/v1.3.0.md").is_file()
         || !repo.join("docs/releases/releases.json").is_file()
         || !repo.join("docs/releases/feed.xml").is_file()
-        || !repo.join(".landfall/backfill-manifest.json").is_file()
+        || !repo.join(".landmark/backfill-manifest.json").is_file()
     {
         return Err("artifact-only backfill did not write the expected artifact set or wrote an ambiguous duplicate".into());
     }
@@ -9317,20 +9317,20 @@ fn scenario_action_static_contract(_: &Path) -> Result<Value> {
     if action.contains("python ") || action.contains("setup-python") {
         return Err("action.yml still invokes Python".into());
     }
-    if !action.contains("dist/landfall") {
-        return Err("action.yml does not invoke dist/landfall".into());
+    if !action.contains("dist/landmark") {
+        return Err("action.yml does not invoke dist/landmark".into());
     }
-    if !action.contains("dist/landfall\" run")
+    if !action.contains("dist/landmark\" run")
         || !action.contains("--provider github")
         || !action.contains("--release-tag \"${RELEASE_TAG}\"")
     {
         return Err("action.yml does not invoke the provider-neutral run command".into());
     }
-    if action.contains("dist/landfall\" update-release") {
+    if action.contains("dist/landmark\" update-release") {
         return Err("action.yml still mutates GitHub releases through update-release".into());
     }
-    if action.contains("dist/landfall\" write-artifacts")
-        || action.contains("dist/landfall\" update-feed")
+    if action.contains("dist/landmark\" write-artifacts")
+        || action.contains("dist/landmark\" update-feed")
     {
         return Err("action.yml still writes release artifacts outside the run command".into());
     }
@@ -9341,7 +9341,7 @@ fn scenario_action_manifest_defaults_precedence(tmp_root: &Path) -> Result<Value
     let repo = tmp_root.join("action-manifest-defaults");
     fs::create_dir_all(&repo)?;
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Manifest Product
   description: Manifest description
@@ -9361,7 +9361,7 @@ model:
     - manifest/fallback
 "#,
     )?;
-    let output = temp_file("landfall-manifest-defaults")?;
+    let output = temp_file("landmark-manifest-defaults")?;
     let result = Command::new(current_exe())
         .args([
             "manifest-defaults",
@@ -9424,7 +9424,7 @@ fn action_value(input: &str, manifest: Option<&String>, fallback: &str) -> Strin
 }
 
 fn scenario_publication_degraded_required(_: &Path) -> Result<Value> {
-    let output = temp_file("landfall-policy")?;
+    let output = temp_file("landmark-policy")?;
     let result = Command::new(current_exe())
         .args([
             "release-policy",
@@ -9448,7 +9448,7 @@ fn scenario_publication_degraded_required(_: &Path) -> Result<Value> {
 }
 
 fn scenario_publication_degraded_optional(_: &Path) -> Result<Value> {
-    let output = temp_file("landfall-policy")?;
+    let output = temp_file("landmark-policy")?;
     let result = Command::new(current_exe())
         .args([
             "release-policy",
@@ -9484,7 +9484,7 @@ fn scenario_summary_rss_failed(_: &Path) -> Result<Value> {
 }
 
 fn scenario_summary_failure(stage: &str, message: &str) -> Result<Value> {
-    let output = temp_file("landfall-summary")?;
+    let output = temp_file("landmark-summary")?;
     let result = Command::new(current_exe())
         .args([
             "release-policy",
@@ -9589,7 +9589,7 @@ fn scenario_first_run_local_preview(tmp_root: &Path) -> Result<Value> {
         return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
     }
     let stdout_evidence: Value = serde_json::from_slice(&result.stdout)?;
-    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence_path = repo.join(".landmark/run/evidence.json");
     let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
     if stdout_evidence != evidence {
         return Err("first-run preview stdout did not match written evidence packet".into());
@@ -9602,8 +9602,8 @@ fn scenario_first_run_local_preview(tmp_root: &Path) -> Result<Value> {
         return Err("first-run preview evidence did not record local patch preview".into());
     }
     let expected = [
-        repo.join(".landfall/run/technical-changelog.md"),
-        repo.join(".landfall/run/evidence.json"),
+        repo.join(".landmark/run/technical-changelog.md"),
+        repo.join(".landmark/run/evidence.json"),
         repo.join("docs/releases/v0.1.1.md"),
         repo.join("docs/releases/v0.1.1.txt"),
         repo.join("docs/releases/v0.1.1.html"),
@@ -9616,7 +9616,7 @@ fn scenario_first_run_local_preview(tmp_root: &Path) -> Result<Value> {
         }
     }
     let notes = fs::read_to_string(repo.join("docs/releases/v0.1.1.md"))?;
-    let technical = fs::read_to_string(repo.join(".landfall/run/technical-changelog.md"))?;
+    let technical = fs::read_to_string(repo.join(".landmark/run/technical-changelog.md"))?;
     if !notes.contains("Make first run obvious")
         || !technical.contains("fix(cli): make first run obvious")
     {
@@ -9627,7 +9627,7 @@ fn scenario_first_run_local_preview(tmp_root: &Path) -> Result<Value> {
         "provider": evidence["provider"],
         "evidence": evidence_path,
         "markdown": repo.join("docs/releases/v0.1.1.md"),
-        "technical_changelog": repo.join(".landfall/run/technical-changelog.md")
+        "technical_changelog": repo.join(".landmark/run/technical-changelog.md")
     }))
 }
 
@@ -9651,11 +9651,11 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "--repository",
             "local-provider-run",
             "--output-dir",
-            ".landfall/run",
+            ".landmark/run",
             "--technical-changelog-file",
-            ".landfall/run/technical.md",
+            ".landmark/run/technical.md",
             "--evidence-file",
-            ".landfall/run/evidence.json",
+            ".landmark/run/evidence.json",
             "--output-file",
             "docs/releases/{version}.md",
             "--output-text-file",
@@ -9671,7 +9671,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     if !result.status.success() {
         return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
     }
-    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence_path = repo.join(".landmark/run/evidence.json");
     let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
     if evidence["provider"] != "local" {
         return Err("local provider evidence did not record provider=local".into());
@@ -9687,8 +9687,8 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
         return Err("local run did not classify feat commit as a minor bump".into());
     }
     if evidence["artifacts"]["technical_changelog_schema"]
-        != "landfall.internal-technical-changelog.v1"
-        || evidence["artifacts"]["public_notes_schema"] != "landfall.public-release-notes.v1"
+        != "landmark.internal-technical-changelog.v1"
+        || evidence["artifacts"]["public_notes_schema"] != "landmark.public-release-notes.v1"
         || evidence["artifacts"]["technical_changelog_audience"] != "internal-developer-operator"
     {
         return Err(
@@ -9709,7 +9709,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     if !notes.contains("Add portable release run") {
         return Err("local run release notes did not include the feature commit".into());
     }
-    let technical = fs::read_to_string(repo.join(".landfall/run/technical.md"))?;
+    let technical = fs::read_to_string(repo.join(".landmark/run/technical.md"))?;
     if !technical.contains("feat(cli): add portable release run") {
         return Err("local run technical changelog did not include the raw commit".into());
     }
@@ -9733,11 +9733,11 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "--release-tag",
             "v1.1.0",
             "--output-dir",
-            ".landfall/tagged-run",
+            ".landmark/tagged-run",
             "--technical-changelog-file",
-            ".landfall/tagged-run/technical.md",
+            ".landmark/tagged-run/technical.md",
             "--evidence-file",
-            ".landfall/tagged-run/evidence.json",
+            ".landmark/tagged-run/evidence.json",
             "--output-file",
             "",
             "--output-text-file",
@@ -9755,7 +9755,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             .to_string()
             .into());
     }
-    let tagged_evidence_path = repo.join(".landfall/tagged-run/evidence.json");
+    let tagged_evidence_path = repo.join(".landmark/tagged-run/evidence.json");
     let tagged_evidence: Value = serde_json::from_str(&fs::read_to_string(&tagged_evidence_path)?)?;
     if tagged_evidence["version_decision"]["range"] != "v1.0.0..v1.1.0" {
         return Err(format!(
@@ -9767,7 +9767,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     if tagged_evidence["version_decision"]["commit_count"] != 1 {
         return Err("existing-tag run included commits outside the tagged range".into());
     }
-    let tagged_technical = fs::read_to_string(repo.join(".landfall/tagged-run/technical.md"))?;
+    let tagged_technical = fs::read_to_string(repo.join(".landmark/tagged-run/technical.md"))?;
     if tagged_technical.contains("post-release patch") {
         return Err("existing-tag run included a post-release commit".into());
     }
@@ -9797,11 +9797,11 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "--repository",
             "local-provider-breaking-footer",
             "--output-dir",
-            ".landfall/run",
+            ".landmark/run",
             "--technical-changelog-file",
-            ".landfall/run/technical.md",
+            ".landmark/run/technical.md",
             "--evidence-file",
-            ".landfall/run/evidence.json",
+            ".landmark/run/evidence.json",
             "--output-file",
             "",
             "--output-text-file",
@@ -9819,7 +9819,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             .to_string()
             .into());
     }
-    let breaking_evidence_path = breaking_repo.join(".landfall/run/evidence.json");
+    let breaking_evidence_path = breaking_repo.join(".landmark/run/evidence.json");
     let breaking_evidence: Value =
         serde_json::from_str(&fs::read_to_string(&breaking_evidence_path)?)?;
     if breaking_evidence["version_decision"]["bump"] != "major"
@@ -9838,7 +9838,7 @@ fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "html": html,
             "json": json_path,
             "rss": feed,
-            "technical_changelog": repo.join(".landfall/run/technical.md"),
+            "technical_changelog": repo.join(".landmark/run/technical.md"),
             "evidence": evidence_path,
         }
     }))
@@ -9889,11 +9889,11 @@ fn scenario_github_provider_run(tmp_root: &Path) -> Result<Value> {
             &server.url,
             "--publish-release-body",
             "--output-dir",
-            ".landfall/run",
+            ".landmark/run",
             "--technical-changelog-file",
-            ".landfall/run/technical.md",
+            ".landmark/run/technical.md",
             "--evidence-file",
-            ".landfall/run/evidence.json",
+            ".landmark/run/evidence.json",
             "--output-file",
             "docs/releases/{version}.md",
             "--output-json",
@@ -9905,7 +9905,7 @@ fn scenario_github_provider_run(tmp_root: &Path) -> Result<Value> {
     if !result.status.success() {
         return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
     }
-    let evidence_path = repo.join(".landfall/run/evidence.json");
+    let evidence_path = repo.join(".landmark/run/evidence.json");
     let evidence: Value = serde_json::from_str(&fs::read_to_string(&evidence_path)?)?;
     if evidence["provider"] != "github" {
         return Err("github provider evidence did not record provider=github".into());
@@ -9925,7 +9925,7 @@ fn scenario_github_provider_run(tmp_root: &Path) -> Result<Value> {
         "artifacts": {
             "markdown": repo.join("docs/releases/v1.1.0.md"),
             "json": repo.join("docs/releases/releases.json"),
-            "technical_changelog": repo.join(".landfall/run/technical.md"),
+            "technical_changelog": repo.join(".landmark/run/technical.md"),
             "evidence": evidence_path,
         }
     }))
@@ -9952,11 +9952,11 @@ fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
             "--repository",
             "provider-run-parity",
             "--output-dir",
-            ".landfall/local",
+            ".landmark/local",
             "--technical-changelog-file",
-            ".landfall/local/technical.md",
+            ".landmark/local/technical.md",
             "--evidence-file",
-            ".landfall/local/evidence.json",
+            ".landmark/local/evidence.json",
             "--output-file",
             "docs/local/{version}.md",
             "--output-text-file",
@@ -9972,7 +9972,7 @@ fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
     if !local.status.success() {
         return Err(String::from_utf8_lossy(&local.stderr).to_string().into());
     }
-    let local_evidence_path = repo.join(".landfall/local/evidence.json");
+    let local_evidence_path = repo.join(".landmark/local/evidence.json");
     let local_evidence: Value = serde_json::from_str(&fs::read_to_string(&local_evidence_path)?)?;
     if local_evidence["provider"] != "local" || local_evidence["release_tag"] != "v1.1.0" {
         return Err("provider parity local run did not produce v1.1.0 local evidence".into());
@@ -10024,11 +10024,11 @@ fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
             &server.url,
             "--publish-release-body",
             "--output-dir",
-            ".landfall/github",
+            ".landmark/github",
             "--technical-changelog-file",
-            ".landfall/github/technical.md",
+            ".landmark/github/technical.md",
             "--evidence-file",
-            ".landfall/github/evidence.json",
+            ".landmark/github/evidence.json",
             "--output-file",
             "docs/github/{version}.md",
             "--output-text-file",
@@ -10044,7 +10044,7 @@ fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
     if !github.status.success() {
         return Err(String::from_utf8_lossy(&github.stderr).to_string().into());
     }
-    let github_evidence_path = repo.join(".landfall/github/evidence.json");
+    let github_evidence_path = repo.join(".landmark/github/evidence.json");
     let github_evidence: Value = serde_json::from_str(&fs::read_to_string(&github_evidence_path)?)?;
     if github_evidence["provider"] != "github"
         || github_evidence["release_tag"] != local_evidence["release_tag"]
@@ -10184,7 +10184,7 @@ fn scenario_manifest_defaults_and_overrides(tmp_root: &Path) -> Result<Value> {
     let repo = tmp_root.join("manifest-defaults");
     init_fixture_repo(&repo, "v1.2.3")?;
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Manifest Product
   description: Manifest description
@@ -10313,7 +10313,7 @@ model:
         "default_quality": fs::read_to_string(defaults_quality)?.trim(),
         "override_quality": fs::read_to_string(override_quality)?.trim(),
         "checked": [
-            ".landfall.yml",
+            ".landmark.yml",
             "manifest model/product/audience/voice/changelog defaults",
             "explicit CLI override precedence"
         ],
@@ -10326,7 +10326,7 @@ fn scenario_synthesis_cost_policy(tmp_root: &Path) -> Result<Value> {
     let templates_dir = env::current_dir()?.join("templates/prompts");
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10369,7 +10369,7 @@ model:
             .unwrap()
             .is_empty()
         || dry_context["deterministic"]["artifacts"]["internal_technical_changelog"]
-            != "landfall.internal-technical-changelog.v1"
+            != "landmark.internal-technical-changelog.v1"
         || dry_context["classification"]["categories"]
             .as_array()
             .unwrap()
@@ -10380,7 +10380,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10446,7 +10446,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10512,7 +10512,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10556,7 +10556,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10600,7 +10600,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10641,7 +10641,7 @@ model:
     }
 
     fs::write(
-        repo.join(".landfall.yml"),
+        repo.join(".landmark.yml"),
         r#"product:
   name: Cost Policy Demo
   description: Demo release automation.
@@ -10753,7 +10753,7 @@ fn scenario_consumer_degraded_required_fails(tmp_root: &Path) -> Result<Value> {
     if !synth.status.success() {
         return Err("degraded synthesis should still emit notes".into());
     }
-    let output = temp_file("landfall-policy")?;
+    let output = temp_file("landmark-policy")?;
     let policy = Command::new(current_exe())
         .args([
             "release-policy",
@@ -10837,7 +10837,7 @@ fn scenario_consumer_floating_tag_behavior(tmp_root: &Path) -> Result<Value> {
 fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     let repo = tmp_root.join("self-release-pr");
     init_self_release_fixture(&repo)?;
-    let prepare_output = temp_file("landfall-self-release-prepare")?;
+    let prepare_output = temp_file("landmark-self-release-prepare")?;
     let dist_target = rustc_host_target()?;
     let prepare = Command::new(current_exe())
         .args([
@@ -10847,7 +10847,7 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
             "--repository",
             "owner/repo",
             "--release-branch",
-            "landfall/self-release",
+            "landmark/self-release",
             "--dist-target",
             &dist_target,
             "--github-output",
@@ -10864,20 +10864,20 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     }
     assert_file_contains(&repo.join("package.json"), r#""version": "1.1.0""#)?;
     assert_file_contains(
-        &repo.join("crates/landfall/Cargo.toml"),
+        &repo.join("crates/landmark/Cargo.toml"),
         r#"version = "1.1.0""#,
     )?;
     assert_file_contains(&repo.join("Cargo.lock"), r#"version = "1.1.0""#)?;
     assert_file_contains(&repo.join("CHANGELOG.md"), "# [1.1.0]")?;
-    let prepared_dist = fs::read(repo.join("dist/landfall"))?;
+    let prepared_dist = fs::read(repo.join("dist/landmark"))?;
     if prepared_dist == b"stale fixture binary\n" {
-        return Err("prepare-self-release did not refresh dist/landfall".into());
+        return Err("prepare-self-release did not refresh dist/landmark".into());
     }
-    assert_file_contains(&repo.join("dist/landfall.sha256"), "  dist/landfall")?;
+    assert_file_contains(&repo.join("dist/landmark.sha256"), "  dist/landmark")?;
     let changed_files = prepare_plan["changed_files"]
         .as_array()
         .ok_or("prepare plan missing changed_files")?;
-    for expected in ["dist/landfall", "dist/landfall.sha256"] {
+    for expected in ["dist/landmark", "dist/landmark.sha256"] {
         if !changed_files
             .iter()
             .any(|file| file.as_str() == Some(expected))
@@ -10885,7 +10885,7 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
             return Err(format!("prepare plan missing {expected}").into());
         }
     }
-    let dist_sha256 = fs::read_to_string(repo.join("dist/landfall.sha256"))?
+    let dist_sha256 = fs::read_to_string(repo.join("dist/landmark.sha256"))?
         .split_whitespace()
         .next()
         .unwrap_or_default()
@@ -10906,7 +10906,7 @@ fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
         json!({"id": 1, "tag_name": "v1.0.0", "body": "old", "html_url": "https://example.invalid/releases/v1.0.0"}),
     );
     let server = start_fake_server(fake)?;
-    let publish_output = temp_file("landfall-self-release-publish")?;
+    let publish_output = temp_file("landmark-self-release-publish")?;
     let publish = Command::new(current_exe())
         .args([
             "publish-self-release",
@@ -10960,7 +10960,7 @@ fn assert_file_contains(path: &Path, needle: &str) -> Result<()> {
 }
 
 fn init_self_release_fixture(path: &Path) -> Result<()> {
-    fs::create_dir_all(path.join("crates/landfall/src"))?;
+    fs::create_dir_all(path.join("crates/landmark/src"))?;
     fs::create_dir_all(path.join("dist"))?;
     run_ok("git", ["init", "-q"], path)?;
     run_ok("git", ["config", "user.name", "Landmark Replay"], path)?;
@@ -10972,28 +10972,28 @@ fn init_self_release_fixture(path: &Path) -> Result<()> {
     fs::write(path.join("README.md"), "# Fixture\n")?;
     fs::write(
         path.join("Cargo.toml"),
-        "[workspace]\nmembers = [\"crates/landfall\"]\nresolver = \"3\"\n",
+        "[workspace]\nmembers = [\"crates/landmark\"]\nresolver = \"3\"\n",
     )?;
     fs::write(
         path.join("package.json"),
-        serde_json::to_string_pretty(&json!({"name": "landfall", "version": "1.0.0"}))? + "\n",
+        serde_json::to_string_pretty(&json!({"name": "landmark", "version": "1.0.0"}))? + "\n",
     )?;
     fs::write(
-        path.join("crates/landfall/Cargo.toml"),
-        "[package]\nname = \"landfall\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
+        path.join("crates/landmark/Cargo.toml"),
+        "[package]\nname = \"landmark\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
     )?;
     fs::write(
-        path.join("crates/landfall/src/main.rs"),
-        "fn main() { println!(\"landfall fixture {}\", env!(\"CARGO_PKG_VERSION\")); }\n",
+        path.join("crates/landmark/src/main.rs"),
+        "fn main() { println!(\"landmark fixture {}\", env!(\"CARGO_PKG_VERSION\")); }\n",
     )?;
     fs::write(
         path.join("Cargo.lock"),
-        "# This file is automatically @generated by Cargo.\nversion = 4\n\n[[package]]\nname = \"landfall\"\nversion = \"1.0.0\"\n",
+        "# This file is automatically @generated by Cargo.\nversion = 4\n\n[[package]]\nname = \"landmark\"\nversion = \"1.0.0\"\n",
     )?;
-    fs::write(path.join("dist/landfall"), "stale fixture binary\n")?;
+    fs::write(path.join("dist/landmark"), "stale fixture binary\n")?;
     fs::write(
-        path.join("dist/landfall.sha256"),
-        "1c8d630e34f92c015d86aacd405409334e6bf29b853d7af0d1952517cf8bc6cb  dist/landfall\n",
+        path.join("dist/landmark.sha256"),
+        "1c8d630e34f92c015d86aacd405409334e6bf29b853d7af0d1952517cf8bc6cb  dist/landmark\n",
     )?;
     fs::write(
         path.join("CHANGELOG.md"),
@@ -11251,8 +11251,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
                 &[],
             ),
             fleet_incomplete_secret_fixture(),
-            fleet_existing_landfall_fixture(),
-            fleet_existing_landfall_workflow_fixture(),
+            fleet_existing_landmark_fixture(),
+            fleet_existing_landmark_workflow_fixture(),
         ],
     };
     fs::write(&fixture, serde_json::to_string_pretty(&scan)? + "\n")?;
@@ -11376,8 +11376,8 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         ("misty-step/docs-site", "skipped"),
         ("phrazzld/incomplete-secret-app", "github-full"),
         ("misty-step/archived-app", "skipped"),
-        ("misty-step/existing-landfall-app", "manifest-only"),
-        ("phrazzld/existing-landfall-workflow", "manifest-only"),
+        ("misty-step/existing-landmark-app", "manifest-only"),
+        ("phrazzld/existing-landmark-workflow", "manifest-only"),
     ] {
         if modes.get(repo).map(String::as_str) != Some(expected) {
             return Err(format!("{repo} expected mode {expected}").into());
@@ -11450,18 +11450,18 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     let manifest_only = pr_plan
         .repositories
         .iter()
-        .find(|repo| repo.repository == "phrazzld/existing-landfall-workflow")
+        .find(|repo| repo.repository == "phrazzld/existing-landmark-workflow")
         .ok_or("existing Landmark workflow dry-run missing")?;
     if manifest_only
         .files
         .iter()
-        .any(|file| file.contains("landfall-release.yml"))
+        .any(|file| file.contains("landmark-release.yml"))
     {
         return Err("manifest-only dry-run should not add a duplicate workflow".into());
     }
     if pr_dir
-        .join("phrazzld__existing-landfall-workflow")
-        .join(".github/workflows/landfall-release.yml")
+        .join("phrazzld__existing-landmark-workflow")
+        .join(".github/workflows/landmark-release.yml")
         .exists()
     {
         return Err("manifest-only dry-run wrote a duplicate workflow file".into());
@@ -11469,7 +11469,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     for repo in ["misty-step__terraform-infra", "phrazzld__search-experiment"] {
         if pr_dir
             .join(repo)
-            .join(".github/workflows/landfall-release.yml")
+            .join(".github/workflows/landmark-release.yml")
             .exists()
         {
             return Err(format!("{repo} dry-run wrote a GitHub workflow").into());
@@ -11480,7 +11480,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         .iter()
         .find(|repo| repo.repository == "phrazzld/semantic-app")
         .ok_or("semantic receipt missing")?;
-    if semantic_receipt.branch != "landfall/adopt-phrazzld-semantic-app"
+    if semantic_receipt.branch != "landmark/adopt-phrazzld-semantic-app"
         || !semantic_receipt.commit_message.contains("github-full")
         || !semantic_receipt.rollback.contains("delete branch")
         || !semantic_receipt
@@ -11575,15 +11575,15 @@ fn fleet_fixture_repo(
         package_topology,
         release_files,
         workflows,
-        existing_landfall: false,
+        existing_landmark: false,
         required_secrets,
         signals: vec![format!("{release_tool} fixture")],
     }
 }
 
-fn fleet_existing_landfall_fixture() -> FleetRepository {
+fn fleet_existing_landmark_fixture() -> FleetRepository {
     let mut repo = fleet_fixture_repo(
-        "misty-step/existing-landfall-app",
+        "misty-step/existing-landmark-app",
         "manual-tag",
         ("application", "github-release"),
         (false, false),
@@ -11591,16 +11591,16 @@ fn fleet_existing_landfall_fixture() -> FleetRepository {
         &[],
         &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
     );
-    repo.existing_landfall = true;
-    repo.release_files.push(".landfall.yml".into());
-    repo.workflows.push("landfall-release.yml".into());
-    repo.signals.push(".landfall.yml present".into());
+    repo.existing_landmark = true;
+    repo.release_files.push(".landmark.yml".into());
+    repo.workflows.push("landmark-release.yml".into());
+    repo.signals.push(".landmark.yml present".into());
     repo
 }
 
-fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
+fn fleet_existing_landmark_workflow_fixture() -> FleetRepository {
     let mut repo = fleet_fixture_repo(
-        "phrazzld/existing-landfall-workflow",
+        "phrazzld/existing-landmark-workflow",
         "manual-tag",
         ("application", "github-release"),
         (false, false),
@@ -11608,7 +11608,7 @@ fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
         &[],
         &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
     );
-    repo.existing_landfall = true;
+    repo.existing_landmark = true;
     repo.workflows = vec!["release.yml".into()];
     repo.signals
         .push("release.yml invokes Landmark action".into());
@@ -11907,7 +11907,7 @@ mod tests {
     fn summary_no_release_accepts_empty_artifact_paths() {
         let output = temp_file("summary-no-release").unwrap();
         let cli = Cli::try_parse_from([
-            "landfall",
+            "landmark",
             "release-policy",
             "summary",
             "--synthesis-enabled",
@@ -12012,14 +12012,14 @@ mod tests {
     }
 
     #[test]
-    fn fleet_detects_landmark_and_legacy_landfall_release_workflow_content() {
-        for action_ref in ["misty-step/landmark@v1", "misty-step/landfall@v1"] {
+    fn fleet_detects_landmark_and_legacy_landmark_release_workflow_content() {
+        for action_ref in ["misty-step/landmark@v1", "misty-step/landmark@v1"] {
             let workflow_texts = vec![(
                 "release.yml".to_string(),
                 format!("steps:\n  - uses: {action_ref}\n"),
             )];
 
-            assert!(workflow_invokes_landfall(&workflow_texts[0].1));
+            assert!(workflow_invokes_landmark(&workflow_texts[0].1));
             assert_eq!(
                 fleet_release_tool(
                     &[],
@@ -12109,7 +12109,7 @@ mod tests {
             tag_format: "v{version}".into(),
             conventional_commits: "ready".into(),
             monorepo: false,
-            packages: vec!["landfall".into()],
+            packages: vec!["landmark".into()],
             signals: Vec::new(),
         };
         let manifest = LandmarkManifest {
@@ -12174,7 +12174,7 @@ mod tests {
     fn synthesis_manifest_defaults_keep_explicit_cli_precedence() {
         let repo = tempfile::tempdir().unwrap();
         fs::write(
-            repo.path().join(".landfall.yml"),
+            repo.path().join(".landmark.yml"),
             r#"product:
   name: Manifest Product
   description: Manifest description
@@ -12236,12 +12236,12 @@ model:
         args.audience = None;
         args.changelog_source = None;
         let mut manifest: LandmarkManifest =
-            serde_yaml::from_str(&fs::read_to_string(repo.path().join(".landfall.yml")).unwrap())
+            serde_yaml::from_str(&fs::read_to_string(repo.path().join(".landmark.yml")).unwrap())
                 .unwrap();
         manifest.model.primary = None;
         manifest.model.policy = Some("rich".into());
         fs::write(
-            repo.path().join(".landfall.yml"),
+            repo.path().join(".landmark.yml"),
             render_manifest_yaml(&manifest).unwrap(),
         )
         .unwrap();
@@ -12471,40 +12471,40 @@ model:
     }
 
     #[test]
-    fn cargo_lock_version_update_targets_landfall_package_only() {
+    fn cargo_lock_version_update_targets_landmark_package_only() {
         let repo = tempfile::tempdir().unwrap();
         let path = repo.path().join("Cargo.lock");
         fs::write(
             &path,
-            "[[package]]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[[package]]\nname = \"landfall\"\nversion = \"1.2.3\"\n",
+            "[[package]]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[[package]]\nname = \"landmark\"\nversion = \"1.2.3\"\n",
         )
         .unwrap();
-        update_lock_package_version(&path, "landfall", "1.3.0").unwrap();
+        update_lock_package_version(&path, "landmark", "1.3.0").unwrap();
         let text = fs::read_to_string(path).unwrap();
         assert!(text.contains("name = \"dep\"\nversion = \"0.1.0\""));
-        assert!(text.contains("name = \"landfall\"\nversion = \"1.3.0\""));
+        assert!(text.contains("name = \"landmark\"\nversion = \"1.3.0\""));
     }
 
     #[test]
     fn version_sync_allows_explicit_release_candidate() {
         let repo = tempfile::tempdir().unwrap();
-        fs::create_dir_all(repo.path().join("crates/landfall")).unwrap();
+        fs::create_dir_all(repo.path().join("crates/landmark")).unwrap();
         run_ok("git", ["init", "-q"], repo.path()).unwrap();
         run_ok("git", ["config", "user.name", "Landmark Test"], repo.path()).unwrap();
         run_ok(
             "git",
-            ["config", "user.email", "landfall@example.invalid"],
+            ["config", "user.email", "landmark@example.invalid"],
             repo.path(),
         )
         .unwrap();
         fs::write(
             repo.path().join("package.json"),
-            r#"{"name":"landfall","version":"1.18.0"}"#,
+            r#"{"name":"landmark","version":"1.18.0"}"#,
         )
         .unwrap();
         fs::write(
-            repo.path().join("crates/landfall/Cargo.toml"),
-            "[package]\nname = \"landfall\"\nversion = \"1.18.0\"\nedition = \"2024\"\n",
+            repo.path().join("crates/landmark/Cargo.toml"),
+            "[package]\nname = \"landmark\"\nversion = \"1.18.0\"\nedition = \"2024\"\n",
         )
         .unwrap();
         fs::write(
@@ -12551,8 +12551,8 @@ model:
         )
         .unwrap();
         fs::write(
-            repo.path().join("crates/landfall/Cargo.toml"),
-            "[package]\nname = \"landfall\"\nversion = \"1.17.9\"\nedition = \"2024\"\n",
+            repo.path().join("crates/landmark/Cargo.toml"),
+            "[package]\nname = \"landmark\"\nversion = \"1.17.9\"\nedition = \"2024\"\n",
         )
         .unwrap();
         let mismatched_metadata = CheckVersionArgs {

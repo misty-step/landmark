@@ -19,34 +19,34 @@ if ! command -v rustup >/dev/null; then
 fi
 . /usr/local/cargo/env
 rustup toolchain install 1.96.0 --profile minimal --target x86_64-unknown-linux-musl --no-self-update >/dev/null
-CARGO_TARGET_DIR=/tmp/landfall-target cargo +1.96.0 build --locked --release --target x86_64-unknown-linux-musl >/dev/null
-built=/tmp/landfall-target/x86_64-unknown-linux-musl/release/landfall
+CARGO_TARGET_DIR=/tmp/landmark-target cargo +1.96.0 build --locked --release --target x86_64-unknown-linux-musl >/dev/null
+built=/tmp/landmark-target/x86_64-unknown-linux-musl/release/landmark
 test -x "$built"
-if [ "$LANDFALL_DIST_MODE" = "--write" ]; then
-  cp "$built" dist/landfall
-  sha256sum dist/landfall > dist/landfall.sha256
+if [ "$LANDMARK_DIST_MODE" = "--write" ]; then
+  cp "$built" dist/landmark
+  sha256sum dist/landmark > dist/landmark.sha256
 else
-  cmp "$built" dist/landfall
+  cmp "$built" dist/landmark
 fi'
 
 if [ "$(uname -s)" = "Linux" ]; then
   rustup target add "$target" >/dev/null
   cargo build --locked --release --target "$target" >/dev/null
-  built="target/$target/release/landfall"
+  built="target/$target/release/landmark"
   test -x "$built"
   if [ "$mode" = "--write" ]; then
-    cp "$built" dist/landfall
-    sha256sum dist/landfall > dist/landfall.sha256
+    cp "$built" dist/landmark
+    sha256sum dist/landmark > dist/landmark.sha256
   else
-    cmp "$built" dist/landfall
+    cmp "$built" dist/landmark
   fi
 else
   command -v docker >/dev/null
   docker run --rm \
     --platform linux/amd64 \
-    -e "LANDFALL_DIST_MODE=$mode" \
-    -v landfall-rustup-amd64-cache:/usr/local/rustup \
-    -v landfall-cargo-amd64-cache:/usr/local/cargo \
+    -e "LANDMARK_DIST_MODE=$mode" \
+    -v landmark-rustup-amd64-cache:/usr/local/rustup \
+    -v landmark-cargo-amd64-cache:/usr/local/cargo \
     -v "$PWD":/work \
     -w /work \
     "$image" \

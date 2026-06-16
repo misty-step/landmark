@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Landfall 015 Verification Honesty Plan</title>
+  <title>Landmark 015 Verification Honesty Plan</title>
   <style>
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #151515; background: #f6f6f2; }
     main { width: min(1120px, calc(100% - 48px)); margin: 0 auto; padding: 44px 0 64px; }
@@ -28,7 +28,7 @@
   <section class="hero">
     <div>
       <h2>Backlog 015 / Verification Honesty</h2>
-      <h1>Make Landfall’s reliability and security claims executable instead of aspirational.</h1>
+      <h1>Make Landmark’s reliability and security claims executable instead of aspirational.</h1>
       <p class="muted">Chosen shape: harden the Rust HTTP chokepoint, prove action subcommand coverage with a meta-check, and expand replay around side effects that the GitHub Action depends on.</p>
     </div>
     <aside class="panel">
@@ -44,7 +44,7 @@
   <section class="panel" style="margin-top: 12px">
     <h2>Execution Plan</h2>
     <div class="phase"><strong class="label">1 harden</strong><p>Refactor <code>curl_json</code> into a bounded helper that feeds URL, auth headers, and body through curl config on stdin and retries transient errors.</p><p class="muted">Evidence: unit test proves args contain no configured secret and config does.</p></div>
-    <div class="phase"><strong class="label">2 cover</strong><p>Add replay scenarios for HTTP 429/5xx/timeout behavior and a meta-test mapping action <code>dist/landfall</code> subcommands to replay coverage.</p><p class="muted">Evidence: replay packet names the covered commands.</p></div>
+    <div class="phase"><strong class="label">2 cover</strong><p>Add replay scenarios for HTTP 429/5xx/timeout behavior and a meta-test mapping action <code>dist/landmark</code> subcommands to replay coverage.</p><p class="muted">Evidence: replay packet names the covered commands.</p></div>
     <div class="phase"><strong class="label">3 docs</strong><p>Update README reliability/security text to name the exact checks instead of vague guarantees.</p><p class="muted">Evidence: contract check fails when claims drift.</p></div>
     <div class="phase"><strong class="label">4 ship</strong><p>Run full gate, adversarial review, refresh Linux binary through hosted CI if needed, squash merge, and monitor master.</p><p class="muted">Evidence: local + hosted receipts.</p></div>
   </section>

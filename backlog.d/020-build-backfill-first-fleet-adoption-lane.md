@@ -3,7 +3,7 @@
 Priority: P1 · Status: pending · Estimate: L
 
 ## Goal
-Let Landfall safely adopt active application/library repos that have packages but no release tags or release automation by producing local artifacts, an initial version policy, and an operator-approved first release path.
+Let Landmark safely adopt active application/library repos that have packages but no release tags or release automation by producing local artifacts, an initial version policy, and an operator-approved first release path.
 
 ## Oracle
 - [ ] `fleet plan` distinguishes no-release repos that need initial versioning from repos that should remain non-release.

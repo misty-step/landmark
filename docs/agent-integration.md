@@ -1,6 +1,6 @@
 # Agent Integration Guide
 
-This guide is the cold-start contract for agents integrating Landfall into a
+This guide is the cold-start contract for agents integrating Landmark into a
 repository or pipeline.
 
 ## Discovery
@@ -8,7 +8,7 @@ repository or pipeline.
 Start with the runtime, not README prose:
 
 ```bash
-landfall describe --json
+landmark describe --json
 ```
 
 The document lists supported providers, modes, commands, inputs, output
@@ -19,7 +19,7 @@ stdout carries JSON payloads. stderr carries logs and errors. Pass
 envelope:
 
 ```bash
-landfall --error-format json run --provider unsupported --dry-run
+landmark --error-format json run --provider unsupported --dry-run
 ```
 
 JSON failures include `code`, `stage`, `retryable`, `user_action`, and redacted
@@ -30,7 +30,7 @@ JSON failures include `code`, `stage`, `retryable`, `user_action`, and redacted
 For a zero-secret local preview, run:
 
 ```bash
-landfall run --provider local --repo-root . --dry-run
+landmark run --provider local --repo-root . --dry-run
 ```
 
 `--dry-run` computes the release decision, artifact paths, hashes, and
@@ -39,7 +39,7 @@ publication plan without writing artifacts or mutating a remote release.
 For a GitHub-backed pipeline, keep publication explicit:
 
 ```bash
-landfall run \
+landmark run \
   --provider github \
   --repo-root . \
   --repository owner/repo \
@@ -55,24 +55,24 @@ evidence and artifacts without mutating the release body.
 
 The checked schema registry is:
 
-- `schemas/landfall-manifest.v1.schema.json` for `.landfall.yml`
+- `schemas/landmark-manifest.v1.schema.json` for `.landmark.yml`
 - `schemas/synthesis-status.v1.schema.json` for synthesis status output
 - `schemas/release-context.v1.schema.json` for deterministic release context packets
 - `schemas/replay-result.v1.schema.json` for replay-action evidence
 - `schemas/fleet-plan.v1.schema.json` for fleet adoption plans
 - `schemas/release-entry.v1.schema.json` for release-note JSON entries
-- `schemas/run-evidence.v1.schema.json` for `landfall run` evidence packets
+- `schemas/run-evidence.v1.schema.json` for `landmark run` evidence packets
 - `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
 
-Every schema carries an `$id` and `x-landfall-artifact` value that is checked by
-`landfall check-action-contract`.
+Every schema carries an `$id` and `x-landmark-artifact` value that is checked by
+`landmark check-action-contract`.
 
 ## Validation Oracle
 
 An agent can validate this guide and the runtime contract with:
 
 ```bash
-landfall replay-action --scenario agent_native_contracts --format json
+landmark replay-action --scenario agent_native_contracts --format json
 ```
 
 The scenario parses every checked schema, validates `describe --json`, exercises

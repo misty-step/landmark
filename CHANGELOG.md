@@ -1,277 +1,277 @@
-# [1.23.1](https://github.com/misty-step/landfall/compare/v1.23.0...v1.23.1) (2026-06-13)
+# [1.23.1](https://github.com/misty-step/landmark/compare/v1.23.0...v1.23.1) (2026-06-13)
 
 ### Bug Fixes
 
-* **action:** tolerate no-release summary artifacts (#131) ([7b1bf02](https://github.com/misty-step/landfall/commit/7b1bf02472d6636f921408322b23a1c3a31bc781))
-# [1.23.0](https://github.com/misty-step/landfall/compare/v1.22.0...v1.23.0) (2026-06-13)
+* **action:** tolerate no-release summary artifacts (#131) ([7b1bf02](https://github.com/misty-step/landmark/commit/7b1bf02472d6636f921408322b23a1c3a31bc781))
+# [1.23.0](https://github.com/misty-step/landmark/compare/v1.22.0...v1.23.0) (2026-06-13)
 
 ### Features
 
-* **fleet:** harden Landfall dogfood adoption (#129) ([52a7ba8](https://github.com/misty-step/landfall/commit/52a7ba866be433483e20e15162db4e637c5c705b))
-# [1.22.0](https://github.com/misty-step/landfall/compare/v1.21.0...v1.22.0) (2026-06-13)
+* **fleet:** harden Landmark dogfood adoption (#129) ([52a7ba8](https://github.com/misty-step/landmark/commit/52a7ba866be433483e20e15162db4e637c5c705b))
+# [1.22.0](https://github.com/misty-step/landmark/compare/v1.21.0...v1.22.0) (2026-06-13)
 
 ### Features
 
-* **backfill:** restore release history migration ([3f0fb5c](https://github.com/misty-step/landfall/commit/3f0fb5cea945a0e223d469bd319849a915cc6769))
+* **backfill:** restore release history migration ([3f0fb5c](https://github.com/misty-step/landmark/commit/3f0fb5cea945a0e223d469bd319849a915cc6769))
 
-# [1.21.0](https://github.com/misty-step/landfall/compare/v1.20.0...v1.21.0) (2026-06-13)
-
-### Features
-
-* **synthesis:** add cost-aware contextual policy ([8a891ef](https://github.com/misty-step/landfall/commit/8a891efc73e58f07221cfd533ef0bb17714a8ab6))
-# [1.20.0](https://github.com/misty-step/landfall/compare/v1.19.0...v1.20.0) (2026-06-13)
+# [1.21.0](https://github.com/misty-step/landmark/compare/v1.20.0...v1.21.0) (2026-06-13)
 
 ### Features
 
-* **fleet:** build Landfall adoption planner ([0dbcfeb](https://github.com/misty-step/landfall/commit/0dbcfeb0083e0a173cf65fbca3db3f0a544cf076))
-# [1.19.0](https://github.com/misty-step/landfall/compare/v1.18.2...v1.19.0) (2026-06-13)
+* **synthesis:** add cost-aware contextual policy ([8a891ef](https://github.com/misty-step/landmark/commit/8a891efc73e58f07221cfd533ef0bb17714a8ab6))
+# [1.20.0](https://github.com/misty-step/landmark/compare/v1.19.0...v1.20.0) (2026-06-13)
 
 ### Features
 
-* **manifest:** add Landfall product manifest ([c15887e](https://github.com/misty-step/landfall/commit/c15887ea6c7b455b0117b232c3bfd96e7189d741))
-# [1.18.2](https://github.com/misty-step/landfall/compare/v1.18.1...v1.18.2) (2026-06-12)
+* **fleet:** build Landmark adoption planner ([0dbcfeb](https://github.com/misty-step/landmark/commit/0dbcfeb0083e0a173cf65fbca3db3f0a544cf076))
+# [1.19.0](https://github.com/misty-step/landmark/compare/v1.18.2...v1.19.0) (2026-06-13)
+
+### Features
+
+* **manifest:** add Landmark product manifest ([c15887e](https://github.com/misty-step/landmark/commit/c15887ea6c7b455b0117b232c3bfd96e7189d741))
+# [1.18.2](https://github.com/misty-step/landmark/compare/v1.18.1...v1.18.2) (2026-06-12)
 
 ### Bug Fixes
 
-* **release:** keep self-release binary in sync ([1832326](https://github.com/misty-step/landfall/commit/18323261d0f2631e6ff493196240f72e17117b07))
-# [1.18.1](https://github.com/misty-step/landfall/compare/v1.18.0...v1.18.1) (2026-06-12)
+* **release:** keep self-release binary in sync ([1832326](https://github.com/misty-step/landmark/commit/18323261d0f2631e6ff493196240f72e17117b07))
+# [1.18.1](https://github.com/misty-step/landmark/compare/v1.18.0...v1.18.1) (2026-06-12)
 
 ### Bug Fixes
 
-* **release:** stabilize self-release post-publish gates ([3bb2bdd](https://github.com/misty-step/landfall/commit/3bb2bddf45c3babca63607fb662e7bba497a6bd2))
-# [1.18.0](https://github.com/misty-step/landfall/compare/v1.17.2...v1.18.0) (2026-06-12)
+* **release:** stabilize self-release post-publish gates ([3bb2bdd](https://github.com/misty-step/landmark/commit/3bb2bddf45c3babca63607fb662e7bba497a6bd2))
+# [1.18.0](https://github.com/misty-step/landmark/compare/v1.17.2...v1.18.0) (2026-06-12)
 
 ### Features
 
-* **runtime:** migrate owned Landfall runtime to Rust (#109) ([3ad9dcb](https://github.com/misty-step/landfall/commit/3ad9dcb25783053a5c7f56c7c2c4c6cf0c2357b8))
-* **notes:** add typed release note artifact plane (#110) ([58c814a](https://github.com/misty-step/landfall/commit/58c814a5db4f7f341097d57c75ada11199878eb8))
-* **setup:** add adoption analyzer and workflow generator (#111) ([2e30c8d](https://github.com/misty-step/landfall/commit/2e30c8dd7da47aae5f8694c2ebad75534cd35741))
-* **release:** add pr-based self-release flow (#112) ([81e9711](https://github.com/misty-step/landfall/commit/81e9711c89fe6e0e1bb683778ddc2299707d846e))
+* **runtime:** migrate owned Landmark runtime to Rust (#109) ([3ad9dcb](https://github.com/misty-step/landmark/commit/3ad9dcb25783053a5c7f56c7c2c4c6cf0c2357b8))
+* **notes:** add typed release note artifact plane (#110) ([58c814a](https://github.com/misty-step/landmark/commit/58c814a5db4f7f341097d57c75ada11199878eb8))
+* **setup:** add adoption analyzer and workflow generator (#111) ([2e30c8d](https://github.com/misty-step/landmark/commit/2e30c8dd7da47aae5f8694c2ebad75534cd35741))
+* **release:** add pr-based self-release flow (#112) ([81e9711](https://github.com/misty-step/landmark/commit/81e9711c89fe6e0e1bb683778ddc2299707d846e))
 
 ### Bug Fixes
 
-* **healthcheck:** auto-run when synthesis enabled, add OpenRouter-specific 401 message (#99) ([9a1e4c9](https://github.com/misty-step/landfall/commit/9a1e4c9165661e6aa2e6b4a8fe1c645b4fa34879))
-* **ci:** avoid duplicate trufflehog fail flag (#106) ([12441ec](https://github.com/misty-step/landfall/commit/12441ec32afb35156e1c00eb62a3c32514919b8d))
-* **ci:** allow release candidate metadata checks (#114) ([f645ea0](https://github.com/misty-step/landfall/commit/f645ea0e36eeb544ff24da40600b36f21618b7a2))
-## [1.17.2](https://github.com/misty-step/landfall/compare/v1.17.1...v1.17.2) (2026-02-13)
-
-
-### Bug Fixes
-
-* default synthesis-failure-issue to false ([a83f8b9](https://github.com/misty-step/landfall/commit/a83f8b9511ea6910491f1b201aeb28066a126b79))
-
-## [1.17.1](https://github.com/misty-step/landfall/compare/v1.17.0...v1.17.1) (2026-02-13)
+* **healthcheck:** auto-run when synthesis enabled, add OpenRouter-specific 401 message (#99) ([9a1e4c9](https://github.com/misty-step/landmark/commit/9a1e4c9165661e6aa2e6b4a8fe1c645b4fa34879))
+* **ci:** avoid duplicate trufflehog fail flag (#106) ([12441ec](https://github.com/misty-step/landmark/commit/12441ec32afb35156e1c00eb62a3c32514919b8d))
+* **ci:** allow release candidate metadata checks (#114) ([f645ea0](https://github.com/misty-step/landmark/commit/f645ea0e36eeb544ff24da40600b36f21618b7a2))
+## [1.17.2](https://github.com/misty-step/landmark/compare/v1.17.1...v1.17.2) (2026-02-13)
 
 
 ### Bug Fixes
 
-* preflight check for orphaned tag history ([#86](https://github.com/misty-step/landfall/issues/86)) ([#89](https://github.com/misty-step/landfall/issues/89)) ([381572c](https://github.com/misty-step/landfall/commit/381572ccb8ceeb6d97d08be3bce7df344fb51fee))
+* default synthesis-failure-issue to false ([a83f8b9](https://github.com/misty-step/landmark/commit/a83f8b9511ea6910491f1b201aeb28066a126b79))
 
-# [1.17.0](https://github.com/misty-step/landfall/compare/v1.16.1...v1.17.0) (2026-02-12)
-
-
-### Features
-
-* generic webhook notification on release ([#87](https://github.com/misty-step/landfall/issues/87)) ([b32a2db](https://github.com/misty-step/landfall/commit/b32a2db1e0650d9266b302f661802c354034d290)), closes [#59](https://github.com/misty-step/landfall/issues/59)
-
-## [1.16.1](https://github.com/misty-step/landfall/compare/v1.16.0...v1.16.1) (2026-02-12)
+## [1.17.1](https://github.com/misty-step/landmark/compare/v1.17.0...v1.17.1) (2026-02-13)
 
 
 ### Bug Fixes
 
-* handle floating tags and deduplicate failure issues ([#84](https://github.com/misty-step/landfall/issues/84)) ([#85](https://github.com/misty-step/landfall/issues/85)) ([faa8c77](https://github.com/misty-step/landfall/commit/faa8c77c908fb03e193f68ad12252cb28e7e6dfa))
+* preflight check for orphaned tag history ([#86](https://github.com/misty-step/landmark/issues/86)) ([#89](https://github.com/misty-step/landmark/issues/89)) ([381572c](https://github.com/misty-step/landmark/commit/381572ccb8ceeb6d97d08be3bce7df344fb51fee))
 
-# [1.16.0](https://github.com/misty-step/landfall/compare/v1.15.0...v1.16.0) (2026-02-12)
-
-
-### Features
-
-* post-synthesis output validation with retry ([#83](https://github.com/misty-step/landfall/issues/83)) ([51ea744](https://github.com/misty-step/landfall/commit/51ea744c8e4165146b6b2441b7a2d3538f1f09b6)), closes [#57](https://github.com/misty-step/landfall/issues/57) [#57](https://github.com/misty-step/landfall/issues/57)
-
-# [1.15.0](https://github.com/misty-step/landfall/compare/v1.14.0...v1.15.0) (2026-02-12)
+# [1.17.0](https://github.com/misty-step/landmark/compare/v1.16.1...v1.17.0) (2026-02-12)
 
 
 ### Features
 
-* highlight breaking changes in notes ([#55](https://github.com/misty-step/landfall/issues/55)) ([#80](https://github.com/misty-step/landfall/issues/80)) ([af81075](https://github.com/misty-step/landfall/commit/af810757a8c11139819d2a4013bab41799b46642))
+* generic webhook notification on release ([#87](https://github.com/misty-step/landmark/issues/87)) ([b32a2db](https://github.com/misty-step/landmark/commit/b32a2db1e0650d9266b302f661802c354034d290)), closes [#59](https://github.com/misty-step/landmark/issues/59)
 
-# [1.14.0](https://github.com/misty-step/landfall/compare/v1.13.0...v1.14.0) (2026-02-12)
-
-
-### Features
-
-* **synthesis:** release significance detection ([#79](https://github.com/misty-step/landfall/issues/79)) ([a493f0b](https://github.com/misty-step/landfall/commit/a493f0b438ca74f2056eab97ca7af68724509287)), closes [#54](https://github.com/misty-step/landfall/issues/54)
-
-# [1.13.0](https://github.com/misty-step/landfall/compare/v1.12.0...v1.13.0) (2026-02-12)
-
-
-### Features
-
-* **synthesis:** add PR-based changelog source selection ([#77](https://github.com/misty-step/landfall/issues/77)) ([9109621](https://github.com/misty-step/landfall/commit/9109621282e4c53a8d6dbaf2776cd917fb9f7b01))
-
-# [1.12.0](https://github.com/misty-step/landfall/compare/v1.11.0...v1.12.0) (2026-02-12)
-
-
-### Features
-
-* add audience-specific synthesis prompt variants ([#76](https://github.com/misty-step/landfall/issues/76)) ([0b5ccc7](https://github.com/misty-step/landfall/commit/0b5ccc70dab76e6b384b838e042d7d83d1abf49f))
-
-# [1.11.0](https://github.com/misty-step/landfall/compare/v1.10.0...v1.11.0) (2026-02-12)
-
-
-### Features
-
-* support targeted release-note resynthesis backfills ([#74](https://github.com/misty-step/landfall/issues/74)) ([eb3b553](https://github.com/misty-step/landfall/commit/eb3b5537df4d3695745e9180b8f6b550e7e2119a))
-
-# [1.10.0](https://github.com/misty-step/landfall/compare/v1.9.0...v1.10.0) (2026-02-11)
-
-
-### Features
-
-* auto-close stale synthesis failure issues on success ([#73](https://github.com/misty-step/landfall/issues/73)) ([b276399](https://github.com/misty-step/landfall/commit/b2763993c9b959f9dc85fb7a8b502a150f404223)), closes [#45](https://github.com/misty-step/landfall/issues/45)
-
-# [1.9.0](https://github.com/misty-step/landfall/compare/v1.8.0...v1.9.0) (2026-02-11)
+## [1.16.1](https://github.com/misty-step/landmark/compare/v1.16.0...v1.16.1) (2026-02-12)
 
 
 ### Bug Fixes
 
-* don't create failure issues when API key is unconfigured ([#67](https://github.com/misty-step/landfall/issues/67)) ([30adeb0](https://github.com/misty-step/landfall/commit/30adeb07c79a2d91dabc83460c109cfda08b4de2)), closes [#46](https://github.com/misty-step/landfall/issues/46)
-* surface actionable diagnosis for 401/403 LLM API errors ([#68](https://github.com/misty-step/landfall/issues/68)) ([c893b9c](https://github.com/misty-step/landfall/commit/c893b9c08302ae9588faaea9f012011c58dee7b8)), closes [#47](https://github.com/misty-step/landfall/issues/47)
+* handle floating tags and deduplicate failure issues ([#84](https://github.com/misty-step/landmark/issues/84)) ([#85](https://github.com/misty-step/landmark/issues/85)) ([faa8c77](https://github.com/misty-step/landmark/commit/faa8c77c908fb03e193f68ad12252cb28e7e6dfa))
+
+# [1.16.0](https://github.com/misty-step/landmark/compare/v1.15.0...v1.16.0) (2026-02-12)
 
 
 ### Features
 
-* support custom synthesis prompt templates ([#66](https://github.com/misty-step/landfall/issues/66)) ([8d022d1](https://github.com/misty-step/landfall/commit/8d022d13c8b3d3ffe9fe598ffc5ba3f94fe380a5)), closes [#15](https://github.com/misty-step/landfall/issues/15)
+* post-synthesis output validation with retry ([#83](https://github.com/misty-step/landmark/issues/83)) ([51ea744](https://github.com/misty-step/landmark/commit/51ea744c8e4165146b6b2441b7a2d3538f1f09b6)), closes [#57](https://github.com/misty-step/landmark/issues/57) [#57](https://github.com/misty-step/landmark/issues/57)
 
-# [1.8.0](https://github.com/misty-step/landfall/compare/v1.7.0...v1.8.0) (2026-02-11)
-
-
-### Features
-
-* add proactive API key health check ([#69](https://github.com/misty-step/landfall/issues/69)) ([7d943cb](https://github.com/misty-step/landfall/commit/7d943cbc7170da281ba4e304ab6afcd8b3e06c9b)), closes [#49](https://github.com/misty-step/landfall/issues/49)
-* add synthesis-only mode to decouple from semantic-release ([#70](https://github.com/misty-step/landfall/issues/70)) ([3fa37e1](https://github.com/misty-step/landfall/commit/3fa37e109409bb8684760c8cb81dbdd21dff8fc2)), closes [#50](https://github.com/misty-step/landfall/issues/50)
-* rewrite synthesis system message and prompt template ([#71](https://github.com/misty-step/landfall/issues/71)) ([04822aa](https://github.com/misty-step/landfall/commit/04822aa8b299264b1a4d620843e68f5aeda83c27)), closes [#53](https://github.com/misty-step/landfall/issues/53)
-
-# [1.7.0](https://github.com/misty-step/landfall/compare/v1.6.1...v1.7.0) (2026-02-11)
+# [1.15.0](https://github.com/misty-step/landmark/compare/v1.14.0...v1.15.0) (2026-02-12)
 
 
 ### Features
 
-* support consuming repo .releaserc override ([#65](https://github.com/misty-step/landfall/issues/65)) ([a173a38](https://github.com/misty-step/landfall/commit/a173a38142e102624e76290bfabeb651391de2a1)), closes [#14](https://github.com/misty-step/landfall/issues/14)
+* highlight breaking changes in notes ([#55](https://github.com/misty-step/landmark/issues/55)) ([#80](https://github.com/misty-step/landmark/issues/80)) ([af81075](https://github.com/misty-step/landmark/commit/af810757a8c11139819d2a4013bab41799b46642))
 
-## [1.6.1](https://github.com/misty-step/landfall/compare/v1.6.0...v1.6.1) (2026-02-11)
-
-
-### Bug Fixes
-
-* make action dependency installs deterministic ([#42](https://github.com/misty-step/landfall/issues/42)) ([31d06ca](https://github.com/misty-step/landfall/commit/31d06ca30e471771e56d11ae3272c185250f8467)), closes [#35](https://github.com/misty-step/landfall/issues/35)
-
-# [1.6.0](https://github.com/misty-step/landfall/compare/v1.5.0...v1.6.0) (2026-02-10)
+# [1.14.0](https://github.com/misty-step/landmark/compare/v1.13.0...v1.14.0) (2026-02-12)
 
 
 ### Features
 
-* add floating major version tag support for GitHub Actions repos ([#28](https://github.com/misty-step/landfall/issues/28)) ([#40](https://github.com/misty-step/landfall/issues/40)) ([7cbb7a0](https://github.com/misty-step/landfall/commit/7cbb7a0e73f6057553cbde7a312407070e468517))
+* **synthesis:** release significance detection ([#79](https://github.com/misty-step/landmark/issues/79)) ([a493f0b](https://github.com/misty-step/landmark/commit/a493f0b438ca74f2056eab97ca7af68724509287)), closes [#54](https://github.com/misty-step/landmark/issues/54)
 
-# [1.5.0](https://github.com/misty-step/landfall/compare/v1.4.0...v1.5.0) (2026-02-10)
-
-
-### Features
-
-* backfill CLI for retroactive release note synthesis ([#39](https://github.com/misty-step/landfall/issues/39)) ([8b57870](https://github.com/misty-step/landfall/commit/8b57870dfdf3fe85147be24758aa59e224601e11)), closes [#13](https://github.com/misty-step/landfall/issues/13) [#13](https://github.com/misty-step/landfall/issues/13)
-
-# [1.4.0](https://github.com/misty-step/landfall/compare/v1.3.4...v1.4.0) (2026-02-10)
+# [1.13.0](https://github.com/misty-step/landmark/compare/v1.12.0...v1.13.0) (2026-02-12)
 
 
 ### Features
 
-* add plaintext/html artifact outputs ([#12](https://github.com/misty-step/landfall/issues/12)) ([#38](https://github.com/misty-step/landfall/issues/38)) ([dcfb14f](https://github.com/misty-step/landfall/commit/dcfb14f21924a7a5686c2d27338379dd29c45bb3))
+* **synthesis:** add PR-based changelog source selection ([#77](https://github.com/misty-step/landmark/issues/77)) ([9109621](https://github.com/misty-step/landmark/commit/9109621282e4c53a8d6dbaf2776cd917fb9f7b01))
 
-## [1.3.4](https://github.com/misty-step/landfall/compare/v1.3.3...v1.3.4) (2026-02-10)
-
-
-### Bug Fixes
-
-* **ci:** correct test directory paths and add ruff config ([#33](https://github.com/misty-step/landfall/issues/33)) ([0f795e0](https://github.com/misty-step/landfall/commit/0f795e0ca758e5581379a364c46d3495172454f3)), closes [#11](https://github.com/misty-step/landfall/issues/11)
-
-## [1.3.3](https://github.com/misty-step/landfall/compare/v1.3.2...v1.3.3) (2026-02-10)
-
-
-### Bug Fixes
-
-* **ci:** add dedicated workflow to sync v1 tag ([#32](https://github.com/misty-step/landfall/issues/32)) ([04c91c5](https://github.com/misty-step/landfall/commit/04c91c55c9740f05ceefa7f063e469b2bcf1211d)), closes [#16](https://github.com/misty-step/landfall/issues/16)
-
-## [1.3.2](https://github.com/misty-step/landfall/compare/v1.3.1...v1.3.2) (2026-02-10)
-
-
-### Bug Fixes
-
-* fall back to GitHub release body when CHANGELOG.md is missing ([#31](https://github.com/misty-step/landfall/issues/31)) ([1384cf5](https://github.com/misty-step/landfall/commit/1384cf50a3d237ab4651ff2e662d4ca8734e33af)), closes [misty-step/cerberus#82](https://github.com/misty-step/cerberus/issues/82)
-
-## [1.3.1](https://github.com/misty-step/landfall/compare/v1.3.0...v1.3.1) (2026-02-09)
-
-
-### Bug Fixes
-
-* keep changelog semantic-release only ([#27](https://github.com/misty-step/landfall/issues/27)) ([5f9a235](https://github.com/misty-step/landfall/commit/5f9a2352c379b82687fa997d214a50cdfcd2ee94))
-
-# [1.3.0](https://github.com/misty-step/landfall/compare/v1.2.0...v1.3.0) (2026-02-09)
+# [1.12.0](https://github.com/misty-step/landmark/compare/v1.11.0...v1.12.0) (2026-02-12)
 
 
 ### Features
 
-* generate portable release notes artifacts ([#26](https://github.com/misty-step/landfall/issues/26)) ([d4ca901](https://github.com/misty-step/landfall/commit/d4ca90199c4b022407ee8ba2705d2a385100356f)), closes [#7](https://github.com/misty-step/landfall/issues/7)
+* add audience-specific synthesis prompt variants ([#76](https://github.com/misty-step/landmark/issues/76)) ([0b5ccc7](https://github.com/misty-step/landmark/commit/0b5ccc70dab76e6b384b838e042d7d83d1abf49f))
 
-# [1.2.0](https://github.com/misty-step/landfall/compare/v1.1.5...v1.2.0) (2026-02-09)
-
-
-### Features
-
-* alert and signal synthesis failures ([#25](https://github.com/misty-step/landfall/issues/25)) ([8398ca0](https://github.com/misty-step/landfall/commit/8398ca066c51c45a025adff1e536c0bbdf2d5202))
-
-## [1.1.5](https://github.com/misty-step/landfall/compare/v1.1.4...v1.1.5) (2026-02-09)
-
-
-### Bug Fixes
-
-* remove unused @semantic-release/npm dependency ([#24](https://github.com/misty-step/landfall/issues/24)) ([a353646](https://github.com/misty-step/landfall/commit/a353646e21c3381e440536e1c3ab3435dbeb3959)), closes [#5](https://github.com/misty-step/landfall/issues/5)
-
-## [1.1.4](https://github.com/misty-step/landfall/compare/v1.1.3...v1.1.4) (2026-02-09)
-
-
-### Bug Fixes
-
-* harden self-release notes pipeline ([#23](https://github.com/misty-step/landfall/issues/23)) ([0a030b4](https://github.com/misty-step/landfall/commit/0a030b4c21e88daf5b5d68fd75cae2b83ce9938f))
-
-## [1.1.3](https://github.com/misty-step/landfall/compare/v1.1.2...v1.1.3) (2026-02-08)
-
-
-### Bug Fixes
-
-* remove dead backward-compat code and warn on insecure API URLs ([#20](https://github.com/misty-step/landfall/issues/20)) ([0df6c21](https://github.com/misty-step/landfall/commit/0df6c21d601c60e71c25a86184b4ac67499535d4)), closes [#3](https://github.com/misty-step/landfall/issues/3) [#4](https://github.com/misty-step/landfall/issues/4)
-
-## [1.1.2](https://github.com/misty-step/landfall/compare/v1.1.1...v1.1.2) (2026-02-08)
-
-
-### Bug Fixes
-
-* provider-agnostic LLM inputs for release synthesis ([#19](https://github.com/misty-step/landfall/issues/19)) ([451db2a](https://github.com/misty-step/landfall/commit/451db2a01256030bedd0039396af86e6f6a5ac03)), closes [#4](https://github.com/misty-step/landfall/issues/4)
-
-## [1.1.1](https://github.com/misty-step/landfall/compare/v1.1.0...v1.1.1) (2026-02-08)
-
-
-### Bug Fixes
-
-* remove npm plugin and package.json references for non-Node project support ([#17](https://github.com/misty-step/landfall/issues/17)) ([c5e9dc0](https://github.com/misty-step/landfall/commit/c5e9dc0257622fff7914ac2db49732d764c39296)), closes [misty-step/vox#178](https://github.com/misty-step/vox/issues/178)
-
-# [1.1.0](https://github.com/misty-step/landfall/compare/v1.0.0...v1.1.0) (2026-02-08)
-
-
-### Bug Fixes
-
-* harden release workflow template (concurrency, timeout, docs) ([#2](https://github.com/misty-step/landfall/issues/2)) ([228f57f](https://github.com/misty-step/landfall/commit/228f57f67cb93db2d7b4d9ebfed6a4a485f330e3))
+# [1.11.0](https://github.com/misty-step/landmark/compare/v1.10.0...v1.11.0) (2026-02-12)
 
 
 ### Features
 
-* integrate Landfall release pipeline ([#1](https://github.com/misty-step/landfall/issues/1)) ([2d36967](https://github.com/misty-step/landfall/commit/2d36967ac612d228fa03905bc664cc4af74cd1d1))
+* support targeted release-note resynthesis backfills ([#74](https://github.com/misty-step/landmark/issues/74)) ([eb3b553](https://github.com/misty-step/landmark/commit/eb3b5537df4d3695745e9180b8f6b550e7e2119a))
+
+# [1.10.0](https://github.com/misty-step/landmark/compare/v1.9.0...v1.10.0) (2026-02-11)
+
+
+### Features
+
+* auto-close stale synthesis failure issues on success ([#73](https://github.com/misty-step/landmark/issues/73)) ([b276399](https://github.com/misty-step/landmark/commit/b2763993c9b959f9dc85fb7a8b502a150f404223)), closes [#45](https://github.com/misty-step/landmark/issues/45)
+
+# [1.9.0](https://github.com/misty-step/landmark/compare/v1.8.0...v1.9.0) (2026-02-11)
+
+
+### Bug Fixes
+
+* don't create failure issues when API key is unconfigured ([#67](https://github.com/misty-step/landmark/issues/67)) ([30adeb0](https://github.com/misty-step/landmark/commit/30adeb07c79a2d91dabc83460c109cfda08b4de2)), closes [#46](https://github.com/misty-step/landmark/issues/46)
+* surface actionable diagnosis for 401/403 LLM API errors ([#68](https://github.com/misty-step/landmark/issues/68)) ([c893b9c](https://github.com/misty-step/landmark/commit/c893b9c08302ae9588faaea9f012011c58dee7b8)), closes [#47](https://github.com/misty-step/landmark/issues/47)
+
+
+### Features
+
+* support custom synthesis prompt templates ([#66](https://github.com/misty-step/landmark/issues/66)) ([8d022d1](https://github.com/misty-step/landmark/commit/8d022d13c8b3d3ffe9fe598ffc5ba3f94fe380a5)), closes [#15](https://github.com/misty-step/landmark/issues/15)
+
+# [1.8.0](https://github.com/misty-step/landmark/compare/v1.7.0...v1.8.0) (2026-02-11)
+
+
+### Features
+
+* add proactive API key health check ([#69](https://github.com/misty-step/landmark/issues/69)) ([7d943cb](https://github.com/misty-step/landmark/commit/7d943cbc7170da281ba4e304ab6afcd8b3e06c9b)), closes [#49](https://github.com/misty-step/landmark/issues/49)
+* add synthesis-only mode to decouple from semantic-release ([#70](https://github.com/misty-step/landmark/issues/70)) ([3fa37e1](https://github.com/misty-step/landmark/commit/3fa37e109409bb8684760c8cb81dbdd21dff8fc2)), closes [#50](https://github.com/misty-step/landmark/issues/50)
+* rewrite synthesis system message and prompt template ([#71](https://github.com/misty-step/landmark/issues/71)) ([04822aa](https://github.com/misty-step/landmark/commit/04822aa8b299264b1a4d620843e68f5aeda83c27)), closes [#53](https://github.com/misty-step/landmark/issues/53)
+
+# [1.7.0](https://github.com/misty-step/landmark/compare/v1.6.1...v1.7.0) (2026-02-11)
+
+
+### Features
+
+* support consuming repo .releaserc override ([#65](https://github.com/misty-step/landmark/issues/65)) ([a173a38](https://github.com/misty-step/landmark/commit/a173a38142e102624e76290bfabeb651391de2a1)), closes [#14](https://github.com/misty-step/landmark/issues/14)
+
+## [1.6.1](https://github.com/misty-step/landmark/compare/v1.6.0...v1.6.1) (2026-02-11)
+
+
+### Bug Fixes
+
+* make action dependency installs deterministic ([#42](https://github.com/misty-step/landmark/issues/42)) ([31d06ca](https://github.com/misty-step/landmark/commit/31d06ca30e471771e56d11ae3272c185250f8467)), closes [#35](https://github.com/misty-step/landmark/issues/35)
+
+# [1.6.0](https://github.com/misty-step/landmark/compare/v1.5.0...v1.6.0) (2026-02-10)
+
+
+### Features
+
+* add floating major version tag support for GitHub Actions repos ([#28](https://github.com/misty-step/landmark/issues/28)) ([#40](https://github.com/misty-step/landmark/issues/40)) ([7cbb7a0](https://github.com/misty-step/landmark/commit/7cbb7a0e73f6057553cbde7a312407070e468517))
+
+# [1.5.0](https://github.com/misty-step/landmark/compare/v1.4.0...v1.5.0) (2026-02-10)
+
+
+### Features
+
+* backfill CLI for retroactive release note synthesis ([#39](https://github.com/misty-step/landmark/issues/39)) ([8b57870](https://github.com/misty-step/landmark/commit/8b57870dfdf3fe85147be24758aa59e224601e11)), closes [#13](https://github.com/misty-step/landmark/issues/13) [#13](https://github.com/misty-step/landmark/issues/13)
+
+# [1.4.0](https://github.com/misty-step/landmark/compare/v1.3.4...v1.4.0) (2026-02-10)
+
+
+### Features
+
+* add plaintext/html artifact outputs ([#12](https://github.com/misty-step/landmark/issues/12)) ([#38](https://github.com/misty-step/landmark/issues/38)) ([dcfb14f](https://github.com/misty-step/landmark/commit/dcfb14f21924a7a5686c2d27338379dd29c45bb3))
+
+## [1.3.4](https://github.com/misty-step/landmark/compare/v1.3.3...v1.3.4) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci:** correct test directory paths and add ruff config ([#33](https://github.com/misty-step/landmark/issues/33)) ([0f795e0](https://github.com/misty-step/landmark/commit/0f795e0ca758e5581379a364c46d3495172454f3)), closes [#11](https://github.com/misty-step/landmark/issues/11)
+
+## [1.3.3](https://github.com/misty-step/landmark/compare/v1.3.2...v1.3.3) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci:** add dedicated workflow to sync v1 tag ([#32](https://github.com/misty-step/landmark/issues/32)) ([04c91c5](https://github.com/misty-step/landmark/commit/04c91c55c9740f05ceefa7f063e469b2bcf1211d)), closes [#16](https://github.com/misty-step/landmark/issues/16)
+
+## [1.3.2](https://github.com/misty-step/landmark/compare/v1.3.1...v1.3.2) (2026-02-10)
+
+
+### Bug Fixes
+
+* fall back to GitHub release body when CHANGELOG.md is missing ([#31](https://github.com/misty-step/landmark/issues/31)) ([1384cf5](https://github.com/misty-step/landmark/commit/1384cf50a3d237ab4651ff2e662d4ca8734e33af)), closes [misty-step/cerberus#82](https://github.com/misty-step/cerberus/issues/82)
+
+## [1.3.1](https://github.com/misty-step/landmark/compare/v1.3.0...v1.3.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* keep changelog semantic-release only ([#27](https://github.com/misty-step/landmark/issues/27)) ([5f9a235](https://github.com/misty-step/landmark/commit/5f9a2352c379b82687fa997d214a50cdfcd2ee94))
+
+# [1.3.0](https://github.com/misty-step/landmark/compare/v1.2.0...v1.3.0) (2026-02-09)
+
+
+### Features
+
+* generate portable release notes artifacts ([#26](https://github.com/misty-step/landmark/issues/26)) ([d4ca901](https://github.com/misty-step/landmark/commit/d4ca90199c4b022407ee8ba2705d2a385100356f)), closes [#7](https://github.com/misty-step/landmark/issues/7)
+
+# [1.2.0](https://github.com/misty-step/landmark/compare/v1.1.5...v1.2.0) (2026-02-09)
+
+
+### Features
+
+* alert and signal synthesis failures ([#25](https://github.com/misty-step/landmark/issues/25)) ([8398ca0](https://github.com/misty-step/landmark/commit/8398ca066c51c45a025adff1e536c0bbdf2d5202))
+
+## [1.1.5](https://github.com/misty-step/landmark/compare/v1.1.4...v1.1.5) (2026-02-09)
+
+
+### Bug Fixes
+
+* remove unused @semantic-release/npm dependency ([#24](https://github.com/misty-step/landmark/issues/24)) ([a353646](https://github.com/misty-step/landmark/commit/a353646e21c3381e440536e1c3ab3435dbeb3959)), closes [#5](https://github.com/misty-step/landmark/issues/5)
+
+## [1.1.4](https://github.com/misty-step/landmark/compare/v1.1.3...v1.1.4) (2026-02-09)
+
+
+### Bug Fixes
+
+* harden self-release notes pipeline ([#23](https://github.com/misty-step/landmark/issues/23)) ([0a030b4](https://github.com/misty-step/landmark/commit/0a030b4c21e88daf5b5d68fd75cae2b83ce9938f))
+
+## [1.1.3](https://github.com/misty-step/landmark/compare/v1.1.2...v1.1.3) (2026-02-08)
+
+
+### Bug Fixes
+
+* remove dead backward-compat code and warn on insecure API URLs ([#20](https://github.com/misty-step/landmark/issues/20)) ([0df6c21](https://github.com/misty-step/landmark/commit/0df6c21d601c60e71c25a86184b4ac67499535d4)), closes [#3](https://github.com/misty-step/landmark/issues/3) [#4](https://github.com/misty-step/landmark/issues/4)
+
+## [1.1.2](https://github.com/misty-step/landmark/compare/v1.1.1...v1.1.2) (2026-02-08)
+
+
+### Bug Fixes
+
+* provider-agnostic LLM inputs for release synthesis ([#19](https://github.com/misty-step/landmark/issues/19)) ([451db2a](https://github.com/misty-step/landmark/commit/451db2a01256030bedd0039396af86e6f6a5ac03)), closes [#4](https://github.com/misty-step/landmark/issues/4)
+
+## [1.1.1](https://github.com/misty-step/landmark/compare/v1.1.0...v1.1.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* remove npm plugin and package.json references for non-Node project support ([#17](https://github.com/misty-step/landmark/issues/17)) ([c5e9dc0](https://github.com/misty-step/landmark/commit/c5e9dc0257622fff7914ac2db49732d764c39296)), closes [misty-step/vox#178](https://github.com/misty-step/vox/issues/178)
+
+# [1.1.0](https://github.com/misty-step/landmark/compare/v1.0.0...v1.1.0) (2026-02-08)
+
+
+### Bug Fixes
+
+* harden release workflow template (concurrency, timeout, docs) ([#2](https://github.com/misty-step/landmark/issues/2)) ([228f57f](https://github.com/misty-step/landmark/commit/228f57f67cb93db2d7b4d9ebfed6a4a485f330e3))
+
+
+### Features
+
+* integrate Landmark release pipeline ([#1](https://github.com/misty-step/landmark/issues/1)) ([2d36967](https://github.com/misty-step/landmark/commit/2d36967ac612d228fa03905bc664cc4af74cd1d1))

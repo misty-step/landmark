@@ -1,14 +1,14 @@
-# Make Landfall self-describing and agent-native
+# Make Landmark self-describing and agent-native
 
 Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
 Give agents stable machine contracts for configuring, running, verifying, and
-debugging Landfall without reverse-engineering README prose or Rust internals.
+debugging Landmark without reverse-engineering README prose or Rust internals.
 
 ## Oracle
-- [x] Versioned JSON Schemas exist for `.landfall.yml`, synthesis status, replay result, fleet plan, artifact feed entries, and release evidence packets.
-- [x] `landfall describe --json` exposes commands, modes, providers, inputs, outputs, schemas, and examples in one machine-readable document.
+- [x] Versioned JSON Schemas exist for `.landmark.yml`, synthesis status, replay result, fleet plan, artifact feed entries, and release evidence packets.
+- [x] `landmark describe --json` exposes commands, modes, providers, inputs, outputs, schemas, and examples in one machine-readable document.
 - [x] Mutating commands support preview/dry-run or explain why preview is impossible.
 - [x] Commands that agents call support deterministic JSON output, with payloads on stdout and logs/errors on stderr.
 - [x] Failure output includes a stable code, stage, retryability, user action, and redacted context.
@@ -29,10 +29,10 @@ debugging Landfall without reverse-engineering README prose or Rust internals.
 
 ## Delivery
 - Added a checked schema registry under `schemas/` for the manifest, synthesis status, replay result, fleet plan, release-entry artifact, run evidence, and JSON failure envelope.
-- Added `landfall describe --json`, generated from Clap command metadata plus explicit runtime contracts for schemas, providers, modes, preview policy, stdout/stderr discipline, examples, and failure taxonomy.
+- Added `landmark describe --json`, generated from Clap command metadata plus explicit runtime contracts for schemas, providers, modes, preview policy, stdout/stderr discipline, examples, and failure taxonomy.
 - Added `--error-format json`, `run --dry-run`, `doctor --format json`, `replay-action --format json`, and JSON stdout options for fleet scan/plan/open-prs.
 - Added `setup --dry-run`, manifest shape validation, schema-vs-runtime key alignment checks, and command-contract coverage checks against the live Clap command tree.
 - Added `docs/agent-integration.md` and README agent-native contract documentation.
 - Added `agent_native_contracts` replay coverage and wired schema/guide validation into `check-action-contract`; replay now exercises `run --dry-run`, `backfill --dry-run`, and fleet scan/plan/open-prs JSON stdout paths.
-- Verification: `cargo test --locked manifest_shape_rejects_unknown_keys`; `cargo test --locked failure_classifier_emits_stable_codes_and_redacts_tokens`; `cargo run --locked -- check-action-contract`; `cargo run --locked -- replay-action --scenario agent_native_contracts --format json --evidence-dir .landfall/replay-014-agent`; `bin/gate`.
-- Evidence packet: `.landfall/replay-014-agent/replay-result.json` records the passing cold-agent contract replay with 7 schemas, JSON error code `invalid_input`, no-write `run --dry-run` release `v1.1.0`, `backfill_dry_run=true`, and fleet JSON path coverage.
+- Verification: `cargo test --locked manifest_shape_rejects_unknown_keys`; `cargo test --locked failure_classifier_emits_stable_codes_and_redacts_tokens`; `cargo run --locked -- check-action-contract`; `cargo run --locked -- replay-action --scenario agent_native_contracts --format json --evidence-dir .landmark/replay-014-agent`; `bin/gate`.
+- Evidence packet: `.landmark/replay-014-agent/replay-result.json` records the passing cold-agent contract replay with 7 schemas, JSON error code `invalid_input`, no-write `run --dry-run` release `v1.1.0`, `backfill_dry_run=true`, and fleet JSON path coverage.

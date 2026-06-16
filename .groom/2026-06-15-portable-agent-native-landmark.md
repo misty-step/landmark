@@ -1,9 +1,9 @@
-# Portable, Agent-Native Landfall Groom
+# Portable, Agent-Native Landmark Groom
 
 Date: 2026-06-15
 
 ## Goal
-Make Landfall the no-brainer release notes, changelog, and semantic-versioning
+Make Landmark the no-brainer release notes, changelog, and semantic-versioning
 system across projects while reducing GitHub from a hard dependency to one
 adapter and one hosted packaging path.
 
@@ -12,8 +12,8 @@ adapter and one hosted packaging path.
 | Surface | Status | Evidence | Contribution |
 | --- | --- | --- | --- |
 | Tidy | complete | `jj status`; archived `008`-`012` with `harness-kit-checks backlog archive` | Active backlog was empty after archiving done tickets. |
-| Product/value | complete | `README.md`, dogfood report, prior rollout memory | Landfall should be release intelligence, not only a GitHub Action. |
-| Architecture | complete | `action.yml`; `crates/landfall/src/main.rs`; architecture lane | GitHub coupling is concentrated enough to extract adapters. |
+| Product/value | complete | `README.md`, dogfood report, prior rollout memory | Landmark should be release intelligence, not only a GitHub Action. |
+| Architecture | complete | `action.yml`; `crates/landmark/src/main.rs`; architecture lane | GitHub coupling is concentrated enough to extract adapters. |
 | Operator UX | complete | README quick start, setup/fleet docs, dogfood findings | First-run value still assumes GitHub workflow/secrets and a Linux action binary. |
 | Agent readiness | complete | `AGENTS.md`, CLI arg/help surface, artifact outputs | The agent contract was stale; schemas/describe/JSON discipline are missing. |
 | Verification/security/ops | complete | security lane; `curl_json`; replay scenario list | README timeout/retry guarantee is false; side-effect coverage is incomplete. |
@@ -21,7 +21,7 @@ adapter and one hosted packaging path.
 | Research | skipped | No external facts needed for this groom | The key design gaps are visible in the live repo. |
 
 ## World-Class Target
-Landfall should be a small, boring release-intelligence engine that any CI
+Landmark should be a small, boring release-intelligence engine that any CI
 system or agent can call:
 
 - Input: git history, tags, release metadata, product manifest, model policy.
@@ -33,7 +33,7 @@ system or agent can call:
 - Packaging: GitHub Action, shell/CLI, CI snippets, and eventually an agent API.
 
 In that shape, GitHub remains an excellent first adapter, but not the place
-where Landfall's domain logic lives.
+where Landmark's domain logic lives.
 
 ## Gap Map
 
@@ -53,13 +53,13 @@ where Landfall's domain logic lives.
    The first provider matrix should be GitHub + local filesystem/git.
 
 2. **Promote local mode to a product, not a fallback.** A shell or arbitrary CI
-   pipeline should be able to run Landfall with only a checkout and optional LLM
+   pipeline should be able to run Landmark with only a checkout and optional LLM
    key, producing technical changelog, public notes, artifacts, RSS, and JSON
    status without touching a forge.
 
 3. **Make agents first-class callers.** Publish schemas, a `describe --json`
    surface, deterministic JSON output modes, failure taxonomy, and sample
-   evidence packets so agents can integrate Landfall without reading Rust.
+   evidence packets so agents can integrate Landmark without reading Rust.
 
 4. **Make the verification loop honest.** Back every documented runtime
    guarantee with replay scenarios, especially external timeouts/retries,
@@ -116,7 +116,7 @@ Blocked/unknown:
   first regardless.
 
 ## Best Next Pickup
-`backlog.d/013-make-landfall-pipeline-neutral.md` outranks the rest. It changes
+`backlog.d/013-make-landmark-pipeline-neutral.md` outranks the rest. It changes
 the shape of every future feature: GitHub becomes an adapter, local execution
 becomes a supported product path, and the GitHub Action can stay as a thin,
 excellent default rather than a lock-in point.

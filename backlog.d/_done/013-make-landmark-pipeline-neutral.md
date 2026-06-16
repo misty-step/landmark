@@ -1,9 +1,9 @@
-# Make Landfall pipeline-neutral with GitHub as one adapter
+# Make Landmark pipeline-neutral with GitHub as one adapter
 
 Priority: P0 · Status: done · Estimate: XL
 
 ## Goal
-Let any release trigger or CI pipeline run Landfall through provider-neutral
+Let any release trigger or CI pipeline run Landmark through provider-neutral
 CLI primitives while preserving the GitHub Action as a thin, excellent wrapper.
 
 ## Oracle
@@ -19,7 +19,7 @@ CLI primitives while preserving the GitHub Action as a thin, excellent wrapper.
 3. Extract GitHub-specific REST calls behind a narrow provider adapter instead of direct command-local `curl_json` use.
 4. Promote git-range changelog generation from `backfill` into the normal release source path.
 5. Split publication sinks into local artifacts, feed, webhook/Slack, and provider release-body mutation.
-6. Add `landfall run` or equivalent orchestration command that can be called from shell, GitHub Actions, GitLab CI, Forgejo, or an agent.
+6. Add `landmark run` or equivalent orchestration command that can be called from shell, GitHub Actions, GitLab CI, Forgejo, or an agent.
 7. Update the GitHub Action to invoke the provider-neutral command with `provider=github`.
 
 ## Notes
@@ -29,8 +29,8 @@ CLI primitives while preserving the GitHub Action as a thin, excellent wrapper.
 - Why: the user wants custom triggers and pipelines; the architecture should make that normal rather than a workaround.
 
 ## Delivery
-- Added `landfall run` with `provider=local` and `provider=github`, local git-range version decisions, technical changelog generation, public notes/artifacts, RSS/feed output, evidence JSON, optional notes-file input, and explicit GitHub publication.
+- Added `landmark run` with `provider=local` and `provider=github`, local git-range version decisions, technical changelog generation, public notes/artifacts, RSS/feed output, evidence JSON, optional notes-file input, and explicit GitHub publication.
 - Routed GitHub release lookup/mutation, PR listing, failure issue lifecycle, and fleet metadata through `GitHubProvider`.
-- Updated the composite action so release-body mutation, release artifact writes, and RSS feed writes use `landfall run`; the static action replay rejects drift back to `update-release`, `write-artifacts`, or `update-feed` for those paths.
-- Verification: `cargo run --locked -- replay-action --scenario action_static_contract --scenario local_provider_run --scenario github_provider_run --scenario provider_run_parity --evidence-dir .landfall/replay-013-parity`; `bin/gate`.
-- Evidence packet: `.landfall/replay/replay-result.json` includes passing `provider_run_parity` with `provider=local` and `provider=github` for `v1.1.0`.
+- Updated the composite action so release-body mutation, release artifact writes, and RSS feed writes use `landmark run`; the static action replay rejects drift back to `update-release`, `write-artifacts`, or `update-feed` for those paths.
+- Verification: `cargo run --locked -- replay-action --scenario action_static_contract --scenario local_provider_run --scenario github_provider_run --scenario provider_run_parity --evidence-dir .landmark/replay-013-parity`; `bin/gate`.
+- Evidence packet: `.landmark/replay/replay-result.json` includes passing `provider_run_parity` with `provider=local` and `provider=github` for `v1.1.0`.

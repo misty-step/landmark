@@ -1,9 +1,9 @@
-# Migrate the Landfall runtime to Rust
+# Migrate the Landmark runtime to Rust
 
 Priority: P1 · Status: done · Estimate: XL
 
 ## Goal
-Move Landfall's owned runtime from Python and bash orchestration to a tested Rust binary while preserving the public GitHub Action contract and the semantic-release engine boundary.
+Move Landmark's owned runtime from Python and bash orchestration to a tested Rust binary while preserving the public GitHub Action contract and the semantic-release engine boundary.
 
 ## Oracle
 - [x] `bin/gate` exits 0 and runs Rust fmt, clippy, tests, action metadata validation, contract validation, and the consumer replay harness.
@@ -14,9 +14,9 @@ Move Landfall's owned runtime from Python and bash orchestration to a tested Rus
 - [x] `npm ci --no-fund --no-audit` still exits 0 because semantic-release remains the external release engine for full mode.
 
 ## PRD Summary
-- User: maintainers shipping Landfall and consumer-repo developers who need predictable release automation.
-- Problem: Landfall's owned behavior is split across an 815-line composite action, 17 Python scripts, Python package bootstrap, repeated shell snippets, and duplicated markdown/GitHub helpers.
-- Goal: one Rust-owned runtime carries Landfall policy, HTTP, rendering, synthesis, diagnostics, and artifact behavior behind the existing action inputs and outputs.
+- User: maintainers shipping Landmark and consumer-repo developers who need predictable release automation.
+- Problem: Landmark's owned behavior is split across an 815-line composite action, 17 Python scripts, Python package bootstrap, repeated shell snippets, and duplicated markdown/GitHub helpers.
+- Goal: one Rust-owned runtime carries Landmark policy, HTTP, rendering, synthesis, diagnostics, and artifact behavior behind the existing action inputs and outputs.
 - Why now: the post-clearance groom found release-integrity, live-replay, and typed-artifact work that all become cheaper if the runtime boundary is made deep before more behavior accretes.
 - UX enabled: consumers get the same action contract with fewer runtime dependencies, bounded failure semantics, and clearer evidence packets when releases partially fail.
 - Deliverable type: migration plus harness primitive.
@@ -35,7 +35,7 @@ Move Landfall's owned runtime from Python and bash orchestration to a tested Rus
 ## Context Packet: Rust Runtime Migration
 
 ## Constraints
-- Rust owns durable Landfall behavior; Node remains only because semantic-release is a deliberate external engine.
+- Rust owns durable Landmark behavior; Node remains only because semantic-release is a deliberate external engine.
 - GitHub Action consumers must not need Python or pip after the migration.
 - Secrets must stay in environment variables or process arguments with existing redaction behavior; no new log leakage.
 - `synthesis-required`, `synthesis-strict`, `synthesis-quality`, failure-issue handling, floating tags, RSS commits, and webhook/Slack behavior must keep compatibility until separately deprecated.
@@ -56,14 +56,14 @@ Move Landfall's owned runtime from Python and bash orchestration to a tested Rus
 - Keep Python and only harden it: lowest short-term risk, but leaves pip bootstrap, duplicated runtime helpers, and an exception to the repo's Rust default as the permanent architecture. Verdict: rejected as end state; acceptable only for emergency fixes before migration lands.
 - Big-bang Rust rewrite including semantic-release replacement: satisfies the phrase "full Rust" most literally, but violates the project decision to wrap semantic-release and would rebuild version analysis, changelog generation, GitHub Release creation, and ecosystem edge cases without evidence. Verdict: rejected.
 - TypeScript/Node action rewrite: removes Python but deepens the non-Rust surface and ties synthesis-only mode to Node. Verdict: rejected.
-- Rust-owned Landfall binary with semantic-release retained as a narrow subprocess boundary: removes Python, centralizes policy and artifact code, preserves proven release mechanics, and lets the action wrapper become shallow. Verdict: recommended.
+- Rust-owned Landmark binary with semantic-release retained as a narrow subprocess boundary: removes Python, centralizes policy and artifact code, preserves proven release mechanics, and lets the action wrapper become shallow. Verdict: recommended.
 
 ## Design
-- Add a Cargo workspace with `crates/landfall-core` for pure behavior and `crates/landfall-cli` for the action-facing binary.
+- Add a Cargo workspace with `crates/landmark-core` for pure behavior and `crates/landmark-cli` for the action-facing binary.
 - Model the release as typed state: resolved release, technical source, synthesized notes, quality, update result, distribution results, and final policy verdict.
 - Implement Rust modules in this order: shared logging/retry/GitHub client, note model/renderers, prompt/changelog selection, synthesis HTTP/fallback/validation, release body update, artifact/feed writers, notifications, failure issue lifecycle, preflight/floating-tag/version helpers, backfill or deletion.
-- Keep `action.yml` as a thin composite wrapper: setup Node only in full mode, invoke semantic-release only in full mode, then call the Rust binary for Landfall-owned behavior.
-- Final consumer distribution uses a checked-in Linux release binary under `dist/landfall` plus a CI check that rebuilds and verifies its checksum. Source-built `cargo run` is allowed for local development and interim dogfood, but not the final consumer path.
+- Keep `action.yml` as a thin composite wrapper: setup Node only in full mode, invoke semantic-release only in full mode, then call the Rust binary for Landmark-owned behavior.
+- Final consumer distribution uses a checked-in Linux release binary under `dist/landmark` plus a CI check that rebuilds and verifies its checksum. Source-built `cargo run` is allowed for local development and interim dogfood, but not the final consumer path.
 - Add `bin/gate` as the one-command local loop. It must create/use a local tool environment without depending on global Python packages.
 - The replay harness from backlog item 003 is the migration gate. If it does not exist yet, the first migration child builds the minimum harness before porting behavior.
 - ADR required: yes. The ADR records the selected runtime boundary, semantic-release retention, binary distribution decision, and rollback strategy. Escalate if implementation requires replacing semantic-release or changing runner support.
@@ -87,7 +87,7 @@ Commands that must all exit 0 after the final milestone:
 - `cargo fmt --check`
 - `npm ci --no-fund --no-audit`
 - `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback`
-- `git diff --exit-code -- dist/landfall dist/landfall.sha256`
+- `git diff --exit-code -- dist/landmark dist/landmark.sha256`
 - `! rg -n "setup-python|python -m pip|\\$\\{GITHUB_ACTION_PATH\\}/scripts/.*\\.py|scripts/.*\\.py" action.yml .github/workflows README.md`
 - `test -z "$(find scripts tests -name '*.py' -print)"`
 
@@ -97,7 +97,7 @@ Evidence artifacts:
 - ADR documenting the Rust runtime boundary and semantic-release retention.
 
 ## Premise Source
-- `sha256:ff21539be7ff9a6bb685593d50ba1d7bee771158804a6567ed69f439e102e859 AGENTS.md` — Rust-by-default and Landfall action doctrine.
+- `sha256:ff21539be7ff9a6bb685593d50ba1d7bee771158804a6567ed69f439e102e859 AGENTS.md` — Rust-by-default and Landmark action doctrine.
 - `sha256:ac6869f0908513a0ae971b6bed63b27d40545ca064d24ce4d4324d0affc7c63e backlog.d/002-harden-release-integrity-policy.md` — release integrity and shell/Python hardening gaps.
 - `sha256:9176fa24759e2f9f5c2e60b31b2b48f1c2730af4f8b74f299aaf4bbc8b44cbfb backlog.d/003-build-a-live-consumer-replay-harness.md` — live replay harness requirement.
 - `sha256:7a8a9bb83860299d9c4070cdfb7ebde0cfec098b96ac52f4f1ab2de0375bbda7 backlog.d/005-turn-release-notes-into-a-typed-artifact-plane.md` — typed artifact plane requirement.
@@ -113,12 +113,12 @@ Evidence artifacts:
 - Commands run: `rg --files`, `wc -l scripts/*.py tests/*.py action.yml README.md`, `shasum -a 256 ...`, `git status --short --branch --untracked-files=all`.
 
 ## Alignment Questions
-- none; assumptions accepted. The only contested interpretation is semantic-release replacement, and current repo doctrine already says Landfall wraps semantic-release rather than reinventing it.
+- none; assumptions accepted. The only contested interpretation is semantic-release replacement, and current repo doctrine already says Landmark wraps semantic-release rather than reinventing it.
 
 ## Risks + Rollout
 - Risk: Rust port subtly changes release-note quality or markdown rendering. Mitigation: parity fixtures and replay packets before deleting Python.
 - Risk: checked-in binary distribution becomes stale. Mitigation: checksum verification in `bin/gate` and CI; release commit must update binary and checksum together.
-- Risk: action runtime becomes slower if it source-builds Rust. Mitigation: source-build only during interim dogfood; final consumer path uses `dist/landfall`.
+- Risk: action runtime becomes slower if it source-builds Rust. Mitigation: source-build only during interim dogfood; final consumer path uses `dist/landmark`.
 - Risk: semantic-release subprocess errors are harder to diagnose through a Rust wrapper. Mitigation: keep semantic-release invocation explicit in `action.yml` until replay harness proves wrapper diagnostics.
 - Rollback: keep Python scripts until the final removal milestone; if a Rust milestone fails, action can continue invoking the legacy Python path while parity gaps are fixed.
 
@@ -129,9 +129,9 @@ Evidence artifacts:
 - Stop if replay fixtures show behavior drift that is not an explicitly approved contract change.
 
 ## Delivery
-- Added the Rust workspace and `landfall` CLI in `crates/landfall`, with subcommands for synthesis, release-body mutation, policy, artifacts, feeds, notifications, failure issues, metadata checks, action-contract checks, floating tags, and replay.
+- Added the Rust workspace and `landmark` CLI in `crates/landmark`, with subcommands for synthesis, release-body mutation, policy, artifacts, feeds, notifications, failure issues, metadata checks, action-contract checks, floating tags, and replay.
 - Replaced Python setup and script invocation in `action.yml` and CI with the Rust runtime while retaining Node only for `semantic-release`.
-- Added `dist/landfall` as a static x86-64 Linux binary, `dist/landfall.sha256`, `.cargo/config.toml` for musl `rust-lld` builds, `bin/replay-action`, and Rust-owned `bin/gate`.
+- Added `dist/landmark` as a static x86-64 Linux binary, `dist/landmark.sha256`, `.cargo/config.toml` for musl `rust-lld` builds, `bin/replay-action`, and Rust-owned `bin/gate`.
 - Deleted the Python scripts, pytest suite, and `pyproject.toml`.
 - Added ADR `docs/adr/0001-rust-runtime-boundary.md`.
-- Evidence: `bin/gate`; `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback --evidence-dir .landfall/replay-ticket-006`; `file dist/landfall`; `shasum -a 256 -c dist/landfall.sha256`; no Python script references in action/CI/README; no `scripts` or `tests` Python files remain.
+- Evidence: `bin/gate`; `bin/replay-action --scenario synthesis-only-success --scenario full-semantic-release --scenario degraded-required-fails --scenario release-body-fallback --evidence-dir .landmark/replay-ticket-006`; `file dist/landmark`; `shasum -a 256 -c dist/landmark.sha256`; no Python script references in action/CI/README; no `scripts` or `tests` Python files remain.

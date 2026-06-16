@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://landfall.dev/schemas/run-evidence.v1.schema.json",
+  "$id": "https://landmark.dev/schemas/run-evidence.v1.schema.json",
   "title": "Landmark run evidence",
   "type": "object",
   "additionalProperties": false,
-  "x-landfall-artifact": "landfall run evidence packet",
+  "x-landmark-artifact": "landmark run evidence packet",
   "required": ["provider", "generated_at", "repo_root", "repository", "release_tag", "version", "previous_tag", "source", "technical_changelog_sha256", "notes_sha256", "version_decision", "artifacts", "publication"],
   "properties": {
     "provider": { "type": "string", "enum": ["local", "github"] },

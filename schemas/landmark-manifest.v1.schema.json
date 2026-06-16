@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://landfall.dev/schemas/landfall-manifest.v1.schema.json",
+  "$id": "https://landmark.dev/schemas/landmark-manifest.v1.schema.json",
   "title": "Landmark manifest",
   "type": "object",
   "additionalProperties": false,
-  "x-landfall-artifact": ".landfall.yml",
+  "x-landmark-artifact": ".landmark.yml",
   "properties": {
     "product": {
       "type": "object",

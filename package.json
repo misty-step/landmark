@@ -13,7 +13,7 @@
     "node": ">=22"
   },
   "license": "MIT",
-  "name": "landfall",
+  "name": "landmark",
   "private": true,
   "version": "1.23.1"
 }

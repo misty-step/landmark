@@ -1,6 +1,6 @@
-# Landfall Dogfood Finding Taxonomy
+# Landmark Dogfood Finding Taxonomy
 
-Use this reference while writing `.landfall/dogfood/<run>/report.md`.
+Use this reference while writing `.landmark/dogfood/<run>/report.md`.
 
 ## Severity
 
@@ -11,7 +11,7 @@ Use this reference while writing `.landfall/dogfood/<run>/report.md`.
 
 ## Categories
 
-- `classification`: wrong active/app/release-tool/existing-Landfall detection.
+- `classification`: wrong active/app/release-tool/existing-Landmark detection.
 - `secret-readiness`: missing, unavailable, or confusing secret metadata.
 - `generated-diff`: wrong workflow, duplicate workflow, weak checkout, generic manifest, or non-repo-fit output.
 - `operator-ux`: unclear help, surprising defaults, noisy paths, missing examples, or weak summary.

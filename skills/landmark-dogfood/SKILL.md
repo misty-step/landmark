@@ -1,35 +1,35 @@
 ---
-name: landfall-dogfood
-description: Dogfood Landfall fleet adoption and release-note automation across GitHub repositories. Use when asked to integrate Landfall into personal or organization repos, run fleet scan/plan/open-prs, evaluate adoption friction, capture release-pipeline evidence, or turn dogfood findings into Landfall fixes/backlog.
+name: landmark-dogfood
+description: Dogfood Landmark fleet adoption and release-note automation across GitHub repositories. Use when asked to integrate Landmark into personal or organization repos, run fleet scan/plan/open-prs, evaluate adoption friction, capture release-pipeline evidence, or turn dogfood findings into Landmark fixes/backlog.
 ---
 
-# Landfall Dogfood
+# Landmark Dogfood
 
-Use Landfall against real repositories before claiming adoption quality. The output is not just a plan: it is an evidence packet, concrete downstream PRs where safe, and upstream fixes or backlog where the dogfood loop exposes product gaps.
+Use Landmark against real repositories before claiming adoption quality. The output is not just a plan: it is an evidence packet, concrete downstream PRs where safe, and upstream fixes or backlog where the dogfood loop exposes product gaps.
 
 ## Workflow
 
-1. Start from the local Landfall checkout and read `AGENTS.md`.
-2. Create an evidence directory under `.landfall/dogfood/<date-or-run>/`.
-3. Build/run the Rust binary locally; on macOS use `cargo run --locked -- ...` or `target/debug/landfall`, not `dist/landfall` because the checked-in action binary is Linux-only.
+1. Start from the local Landmark checkout and read `AGENTS.md`.
+2. Create an evidence directory under `.landmark/dogfood/<date-or-run>/`.
+3. Build/run the Rust binary locally; on macOS use `cargo run --locked -- ...` or `target/debug/landmark`, not `dist/landmark` because the checked-in action binary is Linux-only.
 4. Run a read-only fleet scan first:
 
 ```bash
-target/debug/landfall fleet scan \
+target/debug/landmark fleet scan \
   --owner phrazzld \
   --owner misty-step \
   --active-only \
-  --output .landfall/dogfood/<run>/active-scan.json
+  --output .landmark/dogfood/<run>/active-scan.json
 ```
 
 5. Run `--deep-checks` before opening or recommending PRs; default scans intentionally mark secret metadata unavailable.
 6. Generate `fleet plan`, then `fleet open-prs --dry-run`; inspect the rendered files before mutating downstream repos.
 7. Use the plan's `repository_kind`, `release_surface`, `integration_mode`, and `integration_rationale` fields as the first-pass rollout map. Separate applications, libraries, infrastructure, archived repos, experiments, non-release repos, no-release-tool repos, and already-adopted repos. Do not treat every active repo as an app.
-8. For each candidate, inspect existing workflows, releases, tags, `AGENTS.md`, and release notes. Existing Landfall workflows should become manifest/upgrade work, not duplicate workflow installation.
+8. For each candidate, inspect existing workflows, releases, tags, `AGENTS.md`, and release notes. Existing Landmark workflows should become manifest/upgrade work, not duplicate workflow installation.
 9. Apply downstream integration only when the generated diff is repo-fit and required secrets are present or intentionally provisioned. Use `fleet open-prs --confirm-remote --max-prs 1` only after the dry-run receipt is inspected; never provision secrets for `local`, `generic-ci`, `manifest-only`, `backfill-first`, or skipped non-release modes just to make a GitHub plan look ready.
 10. Roll out one repository at a time. After a downstream PR merges, monitor the release run or local/generic CI artifact path named in the receipt before continuing the fleet.
 11. Record friction immediately. Use [references/finding-taxonomy.md](references/finding-taxonomy.md) for categories and severity.
-12. Fix Landfall itself when the product made the dogfood run unsafe, confusing, or wrong. Add replay coverage for each fixed failure mode.
+12. Fix Landmark itself when the product made the dogfood run unsafe, confusing, or wrong. Add replay coverage for each fixed failure mode.
 
 ## Evidence
 
