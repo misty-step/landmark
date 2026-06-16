@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Landmark 020 Backfill-First Fleet Adoption Plan</title>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #151a1d; background: #f6f7f2; }
+    main { max-width: 1180px; margin: 0 auto; padding: 40px 28px 56px; }
+    h1 { margin: 0 0 10px; font-size: 34px; letter-spacing: 0; }
+    h2 { margin: 30px 0 10px; font-size: 20px; letter-spacing: 0; }
+    p, li { line-height: 1.5; }
+    code { background: #edf1ee; border-radius: 4px; padding: 2px 5px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .panel { border: 1px solid #cbd6d0; background: #fff; border-radius: 8px; padding: 16px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #cbd6d0; }
+    th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid #e0e6e2; }
+    th { background: #edf2ee; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Ticket 020: Backfill-First Fleet Adoption</h1>
+  <p>Make active application and library repositories with packages, no release tags, and no release automation eligible for a safe manifest/local-artifacts adoption PR before any release-mutating workflow is proposed.</p>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Boundary</h2>
+      <p>Keep the change in the Rust fleet planner, dry-run PR renderer, fleet schema, README, and replay fixtures. Do not add Node, Python, or a new release orchestration layer.</p>
+    </section>
+    <section class="panel">
+      <h2>Design</h2>
+      <p>Promote <code>backfill-first</code> from blocked to ready only for no-release application/library repos with package topology. The PR writes <code>.landmark.yml</code> and receipts, never a GitHub release workflow.</p>
+    </section>
+    <section class="panel">
+      <h2>Proof</h2>
+      <p><code>fleet_adoption_planner</code> replay must cover Rust, TypeScript, Go, Python, and multi-package no-release fixtures and prove skipped non-release repos remain skipped.</p>
+    </section>
+  </div>
+
+  <h2>Acceptance</h2>
+  <table>
+    <thead><tr><th>Oracle</th><th>Implementation Shape</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>No-release repos are distinguished from non-release repos.</td><td>Planner classifies package-bearing application/library no-release repos as ready <code>backfill-first</code>; docs/config-only repos stay skipped.</td><td>Focused Rust test plus replay mode/status map.</td></tr>
+      <tr><td><code>fleet open-prs</code> renders a safe adoption PR.</td><td>Dry-run output writes <code>.landmark.yml</code>, <code>diff.md</code>, and receipts without <code>.github/workflows/landmark-release.yml</code>.</td><td>Replay checks rendered files for backfill fixtures.</td></tr>
+      <tr><td>The plan gives first-release operating guidance.</td><td>Add structured initial version/tag recommendation, artifact paths, rollback, and historical preview command to fleet plan JSON/Markdown and PR diff.</td><td>Schema validation through <code>bin/gate</code> and assertions on plan fields.</td></tr>
+      <tr><td>The rollout report explains blockers.</td><td>Plan Markdown lists blocked/skipped reasons while ready backfill repos carry operator approval notes.</td><td>Replay reads the generated plan README.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Quality System</h2>
+  <ul>
+    <li>Standards: Rust CLI remains the product core; the action wrapper stays out of this slice.</li>
+    <li>Proof methods: docs first, failing tests, code, <code>cargo fmt</code>, focused tests, <code>bin/replay-action --scenario fleet_adoption_planner</code>, <code>bin/gate</code>, hosted CI.</li>
+    <li>Critic topology: after local green, give a fresh critic only the diff plus ticket oracle and resolve blockers before PR closeout.</li>
+    <li>Stop rules: stop if the lane would add release mutation for no-release repos, lower gates, or require GitHub secrets for local artifact adoption.</li>
+  </ul>
+</main>
+</body>
+</html>

@@ -2218,6 +2218,16 @@ struct FleetRepositoryPlan {
     unavailable_secret_metadata: Vec<String>,
     migration_notes: Vec<String>,
     #[serde(default)]
+    initial_version_recommendation: String,
+    #[serde(default)]
+    initial_tag_recommendation: String,
+    #[serde(default)]
+    artifact_paths: Vec<String>,
+    #[serde(default)]
+    historical_preview_command: String,
+    #[serde(default)]
+    rollback_guidance: String,
+    #[serde(default)]
     workflow_patches: Vec<FleetWorkflowPatch>,
     manifest: LandmarkManifest,
 }
@@ -2478,15 +2488,15 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         files.extend(workflow_files.iter().map(|(path, _)| path.clone()));
         files.push("diff.md".into());
         let branch = format!("landmark/adopt-{}", repo.repository.replace('/', "-"));
-        let title: String = if repo.recommended_mode == "manifest-only" {
-            "chore(release): configure Landmark manifest".into()
-        } else {
-            "chore(release): adopt Landmark".into()
+        let title: String = match repo.recommended_mode.as_str() {
+            "manifest-only" => "chore(release): configure Landmark manifest".into(),
+            "backfill-first" => "chore(release): configure Landmark backfill artifacts".into(),
+            _ => "chore(release): adopt Landmark".into(),
         };
-        let commit_message = if repo.recommended_mode == "manifest-only" {
-            "chore(release): configure Landmark manifest".into()
-        } else {
-            format!("chore(release): adopt Landmark {}", repo.integration_mode)
+        let commit_message = match repo.recommended_mode.as_str() {
+            "manifest-only" => "chore(release): configure Landmark manifest".into(),
+            "backfill-first" => "chore(release): configure Landmark backfill-first".into(),
+            _ => format!("chore(release): adopt Landmark {}", repo.integration_mode),
         };
         if !args.dry_run {
             fs::write(
@@ -2508,10 +2518,11 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
             } else {
                 "confirmed-operator-apply-required; APPLY.md contains the branch, commit, push, PR, rollback, and monitor commands".into()
             },
-            rollback: format!(
-                "if applied, close the PR and delete branch {}",
-                branch
-            ),
+            rollback: if repo.rollback_guidance.is_empty() {
+                format!("if applied, close the PR and delete branch {}", branch)
+            } else {
+                repo.rollback_guidance.clone()
+            },
             monitor_status: "pending: merge one repository, monitor downstream release, then continue rollout".into(),
             evidence_dir: repo_dir.display().to_string(),
         });
@@ -3133,6 +3144,63 @@ fn fleet_required_secret_names(integration_mode: &str) -> Vec<String> {
     }
 }
 
+fn fleet_initial_version(recommended_mode: &str, status: &str) -> String {
+    if recommended_mode == "backfill-first" && status == "ready" {
+        "0.1.0".into()
+    } else {
+        String::new()
+    }
+}
+
+fn fleet_initial_tag(repo: &FleetRepository, version: &str) -> String {
+    if version.is_empty() {
+        return String::new();
+    }
+    match repo.tag_format.as_str() {
+        "{version}" => version.into(),
+        "package@{version}" => format!("{}@{}", repo.name, version),
+        "custom" => format!("{version} (custom tag format requires operator approval)"),
+        _ => format!("v{version}"),
+    }
+}
+
+fn fleet_manifest_artifact_paths(manifest: &LandmarkManifest) -> Vec<String> {
+    let mut paths = Vec::new();
+    for path in [
+        manifest.artifacts.markdown.as_deref(),
+        manifest.artifacts.plaintext.as_deref(),
+        manifest.artifacts.html.as_deref(),
+        manifest.artifacts.json.as_deref(),
+        manifest.artifacts.rss.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !path.trim().is_empty() {
+            paths.push(path.to_string());
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn fleet_historical_preview_command(tag: &str) -> String {
+    if tag.is_empty() {
+        String::new()
+    } else {
+        format!("landmark backfill --repo-root . --since {tag} --mode artifacts-only --dry-run")
+    }
+}
+
+fn fleet_rollback_guidance(recommended_mode: &str) -> String {
+    if recommended_mode == "backfill-first" {
+        "close the PR and delete the adoption branch; remove .landmark.yml and any previewed local artifact files, and remove the operator-approved initial tag only if it was created before any release was published".into()
+    } else {
+        String::new()
+    }
+}
+
 fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     let mut risk_flags = Vec::new();
     let mut migration_notes = Vec::new();
@@ -3242,18 +3310,20 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
                 "existing semantic-release workflow requires explicit operator choice",
                 rank_base,
             ),
-            "backfill-first" => (
-                "blocked",
-                "backfill-first",
-                "no release tool or release tags detected",
-                rank_base,
-            ),
+            "backfill-first" => ("ready", "backfill-first", "", rank_base),
             _ => ("blocked", "blocked", "unknown release tooling", 10u64),
         }
     };
-    if repo.release_tool == "no-release-tool" {
+    if recommended_mode == "backfill-first" {
+        migration_notes.push(
+            "Create the operator-approved initial tag only after reviewing version policy; preview artifacts before enabling any release-body mutation".into(),
+        );
+        migration_notes.push(
+            "Backfill-first adoption is manifest-only and local-artifacts first; do not add a GitHub release workflow in this PR".into(),
+        );
+    } else if repo.release_tool == "no-release-tool" {
         migration_notes
-            .push("Choose release semantics before installing Landmark automation".into());
+            .push("Choose release semantics before installing release automation".into());
     } else if !repo.existing_landmark && repo.release_tool != "unknown" {
         migration_notes.push(
             "Preview historical migration with `landmark backfill --repo-root . --since <oldest-managed-tag> --dry-run`; write artifacts before considering release-body updates".into(),
@@ -3269,6 +3339,15 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     integration_rationale.push(format!("repository kind: {repository_kind}"));
     integration_rationale.push(format!("release surface: {release_surface}"));
     let manifest = fleet_manifest(repo, recommended_mode);
+    let initial_version_recommendation = fleet_initial_version(recommended_mode, status);
+    let initial_tag_recommendation = fleet_initial_tag(repo, &initial_version_recommendation);
+    let artifact_paths = if recommended_mode == "backfill-first" && status == "ready" {
+        fleet_manifest_artifact_paths(&manifest)
+    } else {
+        Vec::new()
+    };
+    let historical_preview_command = fleet_historical_preview_command(&initial_tag_recommendation);
+    let rollback_guidance = fleet_rollback_guidance(recommended_mode);
     let workflow_patches = if status == "ready" {
         fleet_workflow_patches(repo, &manifest, recommended_mode, &workflow)
     } else {
@@ -3291,6 +3370,11 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         missing_secrets,
         unavailable_secret_metadata,
         migration_notes,
+        initial_version_recommendation,
+        initial_tag_recommendation,
+        artifact_paths,
+        historical_preview_command,
+        rollback_guidance,
         workflow_patches,
         manifest,
     }
@@ -3554,6 +3638,53 @@ fn render_fleet_plan_markdown(plan: &FleetPlan) -> String {
                     .join(", ")
             ));
         }
+        if !repo.initial_version_recommendation.is_empty() {
+            out.push_str(&format!(
+                "- Initial version recommendation: `{}`\n",
+                repo.initial_version_recommendation
+            ));
+        }
+        if !repo.initial_tag_recommendation.is_empty() {
+            out.push_str(&format!(
+                "- Initial tag recommendation: `{}`\n",
+                repo.initial_tag_recommendation
+            ));
+        }
+        if !repo.artifact_paths.is_empty() {
+            out.push_str(&format!(
+                "- Artifact paths: {}\n",
+                repo.artifact_paths.join(", ")
+            ));
+        }
+        if !repo.historical_preview_command.is_empty() {
+            out.push_str(&format!(
+                "- Historical preview command: `{}`\n",
+                repo.historical_preview_command
+            ));
+        }
+        if !repo.rollback_guidance.is_empty() {
+            out.push_str(&format!("- Rollback: {}\n", repo.rollback_guidance));
+        }
+        out.push('\n');
+    }
+    let blocked_or_skipped = plan
+        .repositories
+        .iter()
+        .filter(|repo| matches!(repo.status.as_str(), "blocked" | "skipped"))
+        .collect::<Vec<_>>();
+    if !blocked_or_skipped.is_empty() {
+        out.push_str("## Blocked And Skipped Repositories\n\n");
+        for repo in blocked_or_skipped {
+            let reason = if repo.skip_reason.is_empty() {
+                repo.status.as_str()
+            } else {
+                repo.skip_reason.as_str()
+            };
+            out.push_str(&format!(
+                "- {}: {} ({})\n",
+                repo.repository, reason, repo.integration_mode
+            ));
+        }
         out.push('\n');
     }
     out
@@ -3648,9 +3779,31 @@ fn render_fleet_apply_markdown(
     ));
     out.push_str("gh pr checks --watch\n");
     out.push_str("```\n\n");
-    out.push_str(
-        "Rollback: close the PR and delete the remote branch before continuing the fleet.\n",
-    );
+    if !repo.initial_version_recommendation.is_empty() {
+        out.push_str(&format!(
+            "Initial version recommendation: `{}`\n\n",
+            repo.initial_version_recommendation
+        ));
+    }
+    if !repo.initial_tag_recommendation.is_empty() {
+        out.push_str(&format!(
+            "Initial tag recommendation: `{}`\n\n",
+            repo.initial_tag_recommendation
+        ));
+    }
+    if !repo.historical_preview_command.is_empty() {
+        out.push_str(&format!(
+            "Preview command: `{}`\n\n",
+            repo.historical_preview_command
+        ));
+    }
+    if repo.rollback_guidance.is_empty() {
+        out.push_str(
+            "Rollback: close the PR and delete the remote branch before continuing the fleet.\n",
+        );
+    } else {
+        out.push_str(&format!("Rollback: {}\n", repo.rollback_guidance));
+    }
     out
 }
 
@@ -3671,6 +3824,42 @@ fn render_fleet_pr_diff(
     );
     for (path, workflow) in workflow_files {
         out.push_str(&format!("### {}\n\n```yaml\n{}\n```\n\n", path, workflow));
+    }
+    if !repo.initial_version_recommendation.is_empty()
+        || !repo.initial_tag_recommendation.is_empty()
+        || !repo.artifact_paths.is_empty()
+        || !repo.historical_preview_command.is_empty()
+        || !repo.rollback_guidance.is_empty()
+    {
+        out.push_str("## Operator Guidance\n\n");
+        if !repo.initial_version_recommendation.is_empty() {
+            out.push_str(&format!(
+                "- Initial version recommendation: `{}`\n",
+                repo.initial_version_recommendation
+            ));
+        }
+        if !repo.initial_tag_recommendation.is_empty() {
+            out.push_str(&format!(
+                "- Initial tag recommendation: `{}`\n",
+                repo.initial_tag_recommendation
+            ));
+        }
+        if !repo.artifact_paths.is_empty() {
+            out.push_str(&format!(
+                "- Artifact paths: {}\n",
+                repo.artifact_paths.join(", ")
+            ));
+        }
+        if !repo.historical_preview_command.is_empty() {
+            out.push_str(&format!(
+                "- Historical preview command: `{}`\n",
+                repo.historical_preview_command
+            ));
+        }
+        if !repo.rollback_guidance.is_empty() {
+            out.push_str(&format!("- Rollback: {}\n", repo.rollback_guidance));
+        }
+        out.push('\n');
     }
     out.push_str(&format!(
         "## Notes\n\n{}\n",
@@ -11543,14 +11732,50 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
             ),
-            fleet_fixture_repo(
-                "phrazzld/no-release-app",
+            fleet_fixture_repo_with_packages(
+                "phrazzld/no-release-ts-app",
                 "no-release-tool",
                 ("application", "none"),
                 (false, false),
                 "unprotected-or-unavailable",
-                &[],
+                &["package.json"],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+            ),
+            fleet_fixture_repo_with_packages(
+                "misty-step/no-release-rust-crate",
+                "no-release-tool",
+                ("library", "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["Cargo.toml"],
+                &[],
+            ),
+            fleet_fixture_repo_with_packages(
+                "phrazzld/no-release-go-app",
+                "no-release-tool",
+                ("application", "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["go.mod"],
+                &[],
+            ),
+            fleet_fixture_repo_with_packages(
+                "misty-step/no-release-python-lib",
+                "no-release-tool",
+                ("library", "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["pyproject.toml"],
+                &[],
+            ),
+            fleet_fixture_repo_with_packages(
+                "phrazzld/no-release-multipackage",
+                "no-release-tool",
+                ("library", "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &["Cargo.toml", "package.json", "packages/api/package.json"],
+                &[],
             ),
             fleet_fixture_repo(
                 "misty-step/archived-app",
@@ -11727,7 +11952,11 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
         ("misty-step/release-please-app", "github-synthesis-only"),
         ("misty-step/changesets-app", "github-synthesis-only"),
         ("phrazzld/manual-app", "github-synthesis-only"),
-        ("phrazzld/no-release-app", "backfill-first"),
+        ("phrazzld/no-release-ts-app", "backfill-first"),
+        ("misty-step/no-release-rust-crate", "backfill-first"),
+        ("phrazzld/no-release-go-app", "backfill-first"),
+        ("misty-step/no-release-python-lib", "backfill-first"),
+        ("phrazzld/no-release-multipackage", "backfill-first"),
         ("misty-step/terraform-infra", "generic-ci"),
         ("phrazzld/search-experiment", "local"),
         ("misty-step/docs-site", "skipped"),
@@ -11740,12 +11969,22 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             return Err(format!("{repo} expected mode {expected}").into());
         }
     }
-    if statuses.get("phrazzld/no-release-app").map(String::as_str) != Some("blocked") {
-        return Err("no-release-tool repository should be blocked".into());
+    for repo in [
+        "phrazzld/no-release-ts-app",
+        "misty-step/no-release-rust-crate",
+        "phrazzld/no-release-go-app",
+        "misty-step/no-release-python-lib",
+        "phrazzld/no-release-multipackage",
+    ] {
+        if statuses.get(repo).map(String::as_str) != Some("ready") {
+            return Err(format!("{repo} should be ready for backfill-first adoption").into());
+        }
     }
     for (repo, expected) in [
         ("phrazzld/semantic-app", "application"),
         ("misty-step/changesets-app", "library"),
+        ("misty-step/no-release-rust-crate", "library"),
+        ("misty-step/no-release-python-lib", "library"),
         ("misty-step/terraform-infra", "infrastructure"),
         ("phrazzld/search-experiment", "experiment"),
         ("misty-step/docs-site", "non-release"),
@@ -11830,6 +12069,62 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             .exists()
         {
             return Err(format!("{repo} dry-run wrote a GitHub workflow").into());
+        }
+    }
+    let plan_readme = fs::read_to_string(plan_dir.join("README.md"))?;
+    if !plan_readme.contains("## Blocked And Skipped Repositories")
+        || !plan_readme.contains("existing semantic-release workflow")
+        || !plan_readme.contains("secret metadata unavailable")
+    {
+        return Err("fleet rollout report should explain blocked and skipped repositories".into());
+    }
+    for (slug, repo_name) in [
+        ("phrazzld__no-release-ts-app", "phrazzld/no-release-ts-app"),
+        (
+            "misty-step__no-release-rust-crate",
+            "misty-step/no-release-rust-crate",
+        ),
+        ("phrazzld__no-release-go-app", "phrazzld/no-release-go-app"),
+        (
+            "misty-step__no-release-python-lib",
+            "misty-step/no-release-python-lib",
+        ),
+        (
+            "phrazzld__no-release-multipackage",
+            "phrazzld/no-release-multipackage",
+        ),
+    ] {
+        let receipt = pr_plan
+            .repositories
+            .iter()
+            .find(|repo| repo.repository == repo_name)
+            .ok_or_else(|| format!("{repo_name} backfill-first receipt missing"))?;
+        if receipt.skipped || !receipt.commit_message.contains("backfill-first") {
+            return Err(format!("{repo_name} should render a backfill-first PR receipt").into());
+        }
+        if receipt
+            .files
+            .iter()
+            .any(|file| file.contains("landmark-release.yml"))
+        {
+            return Err(format!("{repo_name} should not include a release workflow").into());
+        }
+        if pr_dir
+            .join(slug)
+            .join(".github/workflows/landmark-release.yml")
+            .exists()
+        {
+            return Err(format!("{repo_name} dry-run wrote a GitHub workflow").into());
+        }
+        let diff = fs::read_to_string(pr_dir.join(slug).join("diff.md"))?;
+        if !diff.contains("Initial version recommendation: `0.1.0`")
+            || !diff.contains("landmark backfill --repo-root . --since")
+            || !diff.contains("--mode artifacts-only --dry-run")
+            || !diff.contains("Rollback:")
+        {
+            return Err(
+                format!("{repo_name} diff missing backfill-first operator guidance").into(),
+            );
         }
     }
     let release_please_path = pr_dir
@@ -12074,6 +12369,34 @@ fn fleet_fixture_repo(
         required_secrets,
         signals: vec![format!("{release_tool} fixture")],
     }
+}
+
+fn fleet_fixture_repo_with_packages(
+    name_with_owner: &str,
+    release_tool: &str,
+    classification: (&str, &str),
+    visibility: (bool, bool),
+    branch_protected: &str,
+    package_topology: &[&str],
+    present_secrets: &[&str],
+) -> FleetRepository {
+    let mut repo = fleet_fixture_repo(
+        name_with_owner,
+        release_tool,
+        classification,
+        visibility,
+        branch_protected,
+        &[],
+        present_secrets,
+    );
+    repo.package_topology = package_topology
+        .iter()
+        .map(|value| (*value).to_string())
+        .collect();
+    repo.package_topology.sort();
+    repo.package_topology.dedup();
+    repo.tag_format = fleet_tag_format(&[], &repo.package_topology);
+    repo
 }
 
 fn fleet_existing_landmark_fixture() -> FleetRepository {
@@ -12615,6 +12938,137 @@ mod tests {
         assert!(plan.skip_reason.contains("secret-like literals"));
         assert!(repo.workflow_files[0].content.is_empty());
         assert!(repo.workflow_files[0].content_redacted);
+    }
+
+    #[test]
+    fn fleet_plan_readies_backfill_first_no_release_package_repositories() {
+        for (name, kind, packages) in [
+            (
+                "phrazzld/no-release-ts-app",
+                "application",
+                vec!["package.json"],
+            ),
+            (
+                "misty-step/no-release-rust-crate",
+                "library",
+                vec!["Cargo.toml"],
+            ),
+            ("phrazzld/no-release-go-app", "application", vec!["go.mod"]),
+            (
+                "misty-step/no-release-python-lib",
+                "library",
+                vec!["pyproject.toml"],
+            ),
+            (
+                "phrazzld/no-release-multipackage",
+                "library",
+                vec!["Cargo.toml", "package.json", "packages/api/package.json"],
+            ),
+        ] {
+            let repo = fleet_fixture_repo_with_packages(
+                name,
+                "no-release-tool",
+                (kind, "none"),
+                (false, false),
+                "unprotected-or-unavailable",
+                &packages,
+                &[],
+            );
+
+            let plan = plan_fleet_repository(&repo);
+
+            assert_eq!(plan.status, "ready");
+            assert_eq!(plan.recommended_mode, "backfill-first");
+            assert_eq!(plan.integration_mode, "backfill-first");
+            assert!(plan.required_secrets.is_empty());
+            assert!(plan.missing_secrets.is_empty());
+            assert_eq!(plan.initial_version_recommendation, "0.1.0");
+            assert!(!plan.initial_tag_recommendation.is_empty());
+            if name == "phrazzld/no-release-multipackage" {
+                assert_eq!(
+                    plan.initial_tag_recommendation,
+                    "no-release-multipackage@0.1.0"
+                );
+            } else {
+                assert_eq!(plan.initial_tag_recommendation, "v0.1.0");
+            }
+            assert!(
+                plan.artifact_paths
+                    .iter()
+                    .any(|path| path == "docs/releases/{version}.md")
+            );
+            assert!(
+                plan.historical_preview_command
+                    .contains("--mode artifacts-only --dry-run")
+            );
+            assert!(
+                plan.historical_preview_command
+                    .contains(&plan.initial_tag_recommendation)
+            );
+            assert!(plan.rollback_guidance.contains("close the PR"));
+            assert!(
+                plan.rollback_guidance
+                    .contains("previewed local artifact files")
+            );
+            assert!(
+                plan.migration_notes
+                    .iter()
+                    .any(|note| note.contains("operator-approved initial tag"))
+            );
+            assert_eq!(
+                plan.manifest.release.profile.as_deref(),
+                Some("synthesis-only")
+            );
+        }
+    }
+
+    #[test]
+    fn fleet_plan_keeps_no_package_no_release_repositories_skipped() {
+        let repo = fleet_fixture_repo_with_packages(
+            "misty-step/docs-site",
+            "no-release-tool",
+            ("non-release", "none"),
+            (false, false),
+            "unprotected-or-unavailable",
+            &[],
+            &[],
+        );
+
+        let plan = plan_fleet_repository(&repo);
+
+        assert_eq!(plan.status, "skipped");
+        assert_eq!(plan.recommended_mode, "skipped");
+        assert!(plan.initial_version_recommendation.is_empty());
+        assert!(plan.initial_tag_recommendation.is_empty());
+        assert!(plan.artifact_paths.is_empty());
+        assert!(plan.historical_preview_command.is_empty());
+    }
+
+    #[test]
+    fn fleet_backfill_guidance_helpers_handle_empty_and_tag_variants() {
+        let mut repo = fleet_fixture_repo_with_packages(
+            "misty-step/library",
+            "no-release-tool",
+            ("library", "none"),
+            (false, false),
+            "unprotected-or-unavailable",
+            &["Cargo.toml"],
+            &[],
+        );
+
+        assert!(fleet_initial_version("skipped", "skipped").is_empty());
+        assert!(fleet_initial_tag(&repo, "").is_empty());
+        assert!(fleet_historical_preview_command("").is_empty());
+
+        repo.tag_format = "{version}".into();
+        assert_eq!(fleet_initial_tag(&repo, "0.1.0"), "0.1.0");
+        repo.tag_format = "package@{version}".into();
+        assert_eq!(fleet_initial_tag(&repo, "0.1.0"), "library@0.1.0");
+        repo.tag_format = "custom".into();
+        assert_eq!(
+            fleet_initial_tag(&repo, "0.1.0"),
+            "0.1.0 (custom tag format requires operator approval)"
+        );
     }
 
     #[test]

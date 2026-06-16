@@ -237,15 +237,20 @@ it into an integration mode: `local`, `generic-ci`, `github-full`,
 `skipped`. It writes `.landmark/fleet-plan/plan.json` and a Markdown operator
 dashboard with repository kind, release surface, integration rationale, risk
 flags, required secret names, missing secrets, skip reasons, workflow patch
-paths, and migration notes. GitHub secrets are required only for GitHub
-integration modes; local, generic CI, manifest-only, backfill-first, and
-skipped non-release plans avoid secret blockers. Repositories with existing
-release-please or Changesets workflows get generated patch records for those
-workflow paths. Repositories with existing semantic-release workflows are
-blocked until an operator explicitly chooses whether Landmark should replace the
-full release job. Workflow patch records preserve the existing workflow YAML
-body, add or replace `jobs.synthesize`, and block instead of serializing a
-workflow body that contains obvious token-like literals.
+paths, initial version/tag recommendations, artifact paths, rollback guidance,
+historical backfill preview commands, and migration notes. GitHub secrets are
+required only for GitHub integration modes; local, generic CI, manifest-only,
+backfill-first, and skipped non-release plans avoid secret blockers. Active
+application and library repositories with packages but no release tags or
+release automation enter the `backfill-first` lane; documentation/config-only
+repositories with no package topology remain `skipped` as non-release.
+Repositories with existing release-please or Changesets workflows get generated
+patch records for those workflow paths. Repositories with existing
+semantic-release workflows are blocked until an operator explicitly chooses
+whether Landmark should replace the full release job. Workflow patch records
+preserve the existing workflow YAML body, add or replace `jobs.synthesize`, and
+block instead of serializing a workflow body that contains obvious token-like
+literals.
 
 `fleet open-prs --dry-run` renders the exact `.landmark.yml`, any generated
 existing-workflow updates such as `.github/workflows/release-please.yml` or
@@ -254,6 +259,10 @@ existing-workflow updates such as `.github/workflows/release-please.yml` or
 `diff.md`, and `open-prs.json` receipt Landmark would propose for each eligible
 repository under `.landmark/fleet-plan/prs/`. Local, generic CI,
 backfill-first, and manifest-only modes do not get a GitHub release workflow.
+For `backfill-first`, the PR is manifest-only/local-artifacts adoption: it adds
+`.landmark.yml` with local artifact destinations and carries the first-release
+approval notes in `diff.md`; it does not require `GH_RELEASE_TOKEN`,
+`OPENROUTER_API_KEY`, or release-body mutation.
 Confirmed rollout requires `--confirm-remote --max-prs 1`; the receipt records
 branch names, commit messages, rollback/disposition guidance, evidence
 directories, and an `APPLY.md` packet with the remote branch, commit, PR,
@@ -312,8 +321,12 @@ included in the prompt. In `balanced` mode, docs-only, chore-only,
 dependency-only, and internal-tooling releases are skipped; breaking, security,
 and migration-heavy releases escalate to the rich tier.
 
-Use `dist/landmark backfill --repo-root . --since <tag> --dry-run` to preview
-historical artifact migration for repositories that already have release tags.
+Use `dist/landmark backfill --repo-root . --since <tag> --mode artifacts-only
+--dry-run` to preview historical artifact migration for repositories that
+already have release tags. For `backfill-first` repos, create the
+operator-approved initial tag only after inspecting the fleet plan
+recommendation, then run the preview command before enabling any
+release-mutating workflow.
 
 ## Inputs
 
