@@ -29,9 +29,9 @@ target/debug/landfall fleet open-prs --dry-run --plan-dir .landfall/dogfood/flee
   workflow in PR [#73](https://github.com/phrazzld/glance/pull/73), merged as
   `abdaa93ad4c0a86696b6021ff7f556598c9995b6`.
 - Glance dogfood exposed a Landfall no-release summary bug. Landfall fixed it
-  in PR [#131](https://github.com/misty-step/landfall/pull/131), released it
-  as [v1.23.1](https://github.com/misty-step/landfall/releases/tag/v1.23.1)
-  via PR [#132](https://github.com/misty-step/landfall/pull/132), then Glance
+  in PR [#131](https://github.com/misty-step/landmark/pull/131), released it
+  as [v1.23.1](https://github.com/misty-step/landmark/releases/tag/v1.23.1)
+  via PR [#132](https://github.com/misty-step/landmark/pull/132), then Glance
   updated to the fixed action pin in PR
   [#74](https://github.com/phrazzld/glance/pull/74), merged as
   `b74081d12772301cfdbe3c82da0d1e549ea7d676`.
@@ -79,7 +79,7 @@ Action: use env fallback and `target/debug/landfall` in dogfood skill; CLI help 
 ### LF-DOGFOOD-003: existing Landfall workflow was missed
 Severity: high
 Category: classification
-Evidence: `phrazzld/glance` has `.github/workflows/release.yml` using `misty-step/landfall`, but initial scan reported `existing_landfall: false`.
+Evidence: `phrazzld/glance` has `.github/workflows/release.yml` using `misty-step/landmark`, but initial scan reported `existing_landfall: false`.
 Impact: Landfall proposed duplicate adoption instead of manifest/upgrade work.
 Action: fixed scanner to inspect workflow contents and added replay/unit coverage.
 
@@ -127,7 +127,7 @@ Severity: critical
 Category: release-path
 Evidence: Glance Release run [27481025693](https://github.com/phrazzld/glance/actions/runs/27481025693) found no semantic-release-worthy commits, then failed in `release-policy summary` because `--attempts-file` and `--context-metadata-file` were passed empty values.
 Impact: a healthy no-op release could fail the release workflow after semantic-release correctly decided not to publish a new version.
-Action: fixed in Landfall PR [#131](https://github.com/misty-step/landfall/pull/131), released as [v1.23.1](https://github.com/misty-step/landfall/releases/tag/v1.23.1), and verified in Glance Release run [27481472455](https://github.com/phrazzld/glance/actions/runs/27481472455).
+Action: fixed in Landfall PR [#131](https://github.com/misty-step/landmark/pull/131), released as [v1.23.1](https://github.com/misty-step/landmark/releases/tag/v1.23.1), and verified in Glance Release run [27481472455](https://github.com/phrazzld/glance/actions/runs/27481472455).
 
 ### LF-DOGFOOD-010: manual-tag adoption can double-trigger synthesis
 Severity: high

@@ -47,6 +47,6 @@ Every run should leave:
 - Prefer env-based token discovery. Avoid passing secrets as CLI arguments, especially through `cargo run`, because Cargo echoes arguments.
 - Never print secret values. Search dogfood artifacts for token-like strings before committing.
 - Do not set or overwrite repository secrets in bulk until the target set is narrowed to real applications and the token/value source is explicit.
-- Do not open duplicate release workflows for repos that already invoke `misty-step/landfall`.
+- Do not open duplicate release workflows for repos that already invoke `misty-step/landmark`.
 - Do not add GitHub workflows for `local`, `generic-ci`, `manifest-only`, or `backfill-first` plans unless repo-specific review deliberately overrides the generated receipt.
 - Treat generated `open-prs` output as a proposal, not authority. The lead agent owns repo-fit.

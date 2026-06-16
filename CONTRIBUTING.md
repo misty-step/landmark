@@ -11,7 +11,7 @@
 Clone and install dependencies:
 
 ```bash
-git clone https://github.com/misty-step/landfall.git
+git clone https://github.com/misty-step/landmark.git
 cd landfall
 
 # Node dependencies (semantic-release and plugins)

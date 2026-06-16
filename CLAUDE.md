@@ -57,7 +57,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}

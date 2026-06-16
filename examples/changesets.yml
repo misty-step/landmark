@@ -15,7 +15,7 @@
 # Docs:
 #   - Changesets: https://github.com/changesets/changesets
 #   - changesets/action: https://github.com/changesets/action
-#   - Landmark: https://github.com/misty-step/landfall
+#   - Landmark: https://github.com/misty-step/landmark
 
 name: Release
 
@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           release-tag: v${{ fromJson(needs.release.outputs.published_packages)[0].version }}
