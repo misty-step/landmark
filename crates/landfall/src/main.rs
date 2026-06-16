@@ -598,7 +598,7 @@ struct FleetOpenPrsArgs {
 struct PrepareSelfReleaseArgs {
     #[arg(long = "repo-root", default_value = ".")]
     repo_root: PathBuf,
-    #[arg(long, default_value = "misty-step/landfall")]
+    #[arg(long, default_value = "misty-step/landmark")]
     repository: String,
     #[arg(long = "release-branch", default_value = "landfall/self-release")]
     release_branch: String,
@@ -2677,7 +2677,7 @@ fn scan_fleet_repository(
             .any(|(_, text)| workflow_invokes_landfall(text));
     for (workflow, text) in &workflow_texts {
         if workflow_invokes_landfall(text) {
-            signals.push(format!("{workflow} invokes misty-step/landfall"));
+            signals.push(format!("{workflow} invokes Landmark action"));
         }
     }
     let branch_protected = if deep_checks {
@@ -2775,7 +2775,12 @@ fn org_secret_names_for_repo(value: &Value, repository: &str, repo_name: &str) -
 }
 
 fn workflow_invokes_landfall(text: &str) -> bool {
-    text.to_ascii_lowercase().contains("misty-step/landfall")
+    workflow_invokes_landmark_action(text)
+}
+
+fn workflow_invokes_landmark_action(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("misty-step/landmark") || lower.contains("misty-step/landfall")
 }
 
 fn fleet_release_tool(
@@ -3611,7 +3616,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: full
           healthcheck: 'true'
@@ -3654,7 +3659,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           healthcheck: 'true'
@@ -3716,7 +3721,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           healthcheck: 'true'
@@ -3767,7 +3772,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           healthcheck: 'true'
@@ -3801,7 +3806,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landfall@v1
+      - uses: misty-step/landmark@v1
         with:
           mode: synthesis-only
           healthcheck: 'true'
@@ -7997,8 +8002,8 @@ fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<Vec<String>>
             ));
         }
     }
-    if readme.contains("misty-step/landfall@v2") {
-        errors.push("README references nonexistent misty-step/landfall@v2 example".into());
+    if readme.contains("misty-step/landmark@v2") {
+        errors.push("README references nonexistent misty-step/landmark@v2 example".into());
     }
     if let Err(error) = serde_yaml::from_str::<serde_yaml::Value>(&manual_example) {
         errors.push(format!("examples/manual-tag.yml is invalid YAML: {error}"));
@@ -8211,7 +8216,7 @@ fn validate_landfall_usage_inputs(path: &Path, text: &str, known: &BTreeSet<&str
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("uses:") || trimmed.starts_with("- uses:") {
-            in_landfall_step = trimmed.contains("misty-step/landfall") || trimmed == "uses: ./";
+            in_landfall_step = workflow_invokes_landmark_action(trimmed) || trimmed == "uses: ./";
             in_with = false;
             continue;
         }
@@ -11606,7 +11611,7 @@ fn fleet_existing_landfall_workflow_fixture() -> FleetRepository {
     repo.existing_landfall = true;
     repo.workflows = vec!["release.yml".into()];
     repo.signals
-        .push("release.yml invokes misty-step/landfall".into());
+        .push("release.yml invokes Landmark action".into());
     repo
 }
 
@@ -11990,13 +11995,13 @@ mod tests {
             "secrets": [
                 {"name": "GH_RELEASE_TOKEN", "visibility": "all"},
                 {"name": "OPENROUTER_API_KEY", "visibility": "selected", "selected_repositories": [
-                    {"full_name": "misty-step/landfall", "name": "landfall"}
+                    {"full_name": "misty-step/landmark", "name": "landmark"}
                 ]},
                 {"name": "UNRELATED", "visibility": "private"}
             ]
         });
 
-        let names = org_secret_names_for_repo(&metadata, "misty-step/landfall", "landfall");
+        let names = org_secret_names_for_repo(&metadata, "misty-step/landmark", "landmark");
         assert!(names.contains("GH_RELEASE_TOKEN"));
         assert!(names.contains("OPENROUTER_API_KEY"));
         assert!(!names.contains("UNRELATED"));
@@ -12007,22 +12012,24 @@ mod tests {
     }
 
     #[test]
-    fn fleet_detects_landfall_in_generic_release_workflow_content() {
-        let workflow_texts = vec![(
-            "release.yml".to_string(),
-            "steps:\n  - uses: misty-step/landfall@v1\n".to_string(),
-        )];
+    fn fleet_detects_landmark_and_legacy_landfall_release_workflow_content() {
+        for action_ref in ["misty-step/landmark@v1", "misty-step/landfall@v1"] {
+            let workflow_texts = vec![(
+                "release.yml".to_string(),
+                format!("steps:\n  - uses: {action_ref}\n"),
+            )];
 
-        assert!(workflow_invokes_landfall(&workflow_texts[0].1));
-        assert_eq!(
-            fleet_release_tool(
-                &[],
-                &["release.yml".into()],
-                &workflow_texts,
-                &["v1.2.3".into()]
-            ),
-            "manual-tag"
-        );
+            assert!(workflow_invokes_landfall(&workflow_texts[0].1));
+            assert_eq!(
+                fleet_release_tool(
+                    &[],
+                    &["release.yml".into()],
+                    &workflow_texts,
+                    &["v1.2.3".into()]
+                ),
+                "manual-tag"
+            );
+        }
     }
 
     #[test]
