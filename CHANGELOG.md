@@ -1,3 +1,17 @@
+# [1.24.0](https://github.com/misty-step/landmark/compare/v1.23.1...v1.24.0) (2026-06-16)
+
+### Features
+
+* **run:** add provider-neutral release pipeline ([2281fc4](https://github.com/misty-step/landmark/commit/2281fc49da63d6fff0924ea2fdc75ffefa85337d))
+* **agent:** publish machine-readable Landfall contracts ([5a6ed75](https://github.com/misty-step/landmark/commit/5a6ed75995015e63cb29bb0a9f34f432bc717e28))
+* **adoption:** make first run local preview obvious ([7359b43](https://github.com/misty-step/landmark/commit/7359b43ed19ad6283129b1612942e6e385cb4cd2))
+* **fleet:** guard rollout adoption ([c02e41a](https://github.com/misty-step/landmark/commit/c02e41a2224090cc0c33615e6c71a6fc82cdbd5d))
+* **synthesis:** emit contextual release intelligence (#141) ([c89e5c3](https://github.com/misty-step/landmark/commit/c89e5c384ee58f915a879d41bb61cc5f3e1bcca6))
+
+### Bug Fixes
+
+* **verification:** prove release side-effect guarantees ([150dc69](https://github.com/misty-step/landmark/commit/150dc696094f85a158c5b479509ae02bbe3ab8a8))
+* **fleet:** recognize org-level release secrets ([e9dad85](https://github.com/misty-step/landmark/commit/e9dad85e28719a13b4fef351e2972a6bea361c4f))
 # [1.23.1](https://github.com/misty-step/landfall/compare/v1.23.0...v1.23.1) (2026-06-13)
 
 ### Bug Fixes
