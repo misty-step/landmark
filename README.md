@@ -236,21 +236,29 @@ it into an integration mode: `local`, `generic-ci`, `github-full`,
 `github-synthesis-only`, `manifest-only`, `backfill-first`, `blocked`, or
 `skipped`. It writes `.landmark/fleet-plan/plan.json` and a Markdown operator
 dashboard with repository kind, release surface, integration rationale, risk
-flags, required secret names, missing secrets, skip reasons, and migration
-notes. GitHub secrets are required only for GitHub integration modes; local,
-generic CI, manifest-only, backfill-first, and skipped non-release plans avoid
-secret blockers.
+flags, required secret names, missing secrets, skip reasons, workflow patch
+paths, and migration notes. GitHub secrets are required only for GitHub
+integration modes; local, generic CI, manifest-only, backfill-first, and
+skipped non-release plans avoid secret blockers. Repositories with existing
+release-please or Changesets workflows get generated patch records for those
+workflow paths. Repositories with existing semantic-release workflows are
+blocked until an operator explicitly chooses whether Landmark should replace the
+full release job. Workflow patch records preserve the existing workflow YAML
+body, add or replace `jobs.synthesize`, and block instead of serializing a
+workflow body that contains obvious token-like literals.
 
-`fleet open-prs --dry-run` renders the exact `.landmark.yml`, optional
-`.github/workflows/landmark-release.yml`, `diff.md`, and `open-prs.json`
-receipt Landmark would propose for each eligible repository under
-`.landmark/fleet-plan/prs/`. Local, generic CI, backfill-first, and
-manifest-only modes do not get a GitHub release workflow. Confirmed rollout
-requires `--confirm-remote --max-prs 1`; the receipt records branch names,
-commit messages, rollback/disposition guidance, evidence directories, and an
-`APPLY.md` packet with the remote branch, commit, PR, rollback, and monitoring
-commands. Operators merge one downstream PR, watch its release run, then
-continue the fleet rollout deliberately.
+`fleet open-prs --dry-run` renders the exact `.landmark.yml`, any generated
+existing-workflow updates such as `.github/workflows/release-please.yml` or
+`.github/workflows/changesets.yml`, fallback
+`.github/workflows/landmark-release.yml` for repos without an owning workflow,
+`diff.md`, and `open-prs.json` receipt Landmark would propose for each eligible
+repository under `.landmark/fleet-plan/prs/`. Local, generic CI,
+backfill-first, and manifest-only modes do not get a GitHub release workflow.
+Confirmed rollout requires `--confirm-remote --max-prs 1`; the receipt records
+branch names, commit messages, rollback/disposition guidance, evidence
+directories, and an `APPLY.md` packet with the remote branch, commit, PR,
+rollback, and monitoring commands. Operators merge one downstream PR, watch its
+release run, then continue the fleet rollout deliberately.
 
 ## Product Manifest
 

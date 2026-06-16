@@ -14,7 +14,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["repository", "repository_kind", "release_surface", "rank", "default_branch", "recommended_mode", "integration_mode", "integration_rationale", "workflow", "status", "skip_reason", "risk_flags", "required_secrets", "missing_secrets", "unavailable_secret_metadata", "migration_notes", "manifest"],
+        "required": ["repository", "repository_kind", "release_surface", "rank", "default_branch", "recommended_mode", "integration_mode", "integration_rationale", "workflow", "status", "skip_reason", "risk_flags", "required_secrets", "missing_secrets", "unavailable_secret_metadata", "migration_notes", "workflow_patches", "manifest"],
         "properties": {
           "repository": { "type": "string" },
           "repository_kind": { "type": "string" },
@@ -32,6 +32,19 @@
           "missing_secrets": { "type": "array", "items": { "type": "string" } },
           "unavailable_secret_metadata": { "type": "array", "items": { "type": "string" } },
           "migration_notes": { "type": "array", "items": { "type": "string" } },
+          "workflow_patches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "description", "content"],
+              "properties": {
+                "path": { "type": "string" },
+                "description": { "type": "string" },
+                "content": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
           "manifest": { "$ref": "landmark-manifest.v1.schema.json" }
         },
         "additionalProperties": false
