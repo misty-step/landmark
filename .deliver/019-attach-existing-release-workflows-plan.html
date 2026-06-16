@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Landmark 019 Existing Release Workflow Attachment Plan</title>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #161b1d; background: #f7f8f5; }
+    main { max-width: 1160px; margin: 0 auto; padding: 40px 28px 56px; }
+    h1 { margin: 0 0 10px; font-size: 34px; }
+    h2 { margin: 28px 0 10px; font-size: 20px; }
+    p, li { line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .panel { border: 1px solid #cfd8d2; background: #fff; border-radius: 8px; padding: 16px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #cfd8d2; }
+    th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid #e2e7e2; }
+    th { background: #edf2ee; }
+    code { background: #eef2ef; border-radius: 4px; padding: 2px 5px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Ticket 019: Attach To Existing Release Workflows</h1>
+  <p>Make <code>fleet open-prs</code> update the release workflow that already owns versioning or publishing, instead of rendering a second competing Landmark release workflow.</p>
+  <div class="grid">
+    <section class="panel"><h2>Boundary</h2><p>Keep the change in the Rust fleet scan, plan, and dry-run PR renderer. No Node, Python, or new shell orchestration.</p></section>
+    <section class="panel"><h2>Design</h2><p>Carry scanned release-workflow metadata into the fleet plan, render explicit workflow patches for release-please and changesets, and block existing semantic-release workflows for operator choice.</p></section>
+    <section class="panel"><h2>Oracle</h2><p>Replay fixtures prove no duplicate release jobs or standalone <code>landmark-release.yml</code> for existing release-please and changesets workflows.</p></section>
+  </div>
+  <h2>Implementation</h2>
+  <table>
+    <thead><tr><th>Slice</th><th>Change</th><th>Proof</th></tr></thead>
+    <tbody>
+      <tr><td>Scan and plan shape</td><td>Add release workflow path/job metadata to scan data and workflow patch records to plan data/schema.</td><td><code>fleet plan</code> serializes generated patch path/content without leaking scanned workflow bodies.</td></tr>
+      <tr><td>Release-please</td><td>Append or update a Landmark <code>synthesize</code> job that depends on the existing release-please job.</td><td>Fixture has one <code>googleapis/release-please-action</code> and no generated <code>landmark-release.yml</code>.</td></tr>
+      <tr><td>Changesets</td><td>Append or update a Landmark <code>synthesize</code> job after the existing changesets publish job.</td><td>Fixture has one <code>changesets/action</code>, valid YAML, and no second publish workflow.</td></tr>
+      <tr><td>Semantic-release</td><td>When an existing semantic-release workflow is present, emit a blocked plan requiring explicit full-mode replacement choice.</td><td>Fixture is blocked and writes only <code>SKIPPED.md</code>.</td></tr>
+      <tr><td>Closeout</td><td>Run focused tests, <code>bin/replay-action</code>, <code>bin/gate</code>, update the action binary as needed, then commit and push.</td><td>Clean status plus gate and replay evidence.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

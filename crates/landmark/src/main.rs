@@ -2156,9 +2156,24 @@ struct FleetRepository {
     package_topology: Vec<String>,
     release_files: Vec<String>,
     workflows: Vec<String>,
+    #[serde(default)]
+    workflow_files: Vec<FleetWorkflowFile>,
     existing_landmark: bool,
     required_secrets: Vec<FleetSecretStatus>,
     signals: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct FleetWorkflowFile {
+    path: String,
+    #[serde(default)]
+    release_tool: String,
+    #[serde(default)]
+    release_job: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    content: String,
+    #[serde(default)]
+    content_redacted: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2202,7 +2217,16 @@ struct FleetRepositoryPlan {
     missing_secrets: Vec<String>,
     unavailable_secret_metadata: Vec<String>,
     migration_notes: Vec<String>,
+    #[serde(default)]
+    workflow_patches: Vec<FleetWorkflowPatch>,
     manifest: LandmarkManifest,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct FleetWorkflowPatch {
+    path: String,
+    description: String,
+    content: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2431,23 +2455,28 @@ fn fleet_open_prs(args: FleetOpenPrsArgs) -> Result<()> {
         opened += 1;
         let manifest = render_manifest_yaml(&repo.manifest)?;
         fs::write(repo_dir.join(".landmark.yml"), &manifest)?;
-        let workflow = if fleet_pr_should_write_workflow(repo) {
+        let mut workflow_files = Vec::new();
+        for patch in &repo.workflow_patches {
+            fs::create_dir_all(
+                repo_dir.join(Path::new(&patch.path).parent().unwrap_or(Path::new("."))),
+            )?;
+            fs::write(repo_dir.join(&patch.path), &patch.content)?;
+            workflow_files.push((patch.path.clone(), patch.content.clone()));
+        }
+        if fleet_pr_should_write_workflow(repo) {
             let workflow = fleet_workflow_for_plan(repo);
             fs::create_dir_all(repo_dir.join(".github/workflows"))?;
             fs::write(
                 repo_dir.join(".github/workflows/landmark-release.yml"),
                 &workflow,
             )?;
-            Some(workflow)
-        } else {
-            None
-        };
-        let diff = render_fleet_pr_diff(repo, &manifest, workflow.as_deref());
-        fs::write(repo_dir.join("diff.md"), diff)?;
-        let mut files = vec![".landmark.yml".into(), "diff.md".into()];
-        if workflow.is_some() {
-            files.insert(1, ".github/workflows/landmark-release.yml".into());
+            workflow_files.push((".github/workflows/landmark-release.yml".into(), workflow));
         }
+        let diff = render_fleet_pr_diff(repo, &manifest, &workflow_files);
+        fs::write(repo_dir.join("diff.md"), diff)?;
+        let mut files = vec![".landmark.yml".into()];
+        files.extend(workflow_files.iter().map(|(path, _)| path.clone()));
+        files.push("diff.md".into());
         let branch = format!("landmark/adopt-{}", repo.repository.replace('/', "-"));
         let title: String = if repo.recommended_mode == "manifest-only" {
             "chore(release): configure Landmark manifest".into()
@@ -2630,6 +2659,12 @@ fn scan_fleet_repository(
         .map(str::to_string)
         .collect::<Vec<_>>();
     let workflow_texts = provider.workflow_texts(&name_with_owner, &default_branch, &workflows);
+    let workflow_files = workflow_texts
+        .iter()
+        .filter_map(|(workflow, text)| {
+            fleet_workflow_file(&format!(".github/workflows/{workflow}"), text)
+        })
+        .collect::<Vec<_>>();
     let mut release_files = Vec::new();
     let mut package_topology = Vec::new();
     let mut signals = Vec::new();
@@ -2712,6 +2747,7 @@ fn scan_fleet_repository(
         package_topology,
         release_files,
         workflows,
+        workflow_files,
         existing_landmark,
         required_secrets,
         signals,
@@ -2781,6 +2817,55 @@ fn workflow_invokes_landmark(text: &str) -> bool {
 fn workflow_invokes_landmark_action(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     lower.contains("misty-step/landmark") || lower.contains("misty-step/landmark")
+}
+
+fn fleet_workflow_file(path: &str, text: &str) -> Option<FleetWorkflowFile> {
+    let lower = text.to_ascii_lowercase();
+    let (release_tool, marker, default_job) = if lower.contains("googleapis/release-please-action")
+    {
+        (
+            "release-please",
+            "googleapis/release-please-action",
+            "release-please",
+        )
+    } else if lower.contains("changesets/action") {
+        ("changesets", "changesets/action", "release")
+    } else if lower.contains("semantic-release") {
+        ("semantic-release", "semantic-release", "release")
+    } else if lower.contains("gh release create") {
+        ("manual-tag", "gh release create", "release")
+    } else {
+        return None;
+    };
+    let release_job =
+        workflow_job_invoking(text, marker).unwrap_or_else(|| default_job.to_string());
+    let redacted = redact_context(text);
+    let content_redacted = redacted != text;
+    Some(FleetWorkflowFile {
+        path: path.into(),
+        release_tool: release_tool.into(),
+        release_job,
+        content: if content_redacted {
+            String::new()
+        } else {
+            text.into()
+        },
+        content_redacted,
+    })
+}
+
+fn workflow_job_invoking(text: &str, marker: &str) -> Option<String> {
+    let raw: serde_yaml::Value = serde_yaml::from_str(text).ok()?;
+    let jobs = raw.get("jobs")?.as_mapping()?;
+    let marker = marker.to_ascii_lowercase();
+    for (key, job) in jobs {
+        let job_id = key.as_str()?;
+        let job_text = serde_yaml::to_string(job).ok()?.to_ascii_lowercase();
+        if job_text.contains(&marker) {
+            return Some(job_id.to_string());
+        }
+    }
+    None
 }
 
 fn fleet_release_tool(
@@ -2901,6 +2986,54 @@ fn normalized_release_surface(repo: &FleetRepository) -> String {
         .to_ascii_lowercase()
 }
 
+fn fleet_workflow_file_for_tool<'a>(
+    repo: &'a FleetRepository,
+    release_tool: &str,
+) -> Option<&'a FleetWorkflowFile> {
+    repo.workflow_files
+        .iter()
+        .find(|workflow| workflow.release_tool == release_tool)
+}
+
+fn workflow_content_blocker(
+    repo: &FleetRepository,
+    integration_mode: &str,
+    workflow: &str,
+) -> Option<String> {
+    if integration_mode != "github-synthesis-only" {
+        return None;
+    }
+    let workflow_file = match workflow {
+        "release-please" => fleet_workflow_file_for_tool(repo, "release-please"),
+        "changesets" => fleet_workflow_file_for_tool(repo, "changesets"),
+        _ => None,
+    }?;
+    if workflow_file.content_redacted {
+        Some(format!(
+            "{} contains secret-like literals; refusing to render workflow patch",
+            workflow_file.path
+        ))
+    } else if !workflow_file.content.is_empty()
+        && !workflow_has_jobs_mapping(&workflow_file.content)
+    {
+        Some(format!(
+            "{} does not contain a patchable jobs mapping; refusing to render workflow patch",
+            workflow_file.path
+        ))
+    } else {
+        None
+    }
+}
+
+fn workflow_has_jobs_mapping(text: &str) -> bool {
+    let Ok(raw) = serde_yaml::from_str::<serde_yaml::Value>(text) else {
+        return false;
+    };
+    raw.get("jobs")
+        .and_then(serde_yaml::Value::as_mapping)
+        .is_some()
+}
+
 fn fleet_integration_mode(
     repo: &FleetRepository,
     repository_kind: &str,
@@ -2946,6 +3079,12 @@ fn fleet_integration_mode(
         );
     }
     match repo.release_tool.as_str() {
+        "semantic-release" if fleet_workflow_file_for_tool(repo, "semantic-release").is_some() => (
+            "blocked".into(),
+            "semantic-release".into(),
+            vec!["existing semantic-release workflow requires explicit operator choice before Landmark full-mode replacement".into()],
+            35,
+        ),
         "semantic-release" => (
             "github-full".into(),
             "semantic-release".into(),
@@ -3072,6 +3211,7 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     } else {
         None
     };
+    let workflow_blocker = workflow_content_blocker(repo, &integration_mode, &workflow);
 
     let (status, recommended_mode, skip_reason, rank) = if repo.archived {
         ("skipped", "skipped", "repository is archived", 0u64)
@@ -3084,6 +3224,8 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         )
     } else if let Some(reason) = secret_blocker.as_deref() {
         ("blocked", integration_mode.as_str(), reason, 15u64)
+    } else if let Some(reason) = workflow_blocker.as_deref() {
+        ("blocked", integration_mode.as_str(), reason, 15u64)
     } else if repo.existing_landmark {
         migration_notes.push(
             "Landmark-like workflow or manifest already exists; inspect before replacing".into(),
@@ -3094,6 +3236,12 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
             "github-full" | "github-synthesis-only" | "generic-ci" | "local" => {
                 ("ready", integration_mode.as_str(), "", rank_base)
             }
+            "blocked" if workflow == "semantic-release" => (
+                "blocked",
+                "blocked",
+                "existing semantic-release workflow requires explicit operator choice",
+                rank_base,
+            ),
             "backfill-first" => (
                 "blocked",
                 "backfill-first",
@@ -3121,6 +3269,11 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
     integration_rationale.push(format!("repository kind: {repository_kind}"));
     integration_rationale.push(format!("release surface: {release_surface}"));
     let manifest = fleet_manifest(repo, recommended_mode);
+    let workflow_patches = if status == "ready" {
+        fleet_workflow_patches(repo, &manifest, recommended_mode, &workflow)
+    } else {
+        Vec::new()
+    };
     FleetRepositoryPlan {
         repository: repo.name_with_owner.clone(),
         repository_kind,
@@ -3138,7 +3291,176 @@ fn plan_fleet_repository(repo: &FleetRepository) -> FleetRepositoryPlan {
         missing_secrets,
         unavailable_secret_metadata,
         migration_notes,
+        workflow_patches,
         manifest,
+    }
+}
+
+fn fleet_workflow_patches(
+    repo: &FleetRepository,
+    manifest: &LandmarkManifest,
+    recommended_mode: &str,
+    workflow: &str,
+) -> Vec<FleetWorkflowPatch> {
+    if recommended_mode != "github-synthesis-only" {
+        return Vec::new();
+    }
+    match workflow {
+        "release-please" => fleet_workflow_file_for_tool(repo, "release-please")
+            .map(|workflow_file| FleetWorkflowPatch {
+                path: workflow_file.path.clone(),
+                description: "update existing release-please workflow with Landmark synthesis job"
+                    .into(),
+                content: patch_release_please_workflow(
+                    workflow_file,
+                    &repo.default_branch,
+                    manifest,
+                ),
+            })
+            .into_iter()
+            .collect(),
+        "changesets" => fleet_workflow_file_for_tool(repo, "changesets")
+            .map(|workflow_file| FleetWorkflowPatch {
+                path: workflow_file.path.clone(),
+                description: "update existing changesets workflow with Landmark synthesis job"
+                    .into(),
+                content: patch_changesets_workflow(
+                    workflow_file,
+                    &repo.default_branch,
+                    repo.package_topology.len() > 1,
+                    manifest,
+                ),
+            })
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn patch_release_please_workflow(
+    workflow_file: &FleetWorkflowFile,
+    branch: &str,
+    manifest: &LandmarkManifest,
+) -> String {
+    if workflow_file.content.is_empty() {
+        return workflow_release_please_for_job(branch, Some(manifest), &workflow_file.release_job);
+    }
+    let job = release_please_synthesis_job(&workflow_file.release_job, manifest);
+    workflow_with_synthesis_job(&workflow_file.content, &job).unwrap_or_else(|| {
+        workflow_release_please_for_job(branch, Some(manifest), &workflow_file.release_job)
+    })
+}
+
+fn patch_changesets_workflow(
+    workflow_file: &FleetWorkflowFile,
+    branch: &str,
+    monorepo: bool,
+    manifest: &LandmarkManifest,
+) -> String {
+    if workflow_file.content.is_empty() {
+        return workflow_changesets_for_job(
+            branch,
+            monorepo,
+            Some(manifest),
+            &workflow_file.release_job,
+        );
+    }
+    let job = changesets_synthesis_job(&workflow_file.release_job, monorepo, manifest);
+    workflow_with_synthesis_job(&workflow_file.content, &job).unwrap_or_else(|| {
+        workflow_changesets_for_job(branch, monorepo, Some(manifest), &workflow_file.release_job)
+    })
+}
+
+fn workflow_with_synthesis_job(content: &str, synthesis_job: &str) -> Option<String> {
+    let mut workflow: serde_yaml::Value = serde_yaml::from_str(content).ok()?;
+    let jobs_key = serde_yaml::Value::String("jobs".into());
+    let synthesize_key = serde_yaml::Value::String("synthesize".into());
+    let jobs = workflow
+        .as_mapping_mut()?
+        .get_mut(&jobs_key)?
+        .as_mapping_mut()?;
+    let synthesis: serde_yaml::Value = serde_yaml::from_str(synthesis_job).ok()?;
+    let synthesis = synthesis.as_mapping()?.get(&synthesize_key)?.clone();
+    jobs.insert(synthesize_key, synthesis);
+    let mut rendered = serde_yaml::to_string(&workflow).ok()?;
+    if !rendered.ends_with('\n') {
+        rendered.push('\n');
+    }
+    Some(rendered)
+}
+
+fn release_please_synthesis_job(release_job: &str, manifest: &LandmarkManifest) -> String {
+    let manifest_inputs = render_manifest_action_inputs(Some(manifest), 8, Some("release-body"));
+    format!(
+        r#"synthesize:
+  needs: {release_job}
+  if: needs.{release_job}.outputs.release_created == 'true'
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: misty-step/landmark@v1
+      with:
+        mode: synthesis-only
+        healthcheck: 'true'
+        release-tag: ${{{{ needs.{release_job}.outputs.tag_name }}}}
+        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+{manifest_inputs}
+"#
+    )
+}
+
+fn changesets_synthesis_job(
+    release_job: &str,
+    monorepo: bool,
+    manifest: &LandmarkManifest,
+) -> String {
+    let manifest_inputs = render_manifest_action_inputs(Some(manifest), 8, Some("release-body"));
+    if monorepo {
+        format!(
+            r#"synthesize:
+  needs: {release_job}
+  if: needs.{release_job}.outputs.published == 'true'
+  strategy:
+    matrix:
+      package: ${{{{ fromJson(needs.{release_job}.outputs.published_packages) }}}}
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: misty-step/landmark@v1
+      with:
+        mode: synthesis-only
+        healthcheck: 'true'
+        release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
+        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+{manifest_inputs}
+"#
+        )
+    } else {
+        format!(
+            r#"synthesize:
+  needs: {release_job}
+  if: needs.{release_job}.outputs.published == 'true'
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: misty-step/landmark@v1
+      with:
+        mode: synthesis-only
+        healthcheck: 'true'
+        release-tag: v${{{{ fromJson(needs.{release_job}.outputs.published_packages)[0].version }}}}
+        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
+{manifest_inputs}
+"#
+        )
     }
 }
 
@@ -3222,6 +3544,16 @@ fn render_fleet_plan_markdown(plan: &FleetPlan) -> String {
                 repo.integration_rationale.join("; ")
             ));
         }
+        if !repo.workflow_patches.is_empty() {
+            out.push_str(&format!(
+                "- Workflow patches: {}\n",
+                repo.workflow_patches
+                    .iter()
+                    .map(|patch| patch.path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
         out.push('\n');
     }
     out
@@ -3261,6 +3593,9 @@ fn fleet_workflow_for_plan(repo: &FleetRepositoryPlan) -> String {
 }
 
 fn fleet_pr_should_write_workflow(repo: &FleetRepositoryPlan) -> bool {
+    if !repo.workflow_patches.is_empty() {
+        return false;
+    }
     matches!(
         repo.integration_mode.as_str(),
         "github-full" | "github-synthesis-only"
@@ -3295,7 +3630,13 @@ fn render_fleet_apply_markdown(
     for file in files.iter().filter(|file| file.as_str() != "diff.md") {
         out.push_str(&format!("# copy rendered `{file}` into this checkout\n"));
     }
-    out.push_str("git add .landmark.yml .github/workflows/landmark-release.yml 2>/dev/null || git add .landmark.yml\n");
+    let add_files = files
+        .iter()
+        .filter(|file| !matches!(file.as_str(), "diff.md" | "APPLY.md"))
+        .map(|file| shell_quote(file))
+        .collect::<Vec<_>>()
+        .join(" ");
+    out.push_str(&format!("git add {add_files}\n"));
     out.push_str(&format!("git commit -m {}\n", shell_quote(commit_message)));
     out.push_str(&format!("git push -u origin {}\n", shell_quote(branch)));
     out.push_str(&format!(
@@ -3320,7 +3661,7 @@ fn shell_quote(value: &str) -> String {
 fn render_fleet_pr_diff(
     repo: &FleetRepositoryPlan,
     manifest: &str,
-    workflow: Option<&str>,
+    workflow_files: &[(String, String)],
 ) -> String {
     let mut out = format!(
         "# {}\n\nDry-run branch: `landmark/adopt-{}`\n\n## Files\n\n### .landmark.yml\n\n```yaml\n{}\n```\n\n",
@@ -3328,11 +3669,8 @@ fn render_fleet_pr_diff(
         repo.repository.replace('/', "-"),
         manifest
     );
-    if let Some(workflow) = workflow {
-        out.push_str(&format!(
-            "### .github/workflows/landmark-release.yml\n\n```yaml\n{}\n```\n\n",
-            workflow
-        ));
+    for (path, workflow) in workflow_files {
+        out.push_str(&format!("### {}\n\n```yaml\n{}\n```\n\n", path, workflow));
     }
     out.push_str(&format!(
         "## Notes\n\n{}\n",
@@ -3628,6 +3966,14 @@ jobs:
 }
 
 fn workflow_release_please(branch: &str, manifest: Option<&LandmarkManifest>) -> String {
+    workflow_release_please_for_job(branch, manifest, "release-please")
+}
+
+fn workflow_release_please_for_job(
+    branch: &str,
+    manifest: Option<&LandmarkManifest>,
+    release_job: &str,
+) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     format!(
         r#"name: Release
@@ -3642,7 +3988,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  release-please:
+  {release_job}:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{{{ steps.release.outputs.release_created }}}}
@@ -3652,8 +3998,8 @@ jobs:
         id: release
 
   synthesize:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: {release_job}
+    if: needs.{release_job}.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -3663,7 +4009,7 @@ jobs:
         with:
           mode: synthesis-only
           healthcheck: 'true'
-          release-tag: ${{{{ needs.release-please.outputs.tag_name }}}}
+          release-tag: ${{{{ needs.{release_job}.outputs.tag_name }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
@@ -3675,6 +4021,15 @@ fn workflow_changesets(
     branch: &str,
     monorepo: bool,
     manifest: Option<&LandmarkManifest>,
+) -> String {
+    workflow_changesets_for_job(branch, monorepo, manifest, "release")
+}
+
+fn workflow_changesets_for_job(
+    branch: &str,
+    monorepo: bool,
+    manifest: Option<&LandmarkManifest>,
+    release_job: &str,
 ) -> String {
     let manifest_inputs = render_manifest_action_inputs(manifest, 10, Some("release-body"));
     if monorepo {
@@ -3691,7 +4046,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  release:
+  {release_job}:
     runs-on: ubuntu-latest
     outputs:
       published: ${{{{ steps.changesets.outputs.published }}}}
@@ -3711,11 +4066,11 @@ jobs:
           NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
 
   synthesize:
-    needs: release
-    if: needs.release.outputs.published == 'true'
+    needs: {release_job}
+    if: needs.{release_job}.outputs.published == 'true'
     strategy:
       matrix:
-        package: ${{{{ fromJson(needs.release.outputs.published_packages) }}}}
+        package: ${{{{ fromJson(needs.{release_job}.outputs.published_packages) }}}}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -3745,7 +4100,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  release:
+  {release_job}:
     runs-on: ubuntu-latest
     outputs:
       published: ${{{{ steps.changesets.outputs.published }}}}
@@ -3765,8 +4120,8 @@ jobs:
           NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
 
   synthesize:
-    needs: release
-    if: needs.release.outputs.published == 'true'
+    needs: {release_job}
+    if: needs.{release_job}.outputs.published == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -3776,7 +4131,7 @@ jobs:
         with:
           mode: synthesis-only
           healthcheck: 'true'
-          release-tag: v${{{{ fromJson(needs.release.outputs.published_packages)[0].version }}}}
+          release-tag: v${{{{ fromJson(needs.{release_job}.outputs.published_packages)[0].version }}}}
           github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
@@ -11160,6 +11515,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
                 &[],
                 &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
             ),
+            fleet_existing_semantic_release_workflow_fixture(),
             fleet_fixture_repo(
                 "misty-step/release-please-app",
                 "release-please",
@@ -11367,6 +11723,7 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     }
     for (repo, expected) in [
         ("phrazzld/semantic-app", "github-full"),
+        ("phrazzld/semantic-workflow-app", "blocked"),
         ("misty-step/release-please-app", "github-synthesis-only"),
         ("misty-step/changesets-app", "github-synthesis-only"),
         ("phrazzld/manual-app", "github-synthesis-only"),
@@ -11475,6 +11832,65 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
             return Err(format!("{repo} dry-run wrote a GitHub workflow").into());
         }
     }
+    let release_please_path = pr_dir
+        .join("misty-step__release-please-app")
+        .join(".github/workflows/release.yml");
+    if !release_please_path.is_file() {
+        return Err("release-please dry-run did not update existing workflow path".into());
+    }
+    if pr_dir
+        .join("misty-step__release-please-app")
+        .join(".github/workflows/landmark-release.yml")
+        .exists()
+    {
+        return Err("release-please dry-run wrote a duplicate Landmark workflow".into());
+    }
+    let release_please_workflow = fs::read_to_string(release_please_path)?;
+    serde_yaml::from_str::<serde_yaml::Value>(&release_please_workflow)?;
+    if release_please_workflow
+        .matches("googleapis/release-please-action")
+        .count()
+        != 1
+        || !release_please_workflow.contains("needs: release-please")
+        || !release_please_workflow.contains("mode: synthesis-only")
+    {
+        return Err("release-please workflow patch duplicated or missed synthesis job".into());
+    }
+    let changesets_path = pr_dir
+        .join("misty-step__changesets-app")
+        .join(".github/workflows/release.yml");
+    if !changesets_path.is_file() {
+        return Err("changesets dry-run did not update existing workflow path".into());
+    }
+    if pr_dir
+        .join("misty-step__changesets-app")
+        .join(".github/workflows/landmark-release.yml")
+        .exists()
+    {
+        return Err("changesets dry-run wrote a duplicate Landmark workflow".into());
+    }
+    let changesets_workflow = fs::read_to_string(changesets_path)?;
+    serde_yaml::from_str::<serde_yaml::Value>(&changesets_workflow)?;
+    if changesets_workflow.matches("changesets/action").count() != 1
+        || !changesets_workflow.contains("needs: release")
+        || !changesets_workflow.contains("mode: synthesis-only")
+    {
+        return Err("changesets workflow patch duplicated or missed synthesis job".into());
+    }
+    let semantic_blocked = pr_plan
+        .repositories
+        .iter()
+        .find(|repo| repo.repository == "phrazzld/semantic-workflow-app")
+        .ok_or("semantic workflow fixture dry-run missing")?;
+    if !semantic_blocked.skipped
+        || !semantic_blocked
+            .reason
+            .contains("existing semantic-release workflow")
+    {
+        return Err(
+            "existing semantic-release workflow should be blocked for operator choice".into(),
+        );
+    }
     let semantic_receipt = pr_plan
         .repositories
         .iter()
@@ -11507,6 +11923,68 @@ fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> {
     }))
 }
 
+fn existing_release_please_workflow() -> String {
+    r#"name: Existing Release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+"#
+    .into()
+}
+
+fn existing_changesets_workflow() -> String {
+    r#"name: Existing Release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      published_packages: ${{ steps.changesets.outputs.publishedPackages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: changesets/action@v1
+        id: changesets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+"#
+    .into()
+}
+
+fn existing_semantic_release_workflow() -> String {
+    r#"name: Existing Release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+"#
+    .into()
+}
+
 fn fleet_fixture_repo(
     name_with_owner: &str,
     release_tool: &str,
@@ -11530,9 +12008,25 @@ fn fleet_fixture_repo(
         _ => Vec::new(),
     };
     let workflows = match release_tool {
-        "release-please" => vec!["release-please.yml".into()],
-        "changesets" => vec!["changesets.yml".into()],
+        "release-please" | "changesets" => vec!["release.yml".into()],
         "manual-tag" => vec!["release.yml".into()],
+        _ => Vec::new(),
+    };
+    let workflow_files = match release_tool {
+        "release-please" => vec![
+            fleet_workflow_file(
+                ".github/workflows/release.yml",
+                &existing_release_please_workflow(),
+            )
+            .expect("release-please fixture workflow"),
+        ],
+        "changesets" => vec![
+            fleet_workflow_file(
+                ".github/workflows/release.yml",
+                &existing_changesets_workflow(),
+            )
+            .expect("changesets fixture workflow"),
+        ],
         _ => Vec::new(),
     };
     let required_secrets = ["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"]
@@ -11575,6 +12069,7 @@ fn fleet_fixture_repo(
         package_topology,
         release_files,
         workflows,
+        workflow_files,
         existing_landmark: false,
         required_secrets,
         signals: vec![format!("{release_tool} fixture")],
@@ -11612,6 +12107,27 @@ fn fleet_existing_landmark_workflow_fixture() -> FleetRepository {
     repo.workflows = vec!["release.yml".into()];
     repo.signals
         .push("release.yml invokes Landmark action".into());
+    repo
+}
+
+fn fleet_existing_semantic_release_workflow_fixture() -> FleetRepository {
+    let mut repo = fleet_fixture_repo(
+        "phrazzld/semantic-workflow-app",
+        "semantic-release",
+        ("application", "github-release+semantic-release"),
+        (false, false),
+        "unprotected-or-unavailable",
+        &[],
+        &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+    );
+    repo.workflows = vec!["release.yml".into()];
+    repo.workflow_files = vec![
+        fleet_workflow_file(
+            ".github/workflows/release.yml",
+            &existing_semantic_release_workflow(),
+        )
+        .expect("semantic-release workflow fixture"),
+    ];
     repo
 }
 
@@ -11987,6 +12503,118 @@ mod tests {
         assert!(workflow.contains("mode: full"));
         assert!(workflow.contains("healthcheck: 'true'"));
         assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    }
+
+    #[test]
+    fn fleet_plan_patches_existing_release_please_workflow() {
+        let mut repo = fleet_fixture_repo(
+            "misty-step/release-please-app",
+            "release-please",
+            ("application", "github-release"),
+            (false, false),
+            "unprotected-or-unavailable",
+            &[],
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+        );
+        repo.workflow_files = vec![
+            fleet_workflow_file(
+                ".github/workflows/release-please.yml",
+                &existing_release_please_workflow(),
+            )
+            .expect("release-please workflow fixture"),
+        ];
+
+        let plan = plan_fleet_repository(&repo);
+
+        assert_eq!(plan.status, "ready");
+        assert_eq!(plan.workflow_patches.len(), 1);
+        let patch = &plan.workflow_patches[0];
+        assert_eq!(patch.path, ".github/workflows/release-please.yml");
+        serde_yaml::from_str::<serde_yaml::Value>(&patch.content).unwrap();
+        assert!(patch.content.contains("Existing Release"));
+        assert_eq!(
+            patch
+                .content
+                .matches("googleapis/release-please-action")
+                .count(),
+            1
+        );
+        assert!(patch.content.contains("needs: release-please"));
+        assert!(patch.content.contains("mode: synthesis-only"));
+        assert!(patch.content.contains("healthcheck: 'true'"));
+    }
+
+    #[test]
+    fn fleet_plan_patches_existing_changesets_workflow() {
+        let mut repo = fleet_fixture_repo(
+            "misty-step/changesets-app",
+            "changesets",
+            ("library", "github-release"),
+            (false, false),
+            "unprotected-or-unavailable",
+            &[],
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+        );
+        repo.workflow_files = vec![
+            fleet_workflow_file(
+                ".github/workflows/changesets.yml",
+                &existing_changesets_workflow(),
+            )
+            .expect("changesets workflow fixture"),
+        ];
+
+        let plan = plan_fleet_repository(&repo);
+
+        assert_eq!(plan.status, "ready");
+        assert_eq!(plan.workflow_patches.len(), 1);
+        let patch = &plan.workflow_patches[0];
+        assert_eq!(patch.path, ".github/workflows/changesets.yml");
+        serde_yaml::from_str::<serde_yaml::Value>(&patch.content).unwrap();
+        assert!(patch.content.contains("Existing Release"));
+        assert_eq!(patch.content.matches("changesets/action").count(), 1);
+        assert!(patch.content.contains("needs: release"));
+        assert!(patch.content.contains("mode: synthesis-only"));
+        assert!(patch.content.contains("healthcheck: 'true'"));
+    }
+
+    #[test]
+    fn fleet_plan_blocks_existing_semantic_release_workflow() {
+        let plan = plan_fleet_repository(&fleet_existing_semantic_release_workflow_fixture());
+
+        assert_eq!(plan.status, "blocked");
+        assert_eq!(plan.integration_mode, "blocked");
+        assert!(plan.workflow_patches.is_empty());
+        assert!(
+            plan.skip_reason
+                .contains("existing semantic-release workflow")
+        );
+    }
+
+    #[test]
+    fn fleet_plan_blocks_secret_like_workflow_bodies() {
+        let mut repo = fleet_fixture_repo(
+            "misty-step/release-please-app",
+            "release-please",
+            ("application", "github-release"),
+            (false, false),
+            "unprotected-or-unavailable",
+            &[],
+            &["GH_RELEASE_TOKEN", "OPENROUTER_API_KEY"],
+        );
+        let mut workflow = existing_release_please_workflow();
+        workflow.push_str("\n# ghp_1234567890abcdef\n");
+        repo.workflow_files = vec![
+            fleet_workflow_file(".github/workflows/release.yml", &workflow)
+                .expect("release-please workflow fixture"),
+        ];
+
+        let plan = plan_fleet_repository(&repo);
+
+        assert_eq!(plan.status, "blocked");
+        assert!(plan.workflow_patches.is_empty());
+        assert!(plan.skip_reason.contains("secret-like literals"));
+        assert!(repo.workflow_files[0].content.is_empty());
+        assert!(repo.workflow_files[0].content_redacted);
     }
 
     #[test]
