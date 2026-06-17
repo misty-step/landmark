@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landmark.dev/schemas/release-kit.v1.schema.json",
+  "title": "Landmark release kit",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landmark-artifact": "release kit plan",
+  "required": ["schema_version", "generated_at", "product", "release", "classification", "artifacts", "producer_contracts", "provenance", "approvals", "status"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "landmark.release-kit.v1" },
+    "generated_at": { "type": "string" },
+    "product": { "type": "object" },
+    "release": { "type": "object" },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["importance", "audiences", "why_it_matters"],
+      "properties": {
+        "importance": { "type": "string", "enum": ["low", "medium", "high", "launch", "migration", "security"] },
+        "audiences": { "type": "array", "items": { "type": "string" } },
+        "why_it_matters": { "type": "string" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "audience", "owner", "status", "acceptance"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["technical_changelog", "release_notes", "migration_guide", "docs_update", "blog_post", "essay", "announcement", "social_copy", "image", "screenshot", "gif", "video", "demo_script", "feed", "other"]
+          },
+          "audience": { "type": "string" },
+          "owner": { "type": "string", "enum": ["landmark", "producer-adapter", "human"] },
+          "status": { "type": "string", "enum": ["planned", "produced", "verified", "blocked", "waived"] },
+          "path": { "type": "string" },
+          "sha256": { "type": "string" },
+          "acceptance": { "type": "array", "items": { "type": "string" } },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "blocker": { "type": "string" },
+          "waiver": { "type": "string" }
+        }
+      }
+    },
+    "producer_contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "producer", "adapter_kind", "input_artifacts", "output_artifacts", "mutates", "acceptance"],
+        "properties": {
+          "id": { "type": "string" },
+          "producer": { "type": "string" },
+          "adapter_kind": { "type": "string", "enum": ["local-cli", "browser", "remote-service", "harness-skill", "human"] },
+          "input_artifacts": { "type": "array", "items": { "type": "string" } },
+          "output_artifacts": { "type": "array", "items": { "type": "string" } },
+          "command": { "type": "string" },
+          "mutates": { "type": "boolean" },
+          "acceptance": { "type": "array", "items": { "type": "string" } },
+          "evidence_path": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "sources"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "state"],
+        "properties": {
+          "artifact_id": { "type": "string" },
+          "state": { "type": "string", "enum": ["not-required", "pending", "approved", "rejected", "waived"] },
+          "approver": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "blocked", "summary"],
+      "properties": {
+        "complete": { "type": "boolean" },
+        "blocked": { "type": "boolean" },
+        "summary": { "type": "string" }
+      }
+    }
+  }
+}

@@ -889,7 +889,7 @@ fn describe(args: DescribeArgs) -> Result<()> {
     let document = json!({
         "schema_version": "landmark.describe.v1",
         "landmark_version": env!("CARGO_PKG_VERSION"),
-        "product_boundary": "Rust CLI runtime; GitHub Action is an adapter wrapper",
+        "product_boundary": "Rust CLI release-intelligence runtime; GitHub Action and rich artifact producers are adapter wrappers",
         "providers": ["local", "github"],
         "modes": ["full", "synthesis-only", "artifacts-only", "release-body"],
         "stdout_stderr": {
@@ -973,6 +973,13 @@ fn schema_descriptors() -> Vec<SchemaDescriptor> {
             id: "https://landmark.dev/schemas/release-context.v1.schema.json",
             version: "v1",
             artifact: "release context packet",
+        },
+        SchemaDescriptor {
+            name: "release_kit",
+            path: "schemas/release-kit.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-kit.v1.schema.json",
+            version: "v1",
+            artifact: "release kit plan",
         },
         SchemaDescriptor {
             name: "replay_result",

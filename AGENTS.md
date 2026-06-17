@@ -3,8 +3,17 @@
 ## Product Boundary
 Landmark is a portable release-intelligence runtime. The GitHub Action is one
 packaging layer, not the product boundary. Keep release analysis, synthesis,
-artifact writing, feed generation, notifications, and provider policy in the
-Rust CLI. Keep GitHub-specific behavior behind explicit adapter seams.
+artifact planning, artifact writing, feed generation, notifications, evidence,
+and provider policy in the Rust CLI. Keep GitHub-specific behavior behind
+explicit adapter seams.
+
+Landmark owns release truth, audience/importance classification, release-kit
+plans, provenance, approval state, and producer contracts for final-mile output.
+It does not own bespoke media production, brand design, CMS publishing, or
+long-running creative pipelines. Demo videos, GIFs, images, blog posts, essays,
+and docs updates should be represented as typed planned/produced artifacts and
+delegated to explicit local, browser, service, harness, or human producer
+adapters.
 
 ## Architecture
 - `crates/landmark/src/main.rs` owns the Rust runtime and current CLI surface.
@@ -24,6 +33,9 @@ Rust CLI. Keep GitHub-specific behavior behind explicit adapter seams.
   manifest files, JSON artifacts, and local git state.
 - `synthesis-only`, `backfill --mode artifacts-only`, `write-artifacts`,
   `update-feed`, and webhook/Slack notification paths are the portable core.
+- `release-kit` artifacts are the planning/evidence boundary for richer
+  final-mile output; prefer extending the typed kit contract over embedding a
+  producer in the core runtime.
 - GitHub operations such as release-body mutation, PR extraction, issue
   lifecycle, fleet scan, and Action outputs must be treated as adapter-specific.
 - Prefer adding a provider interface or local artifact sink over broadening

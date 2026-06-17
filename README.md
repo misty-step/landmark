@@ -4,7 +4,7 @@ Landmark is a portable release-intelligence runtime for repositories that use
 conventional commits. It can run as a GitHub Action, but the product boundary
 is the Rust CLI: local scripts, generic CI systems, and agents can invoke the
 same runtime to produce version decisions, technical changelogs, public release
-notes, feeds, and machine-readable evidence.
+notes, release-kit plans, feeds, and machine-readable evidence.
 
 ## What It Does
 
@@ -14,7 +14,9 @@ notes, feeds, and machine-readable evidence.
 4. Runs `semantic-release` (version bump, changelog update, release creation)
 5. Optionally synthesizes user-facing notes from technical changelog content
 6. Updates the GitHub Release body to prepend a `## What's New` section
-7. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
+7. Plans final-mile artifacts such as docs updates, blog drafts, demo scripts,
+   images, GIFs, and videos through typed producer contracts
+8. Optionally creates a GitHub issue when synthesis/update fails and exposes synthesis status output
 
 ## Adoption Modes
 
@@ -171,6 +173,7 @@ The checked schema registry lives in `schemas/`:
 - `schemas/landmark-manifest.v1.schema.json` for `.landmark.yml`
 - `schemas/synthesis-status.v1.schema.json` for synthesis status output
 - `schemas/release-context.v1.schema.json` for deterministic release context packets
+- `schemas/release-kit.v1.schema.json` for final-mile release kit plans and producer contracts
 - `schemas/replay-result.v1.schema.json` for replay evidence
 - `schemas/fleet-plan.v1.schema.json` for fleet adoption plans
 - `schemas/release-entry.v1.schema.json` for release-note JSON entries
@@ -178,6 +181,31 @@ The checked schema registry lives in `schemas/`:
 - `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
 
 For the full cold-agent contract, see `docs/agent-integration.md`.
+
+## Final-Mile Release Kit
+
+Landmark's durable role is release truth and artifact coordination, not every
+creative production engine. It should own the typed release kit:
+
+- release facts, classification, and audience-specific importance
+- artifact recommendations, paths, dependencies, and acceptance checks
+- provenance for the sources each artifact used
+- approval state, blockers, and waivers
+- producer contracts for richer outputs such as docs patches, migration guides,
+  blog posts, essays, social copy, screenshots, images, GIFs, and demo videos
+
+Landmark should directly produce simple/default text and data artifacts close to
+release truth: technical changelogs, public notes, markdown/plaintext/HTML/JSON
+entries, RSS feeds, migration notes, documentation patch suggestions, and
+announcement/blog drafts. Specialized media and publishing work belongs behind
+explicit producer adapters: local CLIs, browser capture, external services,
+harness skills, or human approval. A video producer should receive a release-kit
+brief and return artifact paths, hashes, evidence, and review status; it should
+not become part of the core release engine.
+
+This keeps the core deep: Landmark decides what the release needs, why it needs
+it, what facts must be preserved, and whether the final packet is complete. The
+repo or organization chooses the producers that satisfy those contracts.
 
 ## Adoption Dry Run
 

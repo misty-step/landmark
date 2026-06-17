@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Landmark Release Kit Vision Plan</title>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #161b1d; background: #f6f7f2; }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 56px; }
+    h1 { margin: 0 0 10px; font-size: 34px; letter-spacing: 0; }
+    h2 { margin: 28px 0 10px; font-size: 20px; letter-spacing: 0; }
+    p, li { line-height: 1.5; }
+    code { background: #edf1ee; border-radius: 4px; padding: 2px 5px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .panel { border: 1px solid #cbd6d0; background: #fff; border-radius: 8px; padding: 16px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #cbd6d0; }
+    th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid #e0e6e2; }
+    th { background: #edf2ee; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Release Kit Vision And Boundary</h1>
+  <p>Capture Landmark as the release-intelligence core for final-mile shipping: release truth, artifact plans, provenance, and producer contracts, not a bundled video editor, brand studio, or CMS engine.</p>
+  <div class="grid">
+    <section class="panel"><h2>Own</h2><p>Typed release facts, audience and importance classification, artifact plans, provenance, approvals, and adapter contracts.</p></section>
+    <section class="panel"><h2>Compose</h2><p>Specialized producers for demo videos, GIFs, images, docs updates, essays, and publishing workflows through explicit contracts.</p></section>
+    <section class="panel"><h2>Avoid</h2><p>Embedding bespoke media rendering, brand design, browser capture, CMS publishing, or long-running creative pipelines in the Rust core.</p></section>
+  </div>
+  <h2>Edits</h2>
+  <table>
+    <thead><tr><th>Surface</th><th>Change</th><th>Proof</th></tr></thead>
+    <tbody>
+      <tr><td>Agent contract</td><td>Update <code>AGENTS.md</code> with the ownership boundary and adapter rule.</td><td>Agent-facing prose stays short and points to docs.</td></tr>
+      <tr><td>Product docs</td><td>Update README, project vision, and an ADR with the release kit ownership model.</td><td>Cold readers see the product focus without chat context.</td></tr>
+      <tr><td>Harness primitive</td><td>Add <code>schemas/release-kit.v1.schema.json</code> and register it in <code>describe --json</code>.</td><td><code>check-action-contract</code> validates schema registry/docs alignment.</td></tr>
+      <tr><td>Backlog</td><td>Add a shaped implementation ticket for the runtime release-kit artifact graph.</td><td>Future work has an oracle instead of vague ambition.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
