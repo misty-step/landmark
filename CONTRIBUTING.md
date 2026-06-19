@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Rust stable
-- Node.js 22+
+- Node.js 24+
 - npm (ships with Node)
 
 ## Setup
@@ -44,8 +44,13 @@ cargo run --locked -- check-action-contract
 
 ## CI
 
-All of the above run automatically on PRs and pushes to `master`. See `.github/workflows/ci.yml`.
-CI also runs `cargo run --locked -- check-version-sync`, which ensures `package.json` and `crates/landmark/Cargo.toml` match the latest semver git tag.
+Run the aggregate local gate before sending changes:
+
+```bash
+bin/gate
+```
+
+GitHub Actions calls the same local gate on PRs and pushes to `master`. The gate also runs `cargo run --locked -- check-version-sync`, which ensures `package.json` and `crates/landmark/Cargo.toml` match the latest semver git tag.
 
 ## Commits
 

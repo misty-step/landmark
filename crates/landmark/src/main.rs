@@ -8651,25 +8651,51 @@ fn schema_property_keys(schema: &Value, pointer: &str) -> BTreeSet<String> {
 fn validate_self_release_workflow_contract(repo_root: &Path) -> Result<Vec<String>> {
     let mut errors = Vec::new();
     let ci_path = repo_root.join(".github/workflows/ci.yml");
+    let gate_path = repo_root.join("bin/gate");
     let release_path = repo_root.join(".github/workflows/release.yml");
     let ci = fs::read_to_string(&ci_path)?;
+    let gate = fs::read_to_string(&gate_path)?;
     let release = fs::read_to_string(&release_path)?;
 
-    let lines: Vec<_> = ci.lines().collect();
-    if let Some(sync_line) = lines
-        .iter()
-        .position(|line| line.contains("cargo run --locked -- check-version-sync"))
-    {
-        let previous = lines[..sync_line]
-            .iter()
-            .rev()
-            .find(|line| !line.trim().is_empty())
-            .map(|line| line.trim());
-        if previous != Some("git fetch --tags --force origin") {
-            errors.push("CI workflow must fetch tags immediately before version sync".into());
+    if !ci.contains("run: bin/gate") {
+        errors.push("CI workflow must delegate the aggregate gate to bin/gate".into());
+    }
+    if ci.contains("cargo run --locked -- check-version-sync") {
+        errors.push("CI workflow must not duplicate version sync outside bin/gate".into());
+    }
+    for required in [
+        "LANDMARK_CI_EVENT",
+        "LANDMARK_PR_BASE_SHA",
+        "LANDMARK_PR_HEAD_REF",
+        "LANDMARK_PR_HEAD_REPO",
+        "LANDMARK_REPOSITORY",
+    ] {
+        if !ci.contains(required) {
+            errors.push(format!(
+                "CI workflow missing bin/gate context env `{required}`"
+            ));
         }
-    } else {
-        errors.push("CI workflow missing version sync step".into());
+    }
+
+    for required in [
+        "git fetch --tags --force origin",
+        "cargo run --locked -- check-version-sync --reference \"${tag_ref}\" \"${candidate_args[@]}\"",
+        "candidate_args+=(--allow-release-candidate)",
+        "LANDMARK_PR_BASE_SHA",
+        "landmark/self-release",
+    ] {
+        if !gate.contains(required) {
+            errors.push(format!(
+                "bin/gate missing self-release version-sync token `{required}`"
+            ));
+        }
+    }
+    if let (Some(fetch), Some(sync)) = (
+        gate.find("git fetch --tags --force origin"),
+        gate.find("cargo run --locked -- check-version-sync"),
+    ) && fetch > sync
+    {
+        errors.push("bin/gate must fetch tags before version sync".into());
     }
 
     if let Some(step) = release.find("name: Synthesize landed release notes") {

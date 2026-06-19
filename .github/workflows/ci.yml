@@ -7,26 +7,7 @@ on:
       - master
 
 jobs:
-  lockfile-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Verify Node 24 runtime
-        shell: bash
-        run: node --version | grep '^v24\.'
-
-      - name: Verify lockfile is in sync
-        shell: bash
-        run: npm ci --no-fund --no-audit
-
-  rust-checks:
+  local-gate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,60 +20,24 @@ jobs:
         with:
           toolchain: 1.96.0
 
-      - name: Install Rust targets
-        shell: bash
-        run: rustup target add x86_64-unknown-linux-musl
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
-      - name: Install tooling
+      - name: Verify Node 24 runtime
         shell: bash
-        run: npm ci --no-fund --no-audit
+        run: node --version | grep '^v24\.'
 
-      - name: Format Rust
-        shell: bash
-        run: cargo fmt --check
-
-      - name: Lint Rust
-        shell: bash
-        run: cargo clippy --locked --all-targets -- -D warnings
-
-      - name: Verify metadata versions match latest release tag
+      - name: Run local gate
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_REF: ${{ github.head_ref }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          RELEASE_BRANCH: landmark/self-release
-        run: |
-          set -euo pipefail
-          tag_ref="HEAD"
-          candidate_args=()
-          if [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
-            tag_ref="${PR_BASE_SHA}"
-            if [ "${PR_HEAD_REF}" = "${RELEASE_BRANCH}" ] && [ "${PR_HEAD_REPO}" = "${GITHUB_REPOSITORY}" ]; then
-              candidate_args+=(--allow-release-candidate)
-            fi
-          fi
-          git fetch --tags --force origin
-          cargo run --locked -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
-
-      - name: Verify public action contract
-        shell: bash
-        run: cargo run --locked -- check-action-contract
-
-      - name: Verify adoption setup analyzer
-        shell: bash
-        run: cargo run --locked -- setup --repo-root . --output-dir .landmark/setup
-
-      - name: Run tests
-        shell: bash
-        run: cargo test --locked
-
-      - name: Build checked-in Linux action binary
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build --locked --release --target x86_64-unknown-linux-musl
+          LANDMARK_CI_EVENT: ${{ github.event_name }}
+          LANDMARK_PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          LANDMARK_PR_HEAD_REF: ${{ github.head_ref || '' }}
+          LANDMARK_PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          LANDMARK_REPOSITORY: ${{ github.repository }}
+        run: bin/gate
 
       - name: Upload Linux action binary evidence
         if: always()
@@ -102,33 +47,6 @@ jobs:
           path: target/x86_64-unknown-linux-musl/release/landmark
           if-no-files-found: ignore
 
-      - name: Verify checked-in Linux action binary
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -x dist/landmark
-          cmp target/x86_64-unknown-linux-musl/release/landmark dist/landmark
-          shasum -a 256 -c dist/landmark.sha256
-          dist/landmark --help >/dev/null
-
-      - name: Replay Landmark action behavior
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-            dist/landmark replay-action \
-              --evidence-dir .landmark/replay \
-              --scenario action_static_contract \
-              --scenario consumer_full_mode_success \
-              --scenario consumer_synthesis_only_success \
-              --scenario consumer_degraded_required_fails \
-              --scenario consumer_release_update_failure \
-              --scenario consumer_floating_tag_behavior \
-              --scenario self_release_pr_path
-          else
-            dist/landmark replay-action --evidence-dir .landmark/replay
-          fi
-
       - name: Upload replay evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,13 +55,9 @@ jobs:
           path: .landmark/replay/
           if-no-files-found: ignore
 
-      - name: Validate action metadata
-        shell: bash
-        run: cargo run --locked -- check-action-contract
-
   merge-gate:
     runs-on: ubuntu-latest
-    needs: [lockfile-check, rust-checks]
+    needs: [local-gate]
     if: always()
     steps:
       - name: All checks passed

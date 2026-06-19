@@ -9,12 +9,27 @@ npm ci --no-fund --no-audit
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
-tag_ref="HEAD"
-if git remote get-url origin >/dev/null 2>&1; then
-  git fetch --tags --force origin master
-  tag_ref="origin/master"
+ci_event="${LANDMARK_CI_EVENT:-${GITHUB_EVENT_NAME:-}}"
+pr_base_sha="${LANDMARK_PR_BASE_SHA:-}"
+pr_head_ref="${LANDMARK_PR_HEAD_REF:-${GITHUB_HEAD_REF:-}}"
+pr_head_repo="${LANDMARK_PR_HEAD_REPO:-}"
+repository="${LANDMARK_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
+release_branch="${LANDMARK_RELEASE_BRANCH:-landmark/self-release}"
+tag_ref="${LANDMARK_VERSION_REFERENCE:-HEAD}"
+candidate_args=()
+if [ "${ci_event}" = "pull_request" ] && [ -n "${pr_base_sha}" ]; then
+  tag_ref="${pr_base_sha}"
+  if [ "${pr_head_ref}" = "${release_branch}" ] && [ "${pr_head_repo}" = "${repository}" ]; then
+    candidate_args+=(--allow-release-candidate)
+  fi
 fi
-cargo run --locked -- check-version-sync --reference "${tag_ref}"
+if git remote get-url origin >/dev/null 2>&1; then
+  git fetch --tags --force origin
+  if [ "${tag_ref}" = "HEAD" ] && git show-ref --verify --quiet refs/remotes/origin/master; then
+    tag_ref="origin/master"
+  fi
+fi
+cargo run --locked -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
 cargo run --locked -- check-action-contract
 cargo run --locked -- setup --repo-root . --output-dir .landmark/setup
 cargo run --locked -- replay-action --evidence-dir .landmark/replay
