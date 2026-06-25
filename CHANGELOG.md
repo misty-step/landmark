@@ -1,3 +1,13 @@
+# [1.25.0](https://github.com/misty-step/landmark/compare/v1.24.0...v1.25.0) (2026-06-25)
+
+### Features
+
+* **fleet:** deliver backfill-first adoption lane ([bddbfb2](https://github.com/misty-step/landmark/commit/bddbfb2824e783ca94b8924deabb9bd85b3d9e2b))
+* **run:** emit release kit artifact graph (#153) ([587ca13](https://github.com/misty-step/landmark/commit/587ca13f0c9f4fa1bf054dfd8dd66aee9bb353b3))
+
+### Bug Fixes
+
+* **fleet:** attach to existing release workflows ([03c65b2](https://github.com/misty-step/landmark/commit/03c65b264a6a6a899783e6df04236b866823a882))
 # [1.24.0](https://github.com/misty-step/landmark/compare/v1.23.1...v1.24.0) (2026-06-16)
 
 ### Features
