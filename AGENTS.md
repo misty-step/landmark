@@ -16,7 +16,12 @@ delegated to explicit local, browser, service, harness, or human producer
 adapters.
 
 ## Architecture
-- `crates/landmark/src/main.rs` owns the Rust runtime and current CLI surface.
+- `crates/landmark/src/main.rs` is the Rust binary facade: parse CLI, dispatch,
+  and render top-level errors. Runtime responsibilities should live in focused
+  modules under `crates/landmark/src/`.
+- `bin/check-architecture` ratchets the facade and extracted module sizes; if
+  a module needs to grow past its current budget, split ownership first or
+  update the ratchet with an explicit architecture reason.
 - `action.yml` is a composite GitHub Action wrapper around `dist/landmark` plus
   `semantic-release` for full GitHub release mode.
 - `dist/landmark` is the checked-in Linux x86_64 musl binary consumed by the
@@ -43,6 +48,8 @@ adapters.
 
 ## Repo Gates
 - Run `bin/gate` before closeout for code or contract changes.
+- `bin/gate` includes `bin/check-architecture`; do not weaken the ratchet to
+  land feature work.
 - For action contract changes, also ensure `check-action-contract` coverage
   remains green through the gate.
 - Use `bin/replay-action` when touching release orchestration, synthesis,
