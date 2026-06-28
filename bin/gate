@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 npm ci --no-fund --no-audit
+bin/check-architecture
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked

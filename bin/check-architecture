@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+failures=()
+
+check_max_lines() {
+  local path="$1"
+  local max="$2"
+  if [ ! -f "${path}" ]; then
+    failures+=("${path} is missing")
+    return
+  fi
+  local lines
+  lines="$(wc -l < "${path}" | tr -d ' ')"
+  if [ "${lines}" -gt "${max}" ]; then
+    failures+=("${path} has ${lines} lines; max ${max}")
+  fi
+}
+
+check_max_lines "crates/landmark/src/main.rs" 120
+check_max_lines "crates/landmark/src/release_kit.rs" 1000
+
+while IFS= read -r path; do
+  case "${path}" in
+    crates/landmark/src/main.rs|crates/landmark/src/release_kit.rs)
+      continue
+      ;;
+    *)
+      check_max_lines "${path}" 1200
+      ;;
+  esac
+done < <(find crates/landmark/src -type f -name '*.rs' | sort)
+
+if [ "${#failures[@]}" -gt 0 ]; then
+  printf 'architecture ratchet failed:\n' >&2
+  printf ' - %s\n' "${failures[@]}" >&2
+  exit 1
+fi
+
+echo "architecture ratchet ok"
