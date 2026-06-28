@@ -736,6 +736,11 @@ For a local one-command gate, run:
 bin/gate
 ```
 
+For branch protection, require these hosted checks:
+
+- `merge-gate`: aggregate gate for the `local-gate` job that runs `bin/gate`.
+- `trufflehog`: repository secret scan.
+
 ## Custom semantic-release Config
 
 Landmark ships a default config at `configs/.releaserc.json`. If your repo has its own semantic-release config file (`.releaserc`, `.releaserc.json`, `.releaserc.yml`, `.releaserc.yaml`, `release.config.js`, `release.config.cjs`, or `release.config.mjs`), Landmark uses it instead of the bundled defaults.

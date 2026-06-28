@@ -57,7 +57,7 @@ jobs:
 
             - Release tag: `${{ steps.prepare.outputs.release_tag }}`
             - Generated files: `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, `dist/landmark.sha256`
-            - Required pre-merge check: `merge-gate`
+            - Required pre-merge checks: `merge-gate`, `trufflehog`
 
             The GitHub Release is published only after this PR lands on protected `master`.
 
