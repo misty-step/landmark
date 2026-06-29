@@ -15,6 +15,9 @@ and docs updates should be represented as typed planned/produced artifacts and
 delegated to explicit local, browser, service, harness, or human producer
 adapters.
 
+Read `VISION.md` before changing release boundaries, adoption modes,
+agent-native contracts, or release-kit producer responsibilities.
+
 ## Architecture
 - `crates/landmark/src/main.rs` is the Rust binary facade: parse CLI, dispatch,
   and render top-level errors. Runtime responsibilities should live in focused
