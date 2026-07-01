@@ -898,6 +898,10 @@ fn test_release_classification(significance: &str) -> ReleaseClassification {
         breaking: false,
         security: false,
         migration_heavy: false,
+        source: "test".into(),
+        model: String::new(),
+        deterministic_signals: Vec::new(),
+        disagreements: Vec::new(),
         reasons: Vec::new(),
     }
 }

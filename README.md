@@ -594,9 +594,18 @@ The `synthesis-status` output is a compact JSON object for automation:
       "model_policy": "balanced"
     },
     "deterministic": {
-      "commits": [{ "subject": "feat(cli): add import", "short_hash": "abc1234" }],
+      "commits": [
+        {
+          "subject": "feat(cli): add import",
+          "body": "Adds a guided import flow.",
+          "short_hash": "abc1234",
+          "conventional_type": "feat",
+          "breaking": false
+        }
+      ],
       "tags": ["v1.1.0"],
       "changed_files": ["src/import.rs"],
+      "diff_stats": [{ "path": "src/import.rs", "additions": 42, "deletions": 3, "binary": false }],
       "docs": [{ "path": "README.md", "title": "Landmark" }],
       "artifacts": {
         "internal_technical_changelog": "landmark.internal-technical-changelog.v1",
@@ -614,7 +623,10 @@ The `synthesis-status` output is a compact JSON object for automation:
       "user_visible": true,
       "breaking": false,
       "security": false,
-      "migration_heavy": false
+      "migration_heavy": false,
+      "source": "structured",
+      "deterministic_signals": ["conventional:feat"],
+      "disagreements": []
     },
     "cost": {
       "input_tokens": 1800,

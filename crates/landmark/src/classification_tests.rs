@@ -1,0 +1,180 @@
+use super::*;
+
+#[test]
+fn release_context_includes_commit_bodies_and_diff_stats() {
+    let repo = fixture_repo_with_landmark_125_commits();
+    let args = test_synthesize_args(repo.path(), "v1.25.0");
+    let config = test_synthesis_config("balanced");
+
+    let deterministic = deterministic_release_context(&args, &config);
+
+    assert!(
+        deterministic
+            .commits
+            .iter()
+            .any(|commit| commit.body.contains("Feature body carried into context")),
+        "{:?}",
+        deterministic.commits
+    );
+    assert!(
+        deterministic
+            .diff_stats
+            .iter()
+            .any(|stat| stat.path == "src/run.rs" && stat.additions > 0),
+        "{:?}",
+        deterministic.diff_stats
+    );
+}
+
+#[test]
+fn release_classifier_uses_structured_commits_for_semantic_release_changelog() {
+    let repo = fixture_repo_with_landmark_125_commits();
+    let args = test_synthesize_args(repo.path(), "v1.25.0");
+    let config = test_synthesis_config("balanced");
+    let deterministic = deterministic_release_context(&args, &config);
+    let technical = landmark_125_semantic_release_changelog();
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(
+        classification.user_visible,
+        "classification should not miss semantic-release Features/Bug Fixes: {:?}",
+        classification
+    );
+    assert_eq!(classification.significance, "medium");
+    assert!(
+        classification
+            .deterministic_signals
+            .iter()
+            .any(|signal| signal == "conventional:feat"),
+        "{:?}",
+        classification
+    );
+    assert!(
+        classification
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("parsed conventional commit")),
+        "{:?}",
+        classification
+    );
+}
+
+fn test_synthesis_config(model_policy: &str) -> EffectiveSynthesisConfig {
+    EffectiveSynthesisConfig {
+        product_name: "Demo".into(),
+        product_description: "Demo release automation.".into(),
+        voice_guide: String::new(),
+        audience: "developer".into(),
+        changelog_source: "auto".into(),
+        model_policy: model_policy.into(),
+        model: "primary/model".into(),
+        fallback_models: String::new(),
+        max_input_tokens: None,
+        max_output_tokens: None,
+        max_usd: None,
+    }
+}
+
+fn test_synthesize_args(repo: &Path, version: &str) -> SynthesizeArgs {
+    SynthesizeArgs {
+        api_key: "test".into(),
+        model: String::new(),
+        model_policy: String::new(),
+        api_url: "http://example.invalid".into(),
+        fallback_models: String::new(),
+        product_name: "Landmark".into(),
+        product_description: String::new(),
+        voice_guide: String::new(),
+        audience: None,
+        changelog_source: None,
+        version: version.into(),
+        changelog_file: repo.join("CHANGELOG.md"),
+        release_body_file: repo.join("release.md"),
+        pr_changelog_file: PathBuf::from("."),
+        prompt_template: PathBuf::from("."),
+        quality_file: repo.join("quality.txt"),
+        attempts_file: PathBuf::from("."),
+        templates_dir: PathBuf::from("templates/prompts"),
+        repo_root: repo.to_path_buf(),
+        dry_run_cost: false,
+        context_metadata_file: PathBuf::from("."),
+    }
+}
+
+fn fixture_repo_with_landmark_125_commits() -> tempfile::TempDir {
+    let repo = tempfile::tempdir().unwrap();
+    run_ok("git", ["init", "-q"], repo.path()).unwrap();
+    run_ok("git", ["config", "user.name", "Landmark Test"], repo.path()).unwrap();
+    run_ok(
+        "git",
+        ["config", "user.email", "landmark@example.invalid"],
+        repo.path(),
+    )
+    .unwrap();
+    fs::write(repo.path().join("README.md"), "# Landmark\n").unwrap();
+    run_ok("git", ["add", "README.md"], repo.path()).unwrap();
+    run_ok("git", ["commit", "-q", "-m", "chore: seed"], repo.path()).unwrap();
+    run_ok("git", ["tag", "v1.24.0"], repo.path()).unwrap();
+
+    fs::create_dir_all(repo.path().join("src")).unwrap();
+    fs::write(repo.path().join("src/fleet.rs"), "pub fn fleet() {}\n").unwrap();
+    run_ok("git", ["add", "src/fleet.rs"], repo.path()).unwrap();
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(fleet): deliver backfill-first adoption lane",
+            "-m",
+            "Feature body carried into context.",
+        ],
+        repo.path(),
+    )
+    .unwrap();
+
+    fs::write(repo.path().join("src/run.rs"), "pub fn run() {}\n").unwrap();
+    run_ok("git", ["add", "src/run.rs"], repo.path()).unwrap();
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(run): emit release kit artifact graph",
+        ],
+        repo.path(),
+    )
+    .unwrap();
+
+    fs::create_dir_all(repo.path().join(".github/workflows")).unwrap();
+    fs::write(
+        repo.path().join(".github/workflows/release.yml"),
+        "name: Release\n",
+    )
+    .unwrap();
+    run_ok("git", ["add", ".github/workflows/release.yml"], repo.path()).unwrap();
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "fix(fleet): attach to existing release workflows",
+        ],
+        repo.path(),
+    )
+    .unwrap();
+    repo
+}
+
+fn landmark_125_semantic_release_changelog() -> String {
+    "# [1.25.0](https://github.com/misty-step/landmark/compare/v1.24.0...v1.25.0) (2026-06-25)\n\n### Features\n\n* **fleet:** deliver backfill-first adoption lane\n* **run:** emit release kit artifact graph\n\n### Bug Fixes\n\n* **fleet:** attach to existing release workflows\n".into()
+}

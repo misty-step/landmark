@@ -389,7 +389,9 @@ pub(crate) fn synthesis_context_packet(
     prompt: &str,
 ) -> SynthesisContextPacket {
     let sources = synthesis_context_sources(args, config, technical, prompt);
-    let classification = classify_release_context(technical, &sources);
+    let deterministic = deterministic_release_context(args, config);
+    let classification =
+        classify_release_context_with_deterministic(technical, &sources, &deterministic);
     let cost = estimate_synthesis_cost(config, prompt, &classification, &sources);
     let decision = synthesis_decision(config, &cost, &classification);
     SynthesisContextPacket {
@@ -403,7 +405,7 @@ pub(crate) fn synthesis_context_packet(
             changelog_source: config.changelog_source.clone(),
             model_policy: config.model_policy.clone(),
         },
-        deterministic: deterministic_release_context(args, config),
+        deterministic,
         sources,
         classification,
         cost,
@@ -420,6 +422,7 @@ pub(crate) fn deterministic_release_context(
         commits: context_commits(repo_root, &args.version),
         tags: context_tags(repo_root),
         changed_files: context_changed_files(repo_root, &args.version),
+        diff_stats: context_diff_stats(repo_root, &args.version),
         manifest: ContextManifestSummary {
             present: repo_root.join(".landmark.yml").is_file(),
             product_name: config.product_name.clone(),
@@ -450,18 +453,23 @@ pub(crate) fn context_commits(repo_root: &Path, version: &str) -> Vec<ContextCom
                 .to_string(),
             breaking: is_breaking_commit(&commit),
             subject: commit.subject,
+            body: commit.body,
             short_hash: commit.short_hash,
         })
         .collect()
 }
 
-pub(crate) fn context_changed_files(repo_root: &Path, version: &str) -> Vec<String> {
+pub(crate) fn context_diff_range(repo_root: &Path, version: &str) -> String {
     let (previous, target) = context_git_range(repo_root, version);
-    let range = if previous.trim().is_empty() {
+    if previous.trim().is_empty() {
         format!("{}..{target}", empty_git_tree())
     } else {
         format!("{previous}..{target}")
-    };
+    }
+}
+
+pub(crate) fn context_changed_files(repo_root: &Path, version: &str) -> Vec<String> {
+    let range = context_diff_range(repo_root, version);
     run_ok("git", ["diff", "--name-only", range.as_str()], repo_root)
         .unwrap_or_default()
         .lines()
@@ -470,6 +478,33 @@ pub(crate) fn context_changed_files(repo_root: &Path, version: &str) -> Vec<Stri
         .take(100)
         .map(str::to_string)
         .collect()
+}
+
+pub(crate) fn context_diff_stats(repo_root: &Path, version: &str) -> Vec<ContextDiffStat> {
+    let range = context_diff_range(repo_root, version);
+    run_ok("git", ["diff", "--numstat", range.as_str()], repo_root)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(parse_numstat_line)
+        .take(100)
+        .collect()
+}
+
+pub(crate) fn parse_numstat_line(line: &str) -> Option<ContextDiffStat> {
+    let mut parts = line.splitn(3, '\t');
+    let additions = parts.next()?.trim();
+    let deletions = parts.next()?.trim();
+    let path = parts.next()?.trim();
+    if path.is_empty() {
+        return None;
+    }
+    let binary = additions == "-" || deletions == "-";
+    Some(ContextDiffStat {
+        path: path.to_string(),
+        additions: additions.parse().unwrap_or(0),
+        deletions: deletions.parse().unwrap_or(0),
+        binary,
+    })
 }
 
 pub(crate) fn context_git_range(repo_root: &Path, version: &str) -> (String, String) {
@@ -655,118 +690,6 @@ pub(crate) fn context_source(name: &str, kind: &str, text: &str) -> ContextSourc
 pub(crate) fn estimate_tokens(text: &str) -> u64 {
     let chars = text.chars().count() as u64;
     chars.div_ceil(4).max(1)
-}
-
-pub(crate) fn classify_release_context(
-    technical: &str,
-    sources: &[ContextSource],
-) -> ReleaseClassification {
-    let lower = technical.to_ascii_lowercase();
-    let mut categories = BTreeSet::new();
-    let mut reasons = Vec::new();
-    let docs = lower.contains("docs:")
-        || lower.contains("documentation")
-        || lower.contains("readme")
-        || lower.contains(".md");
-    let chore = lower.contains("chore:")
-        || lower.contains("ci:")
-        || lower.contains("build:")
-        || lower.contains("test:")
-        || lower.contains("refactor:");
-    let dependencies = lower.contains("dependabot")
-        || lower.contains("dependency")
-        || lower.contains("dependencies")
-        || lower.contains("package-lock")
-        || lower.contains("cargo.lock");
-    let internal = lower.contains("workflow")
-        || lower.contains(".github/")
-        || lower.contains("script")
-        || lower.contains("harness")
-        || lower.contains("replay");
-    let mut user_visible = lower.contains("feat:")
-        || lower.contains("fix:")
-        || lower.contains("user")
-        || lower.contains("public")
-        || lower.contains("cli")
-        || lower.contains("action input")
-        || lower.contains("release notes");
-    let breaking = lower.contains("breaking change")
-        || Regex::new(r"(?m)^[*-]?\s*[a-z]+(\([^)]*\))?!:")
-            .unwrap()
-            .is_match(technical);
-    let security = lower.contains("security")
-        || lower.contains("vulnerability")
-        || lower.contains("cve-")
-        || lower.contains("secret");
-    let migration_heavy = lower.contains("migration")
-        || lower.contains("migrate")
-        || lower.contains("deprecat")
-        || lower.contains("manifest")
-        || lower.contains("configuration");
-
-    if docs {
-        categories.insert("docs-only");
-        reasons.push("documentation signals detected".to_string());
-    }
-    if chore {
-        categories.insert("chore-only");
-        reasons.push("chore/build/test/refactor signals detected".to_string());
-    }
-    if dependencies {
-        categories.insert("dependency-only");
-        reasons.push("dependency update signals detected".to_string());
-    }
-    if internal {
-        categories.insert("internal-tooling");
-        reasons.push("internal tooling or workflow signals detected".to_string());
-    }
-    if user_visible {
-        categories.insert("user-visible");
-        reasons.push("feature, fix, CLI, or public-surface signals detected".to_string());
-    }
-    if breaking {
-        categories.insert("breaking");
-        reasons.push("breaking-change signals detected".to_string());
-    }
-    if security {
-        categories.insert("security");
-        reasons.push("security-sensitive signals detected".to_string());
-    }
-    if migration_heavy {
-        categories.insert("migration-heavy");
-        reasons.push("migration or configuration signals detected".to_string());
-    }
-    if sources
-        .iter()
-        .any(|source| source.name == "pull_requests" && source.included)
-    {
-        reasons.push("PR metadata contributed to context".to_string());
-    }
-    if categories.is_empty() {
-        categories.insert("user-visible");
-        user_visible = true;
-        reasons.push("no low-value-only signals found; defaulting to user-visible".to_string());
-    }
-
-    let low_value_only = !user_visible && !breaking && !security && !migration_heavy;
-    let significance = if breaking || security || migration_heavy {
-        "high"
-    } else if low_value_only {
-        "low"
-    } else {
-        "medium"
-    }
-    .to_string();
-
-    ReleaseClassification {
-        categories: categories.into_iter().map(str::to_string).collect(),
-        significance,
-        user_visible,
-        breaking,
-        security,
-        migration_heavy,
-        reasons,
-    }
 }
 
 pub(crate) fn estimate_synthesis_cost(

@@ -112,6 +112,7 @@ pub(crate) struct DeterministicReleaseContext {
     pub(crate) commits: Vec<ContextCommit>,
     pub(crate) tags: Vec<String>,
     pub(crate) changed_files: Vec<String>,
+    pub(crate) diff_stats: Vec<ContextDiffStat>,
     pub(crate) manifest: ContextManifestSummary,
     pub(crate) docs: Vec<ContextDocument>,
     pub(crate) package: Option<ContextPackage>,
@@ -124,9 +125,18 @@ pub(crate) struct DeterministicReleaseContext {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ContextCommit {
     pub(crate) subject: String,
+    pub(crate) body: String,
     pub(crate) short_hash: String,
     pub(crate) conventional_type: String,
     pub(crate) breaking: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ContextDiffStat {
+    pub(crate) path: String,
+    pub(crate) additions: u64,
+    pub(crate) deletions: u64,
+    pub(crate) binary: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -171,6 +181,10 @@ pub(crate) struct ReleaseClassification {
     pub(crate) breaking: bool,
     pub(crate) security: bool,
     pub(crate) migration_heavy: bool,
+    pub(crate) source: String,
+    pub(crate) model: String,
+    pub(crate) deterministic_signals: Vec<String>,
+    pub(crate) disagreements: Vec<String>,
     pub(crate) reasons: Vec<String>,
 }
 

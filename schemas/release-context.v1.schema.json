@@ -11,11 +11,12 @@
     "release": { "type": "object" },
     "deterministic": {
       "type": "object",
-      "required": ["commits", "tags", "changed_files", "manifest", "docs", "package", "prior_releases", "pr_metadata", "release_body", "artifacts"],
+      "required": ["commits", "tags", "changed_files", "diff_stats", "manifest", "docs", "package", "prior_releases", "pr_metadata", "release_body", "artifacts"],
       "properties": {
         "commits": { "type": "array", "items": { "type": "object" } },
         "tags": { "type": "array", "items": { "type": "string" } },
         "changed_files": { "type": "array", "items": { "type": "string" } },
+        "diff_stats": { "type": "array", "items": { "type": "object" } },
         "manifest": { "type": "object" },
         "docs": { "type": "array", "items": { "type": "object" } },
         "package": { "type": ["object", "null"] },

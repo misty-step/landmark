@@ -19,11 +19,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+#[cfg(test)]
+mod classification_tests;
 mod cli;
 mod describe;
 mod errors;
 mod manifest;
 mod providers;
+mod release_classification;
 mod release_kit;
 mod release_ops;
 mod replay;
@@ -39,6 +42,7 @@ pub(crate) use describe::*;
 pub(crate) use errors::*;
 pub(crate) use manifest::*;
 pub(crate) use providers::*;
+pub(crate) use release_classification::*;
 pub(crate) use release_ops::*;
 pub(crate) use replay::*;
 pub(crate) use self_release::*;
