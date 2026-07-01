@@ -177,6 +177,32 @@ fn dry_run_context_packet_does_not_call_model_classifier() {
     assert!(server.state.lock().unwrap().requests.is_empty());
 }
 
+#[test]
+fn release_notes_include_classification_notice_for_disagreements() {
+    let notes = "## Improvements\n\n- Added a safer classifier.\n";
+    let classification = ReleaseClassification {
+        categories: vec!["user-visible".into()],
+        significance: "medium".into(),
+        user_visible: true,
+        breaking: false,
+        security: false,
+        migration_heavy: false,
+        source: "model".into(),
+        model: "test/model".into(),
+        deterministic_signals: vec!["conventional:feat".into()],
+        disagreements: vec![
+            "deterministic floor found user-visible commit signals but model did not".into(),
+        ],
+        reasons: Vec::new(),
+    };
+
+    let rendered = notes_with_classification_notice(notes, &classification);
+
+    assert!(rendered.contains("Landmark classification notice"));
+    assert!(rendered.contains("conventional:feat"));
+    assert!(rendered.contains("deterministic floor found user-visible"));
+}
+
 fn test_synthesis_config(model_policy: &str) -> EffectiveSynthesisConfig {
     EffectiveSynthesisConfig {
         product_name: "Demo".into(),

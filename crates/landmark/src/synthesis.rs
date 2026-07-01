@@ -143,6 +143,7 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
                 } else {
                     "degraded"
                 };
+                let notes = notes_with_classification_notice(&notes, &context.classification);
                 attempts.push(json!({
                     "model": model,
                     "succeeded": true,
@@ -905,6 +906,25 @@ pub(crate) fn validate_notes(notes: &str) -> bool {
         && notes
             .lines()
             .any(|line| line.trim_start().starts_with("- "))
+}
+
+pub(crate) fn notes_with_classification_notice(
+    notes: &str,
+    classification: &ReleaseClassification,
+) -> String {
+    if classification.disagreements.is_empty() {
+        return notes.trim().to_string();
+    }
+    let signals = if classification.deterministic_signals.is_empty() {
+        "none".to_string()
+    } else {
+        classification.deterministic_signals.join(", ")
+    };
+    format!(
+        "{}\n\n> Landmark classification notice: deterministic release signals ({signals}) disagreed with model classification; synthesis proceeded. {}",
+        notes.trim(),
+        classification.disagreements.join("; ")
+    )
 }
 
 pub(crate) fn release_policy(args: ReleasePolicyArgs) -> Result<()> {

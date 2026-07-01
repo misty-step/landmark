@@ -363,7 +363,8 @@ default OpenRouter endpoint this preflight uses `openai/gpt-4o-mini`; custom
 endpoints use the configured primary model. Conventional `feat`, `fix`, `perf`,
 security, migration, and breaking-change signals remain the deterministic floor:
 if the model would downgrade or skip them, Landmark records the disagreement in
-the synthesis context and preserves a synthesis-worthy classification.
+the synthesis context, preserves a synthesis-worthy classification, and appends
+a short classification notice to the generated release notes.
 
 Use `dist/landmark run --provider local --repo-root .` to write a release-kit
 plan at `.landmark/run/release-kit.json` and record its schema and hash in
