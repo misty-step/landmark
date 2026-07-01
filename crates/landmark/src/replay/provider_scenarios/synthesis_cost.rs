@@ -134,6 +134,91 @@ model:
   description: Demo release automation.
 model:
   policy: balanced
+"#,
+    )?;
+    fs::create_dir_all(repo.join("src"))?;
+    fs::write(repo.join("src/cli.rs"), "pub fn fleet_command() {}\n")?;
+    run_ok("git", ["add", "src/cli.rs"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat(cli): add a fleet command"],
+        &repo,
+    )?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.2.4]\n\n- feat(cli): add a fleet command\n",
+    )?;
+    let disagreement_context = repo.join("disagreement-context.json");
+    let disagreement_quality = repo.join("disagreement-quality.txt");
+    let mut disagreement_fake = FakeState {
+        llm_status: 200,
+        update_status: 200,
+        ..Default::default()
+    };
+    disagreement_fake.llm_responses.push_back((
+        200,
+        json!({
+            "categories": ["internal-tooling"],
+            "significance": "low",
+            "user_visible": false,
+            "breaking": false,
+            "security": false,
+            "migration_heavy": false,
+            "reasons": ["model treated CLI release as internal"]
+        })
+        .to_string(),
+    ));
+    disagreement_fake
+        .llm_responses
+        .push_back((200, VALID_NOTES.to_string()));
+    let disagreement_server = start_fake_server(disagreement_fake)?;
+    let disagreement = Command::new(current_exe())
+        .args([
+            "synthesize",
+            "--api-key",
+            "test-key",
+            "--api-url",
+            &format!("{}/chat/completions", disagreement_server.url),
+            "--version",
+            "v1.2.4",
+            "--changelog-file",
+            "CHANGELOG.md",
+            "--templates-dir",
+        ])
+        .arg(&templates_dir)
+        .args(["--quality-file"])
+        .arg(&disagreement_quality)
+        .args(["--context-metadata-file"])
+        .arg(&disagreement_context)
+        .args(["--repo-root"])
+        .arg(&repo)
+        .current_dir(&repo)
+        .output()?;
+    if !disagreement.status.success() {
+        return Err(String::from_utf8_lossy(&disagreement.stderr)
+            .to_string()
+            .into());
+    }
+    let disagreement_notes = String::from_utf8(disagreement.stdout)?;
+    let disagreement_context_json: Value =
+        serde_json::from_str(&fs::read_to_string(&disagreement_context)?)?;
+    if !disagreement_notes.contains("Landmark classification notice")
+        || disagreement_context_json["classification"]["disagreements"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+        || disagreement_context_json["cost"]["skip"] != false
+    {
+        return Err("model downgrade disagreement was not visible in notes and context".into());
+    }
+
+    fs::write(
+        repo.join(".landmark.yml"),
+        r#"product:
+  name: Cost Policy Demo
+  description: Demo release automation.
+model:
+  policy: balanced
   primary: primary/model
   fallbacks:
     - fallback/model
@@ -391,6 +476,8 @@ model:
     Ok(json!({
         "dry_run_skip": dry_context["cost"],
         "cheap_model": cheap_request["model"],
+        "disagreement_notice": disagreement_notes.contains("Landmark classification notice"),
+        "disagreement_classification": disagreement_context_json["classification"],
         "fallback_attempts": attempts,
         "rich_cost": rich_context["cost"],
         "direct_rich_decision": direct_rich_context["decision"],
