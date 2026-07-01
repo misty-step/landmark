@@ -109,7 +109,10 @@ model:
         return Err(String::from_utf8_lossy(&cheap.stderr).to_string().into());
     }
     let cheap_requests = server.state.lock().unwrap().requests.clone();
-    let cheap_request = request_payload(&cheap_requests, 0)?;
+    let cheap_request = request_payloads_with_system(&cheap_requests, "release notes")?
+        .into_iter()
+        .next()
+        .ok_or("cheap policy did not send a synthesis request")?;
     let cheap_context: Value = serde_json::from_str(&fs::read_to_string(&cheap_context_file)?)?;
     if cheap_request["model"] != "openai/gpt-4o-mini"
         || cheap_context["cost"]["model_tier"] != "cheap"
@@ -142,6 +145,19 @@ model:
         update_status: 200,
         ..Default::default()
     };
+    fallback_fake.llm_responses.push_back((
+        200,
+        json!({
+            "categories": ["user-visible"],
+            "significance": "medium",
+            "user_visible": true,
+            "breaking": false,
+            "security": false,
+            "migration_heavy": false,
+            "reasons": ["fake classifier preserved feature release"]
+        })
+        .to_string(),
+    ));
     for _ in 0..HttpPolicy::default().attempts {
         fallback_fake.llm_responses.push_back((500, String::new()));
     }
@@ -183,9 +199,9 @@ model:
         return Err("fallback attempt sequence was not recorded".into());
     }
     let fallback_requests = fallback_server.state.lock().unwrap().requests.len();
-    if fallback_requests != HttpPolicy::default().attempts + 1 {
+    if fallback_requests != HttpPolicy::default().attempts + 2 {
         return Err(format!(
-            "fallback replay expected primary HTTP retries plus fallback request, got {fallback_requests}"
+            "fallback replay expected classifier request, primary HTTP retries, and fallback request, got {fallback_requests}"
         )
         .into());
     }
@@ -389,4 +405,20 @@ pub(crate) fn request_payload(requests: &[Value], index: usize) -> Result<Value>
         .and_then(|request| request["body"].as_str())
         .ok_or_else(|| format!("missing fake LLM request {index}"))?;
     Ok(serde_json::from_str(body)?)
+}
+
+pub(crate) fn request_payloads_with_system(requests: &[Value], needle: &str) -> Result<Vec<Value>> {
+    let mut payloads = Vec::new();
+    for index in 0..requests.len() {
+        let Ok(payload) = request_payload(requests, index) else {
+            continue;
+        };
+        let system = payload["messages"][0]["content"]
+            .as_str()
+            .unwrap_or_default();
+        if system.contains(needle) {
+            payloads.push(payload);
+        }
+    }
+    Ok(payloads)
 }

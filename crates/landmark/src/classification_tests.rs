@@ -66,6 +66,117 @@ fn release_classifier_uses_structured_commits_for_semantic_release_changelog() {
     );
 }
 
+#[test]
+fn model_classifier_uses_commit_diff_context_and_preserves_floor() {
+    let repo = fixture_repo_with_landmark_125_commits();
+    let args = test_synthesize_args(repo.path(), "v1.25.0");
+    let config = test_synthesis_config("balanced");
+    let deterministic = deterministic_release_context(&args, &config);
+    let technical = landmark_125_semantic_release_changelog();
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+    let server = start_fake_server(FakeState {
+        llm_status: 200,
+        llm_notes: json!({
+            "categories": ["chore-only"],
+            "significance": "low",
+            "user_visible": false,
+            "breaking": false,
+            "security": false,
+            "migration_heavy": false,
+            "reasons": ["model treated the release as internal maintenance"]
+        })
+        .to_string(),
+        update_status: 200,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let classification = classify_release_context_with_model(
+        &technical,
+        &sources,
+        &deterministic,
+        &format!("{}/chat/completions", server.url),
+        "test-key",
+        &["test/model".into()],
+    );
+
+    assert_eq!(classification.source, "model");
+    assert_eq!(classification.model, "test/model");
+    assert!(classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "medium");
+    assert!(
+        classification
+            .disagreements
+            .iter()
+            .any(|disagreement| disagreement.contains("deterministic floor")),
+        "{classification:?}"
+    );
+    assert!(
+        classification
+            .deterministic_signals
+            .iter()
+            .any(|signal| signal == "conventional:feat"),
+        "{classification:?}"
+    );
+
+    let requests = server.state.lock().unwrap().requests.clone();
+    let payload = request_payload(&requests, 0).unwrap();
+    let classifier_context: Value =
+        serde_json::from_str(payload["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["model"], "test/model");
+    assert!(
+        classifier_context["deterministic"]["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|commit| commit["subject"] == "feat(run): emit release kit artifact graph"),
+        "{classifier_context:#?}"
+    );
+    assert!(
+        classifier_context["deterministic"]["diff_stats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|stat| stat["path"] == "src/run.rs"),
+        "{classifier_context:#?}"
+    );
+}
+
+#[test]
+fn dry_run_context_packet_does_not_call_model_classifier() {
+    let repo = fixture_repo_with_landmark_125_commits();
+    let mut args = test_synthesize_args(repo.path(), "v1.25.0");
+    let config = test_synthesis_config("balanced");
+    let technical = landmark_125_semantic_release_changelog();
+    let server = start_fake_server(FakeState {
+        llm_status: 200,
+        llm_notes: json!({
+            "categories": ["user-visible"],
+            "significance": "medium",
+            "user_visible": true,
+            "breaking": false,
+            "security": false,
+            "migration_heavy": false,
+            "reasons": ["would classify if called"]
+        })
+        .to_string(),
+        update_status: 200,
+        ..Default::default()
+    })
+    .unwrap();
+    args.api_url = format!("{}/chat/completions", server.url);
+    args.dry_run_cost = true;
+
+    let context = synthesis_context_packet_with_model(&args, &config, &technical, "prompt");
+
+    assert_eq!(context.classification.source, "structured");
+    assert!(server.state.lock().unwrap().requests.is_empty());
+}
+
 fn test_synthesis_config(model_policy: &str) -> EffectiveSynthesisConfig {
     EffectiveSynthesisConfig {
         product_name: "Demo".into(),
