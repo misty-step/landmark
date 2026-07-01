@@ -18,5 +18,6 @@ changelog, feed, and evidence-preview surfaces.
 - [ ] `bin/gate` passes after implementation.
 
 ## Notes
-Reference board:
-`http://serenity.tail5f5eb4.ts.net:8788/landmark-operator-pulp-concept.png`.
+The original groom referenced a private local concept board. Do not track
+private artifact, network, or instance URLs in this public-able repo; regenerate
+or attach a portable concept artifact when this ticket is picked up.
