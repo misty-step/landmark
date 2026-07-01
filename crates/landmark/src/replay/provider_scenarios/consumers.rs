@@ -188,8 +188,16 @@ model:
     }
 
     let requests = server.state.lock().unwrap().requests.clone();
-    let default_request = request_payload(&requests, 0)?;
-    let override_request = request_payload(&requests, 1)?;
+    let synthesis_requests = request_payloads_with_system(&requests, "release notes")?;
+    if synthesis_requests.len() != 2 {
+        return Err(format!(
+            "expected two synthesis requests after classifier preflights, got {}",
+            synthesis_requests.len()
+        )
+        .into());
+    }
+    let default_request = &synthesis_requests[0];
+    let override_request = &synthesis_requests[1];
     let default_prompt = default_request["messages"][1]["content"]
         .as_str()
         .unwrap_or_default();

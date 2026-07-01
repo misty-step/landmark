@@ -140,6 +140,317 @@ pub(crate) fn classify_release_context_with_deterministic(
     }
 }
 
+pub(crate) fn classify_release_context_with_model(
+    technical: &str,
+    sources: &[ContextSource],
+    deterministic: &DeterministicReleaseContext,
+    api_url: &str,
+    api_key: &str,
+    models: &[String],
+) -> ReleaseClassification {
+    let deterministic_classification =
+        classify_release_context_with_deterministic(technical, sources, deterministic);
+    if api_key.trim().is_empty() || models.is_empty() {
+        return deterministic_classification;
+    }
+
+    let mut errors = Vec::new();
+    for model in models {
+        match request_release_classification(
+            api_url,
+            api_key,
+            model,
+            technical,
+            sources,
+            deterministic,
+        ) {
+            Ok(classification) => {
+                return apply_deterministic_floor(classification, &deterministic_classification);
+            }
+            Err(error) => errors.push(format!("{model}: {}", sanitize_text(&error.to_string()))),
+        }
+    }
+
+    let mut classification = deterministic_classification;
+    classification.source = "structured-fallback".into();
+    classification.reasons.push(format!(
+        "model classification unavailable; deterministic floor used: {}",
+        errors.join("; ")
+    ));
+    classification
+}
+
+pub(crate) fn release_classification_models(
+    config: &EffectiveSynthesisConfig,
+    api_url: &str,
+) -> Vec<String> {
+    if config.model_policy.trim().eq_ignore_ascii_case("off") {
+        return Vec::new();
+    }
+    let mut models = Vec::new();
+    let primary = config.model.trim();
+    let openrouter = api_url.to_ascii_lowercase().contains("openrouter.ai");
+    if openrouter && !config.model_policy.trim().eq_ignore_ascii_case("cheap") {
+        push_unique_model(&mut models, "openai/gpt-4o-mini");
+    } else if !primary.is_empty() && primary != "off" {
+        push_unique_model(&mut models, primary);
+    } else {
+        push_unique_model(&mut models, "openai/gpt-4o-mini");
+    }
+    for model in config
+        .fallback_models
+        .split(',')
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+    {
+        push_unique_model(&mut models, model);
+    }
+    if openrouter {
+        push_unique_model(&mut models, "openai/gpt-4o-mini");
+    }
+    models
+}
+
+pub(crate) fn push_unique_model(models: &mut Vec<String>, model: &str) {
+    if !models.iter().any(|existing| existing == model) {
+        models.push(model.to_string());
+    }
+}
+
+pub(crate) fn request_release_classification(
+    api_url: &str,
+    api_key: &str,
+    model: &str,
+    technical: &str,
+    sources: &[ContextSource],
+    deterministic: &DeterministicReleaseContext,
+) -> Result<ReleaseClassification> {
+    let input = json!({
+        "task": "classify_release_importance",
+        "rendered_changelog_context": technical,
+        "context_sources": sources,
+        "deterministic": deterministic,
+        "output_schema": {
+            "type": "object",
+            "required": [
+                "categories",
+                "significance",
+                "user_visible",
+                "breaking",
+                "security",
+                "migration_heavy",
+                "reasons"
+            ],
+            "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "user-visible",
+                            "docs-only",
+                            "chore-only",
+                            "dependency-only",
+                            "internal-tooling",
+                            "breaking",
+                            "security",
+                            "migration-heavy"
+                        ]
+                    }
+                },
+                "significance": { "type": "string", "enum": ["low", "medium", "high"] },
+                "user_visible": { "type": "boolean" },
+                "breaking": { "type": "boolean" },
+                "security": { "type": "boolean" },
+                "migration_heavy": { "type": "boolean" },
+                "reasons": { "type": "array", "items": { "type": "string" } }
+            }
+        }
+    });
+    let payload = json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You classify software releases. Return only one strict JSON object matching the requested schema. Conventional commit feat, fix, perf, and breaking signals are floor evidence, not final prose."
+            },
+            {
+                "role": "user",
+                "content": serde_json::to_string_pretty(&input)?
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 700
+    });
+    let response = curl_json("POST", api_url, Some(api_key), Some(&payload))?;
+    if !(200..300).contains(&response.status) {
+        return Err(format!("HTTP {}", response.status).into());
+    }
+    let value: Value = serde_json::from_str(&response.body)?;
+    let content = value["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("provider response did not include choices[0].message.content")?;
+    parse_model_release_classification(content, model)
+}
+
+pub(crate) fn parse_model_release_classification(
+    content: &str,
+    model: &str,
+) -> Result<ReleaseClassification> {
+    let value: Value = serde_json::from_str(extract_json_object(content)?)?;
+    let significance = string_field(&value, "significance")?;
+    if !matches!(significance.as_str(), "low" | "medium" | "high") {
+        return Err(format!(
+            "classification significance must be low, medium, or high; got {significance}"
+        )
+        .into());
+    }
+    Ok(ReleaseClassification {
+        categories: string_array_field(&value, "categories")?,
+        significance,
+        user_visible: bool_field(&value, "user_visible")?,
+        breaking: bool_field(&value, "breaking")?,
+        security: bool_field(&value, "security")?,
+        migration_heavy: bool_field(&value, "migration_heavy")?,
+        source: "model".into(),
+        model: model.into(),
+        deterministic_signals: Vec::new(),
+        disagreements: Vec::new(),
+        reasons: string_array_field(&value, "reasons")?,
+    })
+}
+
+pub(crate) fn extract_json_object(content: &str) -> Result<&str> {
+    let trimmed = content.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return Ok(trimmed);
+    }
+    let start = trimmed
+        .find('{')
+        .ok_or("classification response did not contain a JSON object")?;
+    let end = trimmed
+        .rfind('}')
+        .ok_or("classification response did not contain a complete JSON object")?;
+    if end < start {
+        return Err("classification response JSON object was malformed".into());
+    }
+    Ok(&trimmed[start..=end])
+}
+
+pub(crate) fn string_field(value: &Value, field: &str) -> Result<String> {
+    value[field]
+        .as_str()
+        .map(sanitize_text)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("classification field {field} must be a non-empty string").into())
+}
+
+pub(crate) fn bool_field(value: &Value, field: &str) -> Result<bool> {
+    value[field]
+        .as_bool()
+        .ok_or_else(|| format!("classification field {field} must be a boolean").into())
+}
+
+pub(crate) fn string_array_field(value: &Value, field: &str) -> Result<Vec<String>> {
+    let values = value[field]
+        .as_array()
+        .ok_or_else(|| format!("classification field {field} must be an array"))?;
+    let mut out = Vec::new();
+    for item in values {
+        let value = item
+            .as_str()
+            .map(sanitize_text)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("classification field {field} must contain only strings"))?;
+        out.push(value);
+    }
+    Ok(out)
+}
+
+pub(crate) fn apply_deterministic_floor(
+    mut classification: ReleaseClassification,
+    deterministic: &ReleaseClassification,
+) -> ReleaseClassification {
+    for signal in &deterministic.deterministic_signals {
+        if !classification
+            .deterministic_signals
+            .iter()
+            .any(|existing| existing == signal)
+        {
+            classification.deterministic_signals.push(signal.clone());
+        }
+    }
+
+    let user_visible_floor = deterministic.deterministic_signals.iter().any(|signal| {
+        matches!(
+            signal.as_str(),
+            "conventional:feat" | "conventional:fix" | "conventional:perf" | "breaking"
+        )
+    });
+    if user_visible_floor && !classification.user_visible {
+        classification.user_visible = true;
+        push_unique_category(&mut classification.categories, "user-visible");
+        classification
+            .disagreements
+            .push("deterministic floor found user-visible commit signals but model did not".into());
+    }
+    for (field, category, value) in [
+        ("breaking", "breaking", deterministic.breaking),
+        ("security", "security", deterministic.security),
+        (
+            "migration-heavy",
+            "migration-heavy",
+            deterministic.migration_heavy,
+        ),
+    ] {
+        if value
+            && !classification
+                .categories
+                .iter()
+                .any(|existing| existing == category)
+        {
+            push_unique_category(&mut classification.categories, category);
+        }
+        if field == "breaking" && value && !classification.breaking {
+            classification.breaking = true;
+            classification
+                .disagreements
+                .push("deterministic floor found breaking signals but model did not".into());
+        }
+        if field == "security" && value && !classification.security {
+            classification.security = true;
+            classification
+                .disagreements
+                .push("deterministic floor found security signals but model did not".into());
+        }
+        if field == "migration-heavy" && value && !classification.migration_heavy {
+            classification.migration_heavy = true;
+            classification
+                .disagreements
+                .push("deterministic floor found migration signals but model did not".into());
+        }
+    }
+    if (user_visible_floor || classification.breaking || classification.security)
+        && classification.significance == "low"
+    {
+        classification.significance = if classification.breaking || classification.security {
+            "high".into()
+        } else {
+            "medium".into()
+        };
+        classification
+            .disagreements
+            .push("deterministic floor prevented low-significance skip".into());
+    }
+    classification
+}
+
+pub(crate) fn push_unique_category(categories: &mut Vec<String>, category: &str) {
+    if !categories.iter().any(|existing| existing == category) {
+        categories.push(category.to_string());
+    }
+}
+
 pub(crate) fn release_relevant_commits<'a>(
     technical: &str,
     deterministic: &'a DeterministicReleaseContext,

@@ -351,10 +351,19 @@ that reflect the durable defaults.
 Use `dist/landmark synthesize --dry-run-cost ...` to inspect the release context
 packet without calling an LLM. The dry run reports deterministic repo facts,
 estimated input/output tokens, model tier, selected model, skip/use/escalation
-decision, cost estimate, release classification, and the final context sources
-included in the prompt. In `balanced` mode, docs-only, chore-only,
-dependency-only, and internal-tooling releases are skipped; breaking, security,
-and migration-heavy releases escalate to the rich tier.
+decision, cost estimate, deterministic release classification, and the final
+context sources included in the prompt. In `balanced` mode, docs-only,
+chore-only, dependency-only, and internal-tooling releases are skipped; breaking,
+security, and migration-heavy releases escalate to the rich tier.
+
+During real synthesis runs with `model.policy` enabled and an API key present,
+Landmark first sends the parsed commits, commit bodies, diff statistics, and the
+rendered changelog context through a cheap OpenAI-compatible classifier. On the
+default OpenRouter endpoint this preflight uses `openai/gpt-4o-mini`; custom
+endpoints use the configured primary model. Conventional `feat`, `fix`, `perf`,
+security, migration, and breaking-change signals remain the deterministic floor:
+if the model would downgrade or skip them, Landmark records the disagreement in
+the synthesis context and preserves a synthesis-worthy classification.
 
 Use `dist/landmark run --provider local --repo-root .` to write a release-kit
 plan at `.landmark/run/release-kit.json` and record its schema and hash in
@@ -624,9 +633,11 @@ The `synthesis-status` output is a compact JSON object for automation:
       "breaking": false,
       "security": false,
       "migration_heavy": false,
-      "source": "structured",
+      "source": "model",
+      "model": "openai/gpt-4o-mini",
       "deterministic_signals": ["conventional:feat"],
-      "disagreements": []
+      "disagreements": [],
+      "reasons": ["model classified the parsed release evidence as user-visible"]
     },
     "cost": {
       "input_tokens": 1800,

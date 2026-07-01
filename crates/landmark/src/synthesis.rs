@@ -95,7 +95,11 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
     let config = resolve_synthesis_config(&args)?;
     let technical = resolve_technical_changelog(&args, &config)?;
     let prompt = render_prompt(&args, &config, &technical)?;
-    let context = synthesis_context_packet(&args, &config, &technical, &prompt);
+    let context = if args.dry_run_cost {
+        synthesis_context_packet(&args, &config, &technical, &prompt)
+    } else {
+        synthesis_context_packet_with_model(&args, &config, &technical, &prompt)
+    };
     write_json_if_requested(&args.context_metadata_file, &context)?;
     if args.dry_run_cost {
         println!("{}", serde_json::to_string_pretty(&context)?);
@@ -392,6 +396,54 @@ pub(crate) fn synthesis_context_packet(
     let deterministic = deterministic_release_context(args, config);
     let classification =
         classify_release_context_with_deterministic(technical, &sources, &deterministic);
+    synthesis_context_packet_from_classification(
+        args,
+        config,
+        prompt,
+        sources,
+        deterministic,
+        classification,
+    )
+}
+
+pub(crate) fn synthesis_context_packet_with_model(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+    technical: &str,
+    prompt: &str,
+) -> SynthesisContextPacket {
+    if args.dry_run_cost {
+        return synthesis_context_packet(args, config, technical, prompt);
+    }
+    let sources = synthesis_context_sources(args, config, technical, prompt);
+    let deterministic = deterministic_release_context(args, config);
+    let models = release_classification_models(config, &args.api_url);
+    let classification = classify_release_context_with_model(
+        technical,
+        &sources,
+        &deterministic,
+        &args.api_url,
+        &args.api_key,
+        &models,
+    );
+    synthesis_context_packet_from_classification(
+        args,
+        config,
+        prompt,
+        sources,
+        deterministic,
+        classification,
+    )
+}
+
+pub(crate) fn synthesis_context_packet_from_classification(
+    args: &SynthesizeArgs,
+    config: &EffectiveSynthesisConfig,
+    prompt: &str,
+    sources: Vec<ContextSource>,
+    deterministic: DeterministicReleaseContext,
+    classification: ReleaseClassification,
+) -> SynthesisContextPacket {
     let cost = estimate_synthesis_cost(config, prompt, &classification, &sources);
     let decision = synthesis_decision(config, &cost, &classification);
     SynthesisContextPacket {
