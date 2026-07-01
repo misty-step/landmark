@@ -322,6 +322,101 @@ fn classifier_handles_empty_context_without_panicking() {
     assert_eq!(classification.significance, "medium");
 }
 
+#[test]
+fn classifier_defaults_non_conventional_commit_to_user_visible() {
+    let deterministic = deterministic_context(
+        vec![context_commit(
+            "Add guided import wizard",
+            "User-facing import flow without conventional commit syntax.",
+        )],
+        vec!["src/import.rs".into()],
+    );
+    let technical = "### Changes\n\n* Add guided import wizard\n".to_string();
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "medium");
+    assert!(classification.deterministic_signals.is_empty());
+}
+
+#[test]
+fn classifier_handles_revert_subject_as_visible_release_event() {
+    let deterministic = deterministic_context(
+        vec![context_commit(
+            "Revert \"feat(cli): add guided import wizard\"",
+            "This reverts commit abc1234.",
+        )],
+        vec!["src/import.rs".into()],
+    );
+    let technical = "### Reverts\n\n* Revert \"feat(cli): add guided import wizard\"\n".to_string();
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "medium");
+}
+
+#[test]
+fn classifier_covers_rename_and_bootstrap_ranges_without_keyword_misfire() {
+    let deterministic = deterministic_context(
+        vec![
+            context_commit(
+                "refactor: rename release-kit package",
+                "Internal crate rename without public operator action.",
+            ),
+            context_commit(
+                "chore: bootstrap release workflow",
+                "Initial workflow bootstrap for maintainers.",
+            ),
+        ],
+        vec![
+            "crates/landmark/src/release_kit.rs".into(),
+            ".github/workflows/release.yml".into(),
+        ],
+    );
+    let technical =
+        "### Maintenance\n\n* rename release-kit package\n* bootstrap release workflow\n"
+            .to_string();
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(!classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "low");
+    assert!(
+        classification
+            .deterministic_signals
+            .iter()
+            .any(|signal| signal == "conventional:refactor"),
+        "{classification:?}"
+    );
+    assert!(
+        classification
+            .deterministic_signals
+            .iter()
+            .any(|signal| signal == "conventional:chore"),
+        "{classification:?}"
+    );
+}
+
 fn deterministic_context(
     commits: Vec<ContextCommit>,
     changed_files: Vec<String>,
