@@ -300,6 +300,10 @@ directories, and an `APPLY.md` packet with the remote branch, commit, PR,
 rollback, and monitoring commands. Operators merge one downstream PR, watch its
 release run, then continue the fleet rollout deliberately.
 
+For the Misty Step factory-wide adoption standard, including when to choose
+full mode versus synthesis-only, see
+[`docs/fleet-integration-playbook.md`](docs/fleet-integration-playbook.md).
+
 ## Product Manifest
 
 Landmark reads `.landmark.yml` from the repository root before synthesis. It
@@ -380,7 +384,7 @@ release-mutating workflow.
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
 | `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
-| `node-version` | No | `22` | Node.js version used to run `semantic-release`. |
+| `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
 | `synthesis-required` | No | `false` | If `true`, fail the action when synthesis/update fails (after failure reporting). |
 | `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |

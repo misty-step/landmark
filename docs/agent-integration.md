@@ -54,6 +54,11 @@ landmark run \
 Without `--publish-release-body`, the GitHub provider still produces local
 evidence and artifacts without mutating the release body.
 
+For fleet-wide Misty Step adoption, use
+[`docs/fleet-integration-playbook.md`](fleet-integration-playbook.md) before
+opening consumer-repo branches. It defines the standard manifest, when to choose
+full mode versus synthesis-only, and the required verification steps.
+
 ## Schemas
 
 The checked schema registry is:
