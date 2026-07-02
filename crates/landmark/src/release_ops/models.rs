@@ -208,6 +208,8 @@ pub(crate) struct RunVersionDecision {
     pub(crate) commit_count: usize,
     pub(crate) conventional_commit_count: usize,
     pub(crate) range: String,
+    pub(crate) decisive_commit: Option<String>,
+    pub(crate) unknown_commits: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

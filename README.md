@@ -128,6 +128,13 @@ Landmark is language-agnostic. Your repo does not need `package.json` or Node.js
 unless full mode is running `semantic-release`; the action handles its own Node
 24 runtime setup.
 
+Full mode's version/changelog/tag/release decisions are `semantic-release`'s,
+kept only as a named **compatibility path** for repos that already run it.
+Landmark's own Rust version-decision engine (`landmark run`,
+`prepare-self-release`) is the source of truth everywhere else; `semantic-release`
+stays wired into full mode until a Rust-owned full-mode v2 can analyze, version,
+changelog, tag, and publish without it.
+
 ### GitHub Action Synthesis-Only Mode
 
 Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a

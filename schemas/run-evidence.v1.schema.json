@@ -19,13 +19,15 @@
     "notes_sha256": { "type": "string" },
     "version_decision": {
       "type": "object",
-      "required": ["latest_tag", "bump", "commit_count", "conventional_commit_count", "range"],
+      "required": ["latest_tag", "bump", "commit_count", "conventional_commit_count", "range", "decisive_commit", "unknown_commits"],
       "properties": {
         "latest_tag": { "type": "string" },
         "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
         "commit_count": { "type": "integer", "minimum": 0 },
         "conventional_commit_count": { "type": "integer", "minimum": 0 },
-        "range": { "type": "string" }
+        "range": { "type": "string" },
+        "decisive_commit": { "type": ["string", "null"] },
+        "unknown_commits": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": false
     },

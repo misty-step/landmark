@@ -108,29 +108,37 @@ pub(crate) fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext>
         .cloned()
         .unwrap_or_else(|| "HEAD".into());
     let commits = local_release_commits(&args.repo_root, previous_tag.as_str(), &target_ref)?;
-    let bump = decide_version_bump(&commits);
+    let classified: Vec<ClassifiedCommit> = commits
+        .iter()
+        .map(|commit| classify_commit(&commit.short_hash, &commit.subject, &commit.body))
+        .collect();
+    let decision = decide_version(&classified);
+    let bump = decision.bump.map(VersionBump::as_str).unwrap_or("none");
     let release_tag =
-        explicit_release_tag.unwrap_or_else(|| next_release_tag(latest_tag.as_ref(), &bump));
+        explicit_release_tag.unwrap_or_else(|| next_release_tag(latest_tag.as_ref(), bump));
     let version = release_tag.trim_start_matches('v').to_string();
     let range = if previous_tag.is_empty() {
         target_ref
     } else {
         format!("{previous_tag}..{target_ref}")
     };
-    let conventional_commit_count = commits
-        .iter()
-        .filter(|commit| conventional_commit_type(&commit.subject).is_some())
-        .count();
+    let conventional_commit_count = classified.len() - decision.unknown_commits.len();
     Ok(RunReleaseContext {
         release_tag,
         previous_tag,
         version,
         decision: RunVersionDecision {
             latest_tag: latest_tag.map(|tag| tag.tag).unwrap_or_default(),
-            bump,
+            bump: bump.to_string(),
             commit_count: commits.len(),
             conventional_commit_count,
             range,
+            decisive_commit: decision.decisive.map(|commit| commit.evidence_line()),
+            unknown_commits: decision
+                .unknown_commits
+                .iter()
+                .map(ClassifiedCommit::evidence_line)
+                .collect(),
         },
         commits,
     })
@@ -171,28 +179,6 @@ pub(crate) fn local_release_commits(
             })
         })
         .collect())
-}
-
-pub(crate) fn decide_version_bump(commits: &[RunCommit]) -> String {
-    if commits.iter().any(is_breaking_commit) {
-        "major".into()
-    } else if commits
-        .iter()
-        .any(|commit| conventional_commit_type(&commit.subject) == Some("feat"))
-    {
-        "minor".into()
-    } else if commits.iter().any(|commit| {
-        matches!(
-            conventional_commit_type(&commit.subject),
-            Some("fix" | "perf")
-        )
-    }) {
-        "patch".into()
-    } else if commits.is_empty() {
-        "none".into()
-    } else {
-        "patch".into()
-    }
 }
 
 pub(crate) fn conventional_commit_type(subject: &str) -> Option<&str> {

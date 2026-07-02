@@ -56,7 +56,7 @@ fn typed_artifact_renders_shared_outputs() {
 }
 
 #[test]
-fn local_provider_version_decision_uses_conventional_commits() {
+fn next_release_tag_bumps_from_latest() {
     let latest = BackfillTag {
         tag: "v1.2.3".into(),
         version: "1.2.3".into(),
@@ -64,38 +64,6 @@ fn local_provider_version_decision_uses_conventional_commits() {
         package: String::new(),
         prerelease: false,
     };
-    assert_eq!(
-        decide_version_bump(&[RunCommit {
-            subject: "feat(cli): add local run".into(),
-            short_hash: String::new(),
-            body: String::new(),
-        }]),
-        "minor"
-    );
-    assert_eq!(
-        decide_version_bump(&[RunCommit {
-            subject: "fix(action): patch output".into(),
-            short_hash: String::new(),
-            body: String::new(),
-        }]),
-        "patch"
-    );
-    assert_eq!(
-        decide_version_bump(&[RunCommit {
-            subject: "feat(api)!: change provider contract".into(),
-            short_hash: String::new(),
-            body: String::new(),
-        }]),
-        "major"
-    );
-    assert_eq!(
-        decide_version_bump(&[RunCommit {
-            subject: "feat(api): rename field".into(),
-            short_hash: String::new(),
-            body: "BREAKING CHANGE: clients must migrate field names".into(),
-        }]),
-        "major"
-    );
     assert_eq!(next_release_tag(Some(&latest), "minor"), "v1.3.0");
     assert_eq!(next_release_tag(Some(&latest), "patch"), "v1.2.4");
     assert_eq!(next_release_tag(Some(&latest), "major"), "v2.0.0");
@@ -929,18 +897,49 @@ fn setup_generated_workflows_are_yaml() {
 }
 
 #[test]
-fn self_release_bump_ignores_non_release_commits() {
-    assert!(classify_release_commit("abcdef0", "docs: update readme", "").is_none());
+fn bump_version_applies_each_bump_kind() {
+    assert_eq!(bump_version("1.2.3", VersionBump::Major).unwrap(), "2.0.0");
+    assert_eq!(bump_version("1.2.3", VersionBump::Minor).unwrap(), "1.3.0");
+    assert_eq!(bump_version("1.2.3", VersionBump::Patch).unwrap(), "1.2.4");
 }
 
 #[test]
-fn self_release_bump_detects_breaking_major() {
-    let fix = classify_release_commit("abcdef0", "fix(runtime): close leak", "").unwrap();
-    let feat = classify_release_commit("abcdef1", "feat(setup): add analyzer", "").unwrap();
-    let breaking = classify_release_commit("abcdef2", "feat(api)!: rename output", "").unwrap();
-    let bump = release_bump(&[fix, feat, breaking]).unwrap();
-    assert!(matches!(bump, ReleaseBump::Major));
-    assert_eq!(bump_version("1.2.3", bump).unwrap(), "2.0.0");
+fn self_release_commits_skip_release_commits_and_keep_the_rest() {
+    let repo = tempfile::tempdir().unwrap();
+    let path = repo.path();
+    run_ok("git", ["init", "-q"], path).unwrap();
+    run_ok("git", ["config", "user.name", "Test"], path).unwrap();
+    run_ok(
+        "git",
+        ["config", "user.email", "test@example.invalid"],
+        path,
+    )
+    .unwrap();
+    fs::write(path.join("f"), "1").unwrap();
+    run_ok("git", ["add", "."], path).unwrap();
+    run_ok("git", ["commit", "-q", "-m", "chore: seed"], path).unwrap();
+    run_ok("git", ["tag", "v1.0.0"], path).unwrap();
+    fs::write(path.join("f"), "2").unwrap();
+    run_ok("git", ["add", "."], path).unwrap();
+    run_ok("git", ["commit", "-q", "-m", "feat(x): add thing"], path).unwrap();
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "chore(release): 1.1.0",
+        ],
+        path,
+    )
+    .unwrap();
+    let commits = self_release_commits(path, "v1.0.0").unwrap();
+    assert_eq!(commits.len(), 1);
+    assert_eq!(commits[0].subject, "feat(x): add thing");
+    let changelog_commits = release_worthy_commits(&commits);
+    assert_eq!(changelog_commits.len(), 1);
+    assert_eq!(changelog_commits[0].category, "features");
 }
 
 #[test]

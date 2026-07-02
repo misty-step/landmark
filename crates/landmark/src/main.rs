@@ -36,6 +36,9 @@ mod synthesis;
 #[cfg(test)]
 mod tests;
 mod util;
+mod version_decision;
+#[cfg(test)]
+mod version_decision_tests;
 
 pub(crate) use cli::*;
 pub(crate) use describe::*;
@@ -49,6 +52,7 @@ pub(crate) use self_release::*;
 pub(crate) use setup_fleet::*;
 pub(crate) use synthesis::*;
 pub(crate) use util::*;
+pub(crate) use version_decision::*;
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn Error>>;
 

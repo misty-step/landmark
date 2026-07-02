@@ -609,6 +609,8 @@ pub(crate) struct SelfReleasePlan {
     pub(crate) changed_files: Vec<String>,
     pub(crate) changelog: String,
     pub(crate) commits: Vec<SelfReleaseCommit>,
+    pub(crate) decisive_commit: Option<String>,
+    pub(crate) unknown_commits: Vec<String>,
 }
 
 #[derive(Clone, Serialize)]
