@@ -12,9 +12,12 @@ Transform the technical changelog below into concise notes for engineers integra
 
 - Breaking changes: If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, why, migration steps. Do not repeat them in other sections.
 - Prioritize integration impact: API behavior, configuration changes, migration implications, and reliability fixes.
-- For new capabilities, start bullets with "You can now...".
-- For fixes, start bullets with "Fixed...".
-- For improvements, start bullets with "The [thing] now...".
+- For new capabilities, lead with the integration-relevant benefit.
+- For fixes, state plainly what was broken and that it's fixed.
+- For improvements, show what got better.
+- Vary how bullets open. Do not start every feature bullet with "You can now," every fix
+  with "Fixed," or every improvement with "The [thing] now" — that repetition reads as
+  templated. Let each bullet's specific content dictate its own natural phrasing.
 - Include practical impact and required action when relevant (for example, update config, rotate key, rerun migration).
 - Omit purely internal items unless they directly affect users or integrators.
 - Never include PR numbers, commit hashes, issue IDs, file paths, or internal process details.

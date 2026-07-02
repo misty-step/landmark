@@ -11,9 +11,12 @@ Transform the technical changelog below into user-facing release notes.
 ## Writing guidelines
 
 - **Breaking changes:** If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, why, migration steps. Do not repeat them in other sections.
-- **Features:** Start with "You can now..." to frame new capabilities from the user's perspective.
-- **Bug fixes:** Start with "Fixed..." to confirm resolution clearly.
-- **Improvements:** Start with "The [thing] now..." to show what got better.
+- **Features:** Frame new capabilities from the user's perspective and lead with the benefit.
+- **Bug fixes:** State plainly what was broken and that it's fixed.
+- **Improvements:** Show what got better and by how much, when the changelog says.
+- Vary how bullets open. Do not start every feature bullet with "You can now," every fix
+  with "Fixed," or every improvement with "The [thing] now" — that repetition reads as
+  templated. Let each bullet's specific content dictate its own natural phrasing.
 - Each non-breaking bullet should be one concise sentence explaining what changed and why it matters.
 - Omit internal-only items (CI, tooling, refactors, dependency bumps) unless they have user-visible impact.
 - Never include PR numbers, commit hashes, issue IDs, file paths, function names, or internal process details.

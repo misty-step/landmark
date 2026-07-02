@@ -13,9 +13,12 @@ Transform the technical changelog below into simple, benefit-first updates for n
 - Breaking changes: If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, what to do next.
 - Use plain language and avoid jargon.
 - Focus on user outcomes: speed, reliability, clarity, ease of use, and reduced friction.
-- For new capabilities, start bullets with "You can now...".
-- For fixes, start bullets with "Fixed...".
-- For improvements, start bullets with "The [thing] now...".
+- For new capabilities, lead with the benefit from the user's perspective.
+- For fixes, state plainly what was broken and that it's fixed.
+- For improvements, show what got better.
+- Vary how bullets open. Do not start every feature bullet with "You can now," every fix
+  with "Fixed," or every improvement with "The [thing] now" — that repetition reads as
+  templated. Let each bullet's specific content dictate its own natural phrasing.
 - Keep each non-breaking bullet to one short sentence.
 - Omit internal-only changes unless they clearly improve user experience.
 - Never include PR numbers, commit hashes, issue IDs, file paths, function names, or internal process details.

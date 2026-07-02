@@ -14,9 +14,12 @@ Transform the technical changelog below into updates for security, compliance, a
 - Prioritize security and risk impact first, then reliability and platform updates.
 - Preserve CVE identifiers exactly when present (for example, `CVE-2024-1234`).
 - Explicitly call out compliance-relevant changes when mentioned (auditability, access control, encryption, retention).
-- For new capabilities, start bullets with "You can now...".
-- For fixes, start bullets with "Fixed...".
-- For improvements, start bullets with "The [thing] now...".
+- For new capabilities, lead with the operational or compliance-relevant benefit.
+- For fixes, state plainly what was broken and that it's fixed.
+- For improvements, show what got better.
+- Vary how bullets open. Do not start every feature bullet with "You can now," every fix
+  with "Fixed," or every improvement with "The [thing] now" — that repetition reads as
+  templated. Let each bullet's specific content dictate its own natural phrasing.
 - Include required follow-up actions when relevant (rotation, policy update, migration step).
 - Omit internal-only items unless they affect security posture, compliance, or operations.
 - Never include PR numbers, commit hashes, issue IDs, file paths, function names, or internal process details.
