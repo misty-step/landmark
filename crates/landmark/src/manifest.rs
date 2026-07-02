@@ -464,6 +464,42 @@ pub(crate) fn manifest_schema_key_contracts()
     ]
 }
 
+pub(crate) fn release_context_schema_key_contracts()
+-> Vec<(&'static str, &'static str, &'static [&'static str])> {
+    vec![
+        (
+            "release-context.classification",
+            "/properties/classification/properties",
+            &[
+                "categories",
+                "significance",
+                "user_visible",
+                "breaking",
+                "security",
+                "migration_heavy",
+                "source",
+                "model",
+                "deterministic_signals",
+                "disagreements",
+                "reasons",
+            ],
+        ),
+        (
+            "release-context.cost",
+            "/properties/cost/properties",
+            &[
+                "input_tokens",
+                "output_tokens",
+                "model_tier",
+                "model",
+                "estimated_usd",
+                "skip",
+                "skip_reason",
+            ],
+        ),
+    ]
+}
+
 pub(crate) fn yaml_value_at_label<'a>(
     raw: &'a serde_yaml::Value,
     label: &str,

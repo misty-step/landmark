@@ -27,8 +27,38 @@
       }
     },
     "sources": { "type": "array", "items": { "type": "object" } },
-    "classification": { "type": "object" },
-    "cost": { "type": "object" },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "significance", "user_visible", "breaking", "security", "migration_heavy", "source", "model", "deterministic_signals", "disagreements", "reasons"],
+      "properties": {
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "significance": { "type": "string" },
+        "user_visible": { "type": "boolean" },
+        "breaking": { "type": "boolean" },
+        "security": { "type": "boolean" },
+        "migration_heavy": { "type": "boolean" },
+        "source": { "type": "string" },
+        "model": { "type": "string" },
+        "deterministic_signals": { "type": "array", "items": { "type": "string" } },
+        "disagreements": { "type": "array", "items": { "type": "string" } },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_tokens", "output_tokens", "model_tier", "model", "estimated_usd", "skip", "skip_reason"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "model_tier": { "type": "string" },
+        "model": { "type": "string" },
+        "estimated_usd": { "type": "number" },
+        "skip": { "type": "boolean" },
+        "skip_reason": { "type": "string" }
+      }
+    },
     "decision": { "type": "object", "required": ["action", "reason", "llm_required", "model_tier"] }
   }
 }

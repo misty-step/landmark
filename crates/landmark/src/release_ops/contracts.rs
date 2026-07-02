@@ -223,8 +223,13 @@ pub(crate) fn validate_agent_native_contracts(repo_root: &Path) -> Result<Vec<St
         }
     }
     errors.extend(validate_command_contract_coverage());
-    errors.extend(validate_manifest_schema_alignment(
+    errors.extend(validate_schema_key_alignment(
         &repo_root.join("schemas/landmark-manifest.v1.schema.json"),
+        manifest_schema_key_contracts(),
+    )?);
+    errors.extend(validate_schema_key_alignment(
+        &repo_root.join("schemas/release-context.v1.schema.json"),
+        release_context_schema_key_contracts(),
     )?);
     for required in [
         "landmark describe --json",
@@ -436,10 +441,13 @@ pub(crate) fn validate_readme_command_names(readme: &str) -> Vec<String> {
     errors
 }
 
-pub(crate) fn validate_manifest_schema_alignment(path: &Path) -> Result<Vec<String>> {
+pub(crate) fn validate_schema_key_alignment(
+    path: &Path,
+    contracts: Vec<(&'static str, &'static str, &'static [&'static str])>,
+) -> Result<Vec<String>> {
     let schema: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
     let mut errors = Vec::new();
-    for (label, pointer, allowed) in manifest_schema_key_contracts() {
+    for (label, pointer, allowed) in contracts {
         let actual = schema_property_keys(&schema, pointer);
         let expected: BTreeSet<String> = allowed.iter().map(|key| (*key).to_string()).collect();
         if actual != expected {
