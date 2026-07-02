@@ -38,12 +38,10 @@ if command -v rustup >/dev/null 2>&1; then
   rustup target add x86_64-unknown-linux-musl
 fi
 if [ "$(uname -s)" = "Linux" ]; then
-  bin/build-linux-action --check
+  bin/build-linux-action
 else
-  echo "non-Linux host: byte-for-byte Linux action binary parity is enforced by hosted CI"
+  echo "non-Linux host: skipping x86_64-unknown-linux-musl build check; the release workflow's build-release-assets matrix builds and publishes it"
 fi
-test -x dist/landmark
-shasum -a 256 -c dist/landmark.sha256
 
 if command -v actionlint >/dev/null 2>&1; then
   actionlint

@@ -11,7 +11,7 @@ Use Landmark against real repositories before claiming adoption quality. The out
 
 1. Start from the local Landmark checkout and read `AGENTS.md`.
 2. Create an evidence directory under `.landmark/dogfood/<date-or-run>/`.
-3. Build/run the Rust binary locally; on macOS use `cargo run --locked -- ...` or `target/debug/landmark`, not `dist/landmark` because the checked-in action binary is Linux-only.
+3. Build/run the Rust binary locally with `cargo run --locked -- ...` or `target/debug/landmark`. The action itself bootstrap-downloads a published release binary; there is no checked-in binary to run locally.
 4. Run a read-only fleet scan first:
 
 ```bash

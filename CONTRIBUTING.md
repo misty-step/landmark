@@ -74,7 +74,7 @@ Releases are fully automated. Merging to `master` triggers:
 2. LLM synthesis generates user-facing "What's New" notes and prepends them to the release body
 
 No manual version bumping or tagging required.
-Metadata versions are updated automatically during release prepare via `./dist/landmark update-version-metadata`.
+Metadata versions are updated automatically during release prepare via `cargo run --locked -- update-version-metadata`.
 
 ## Architecture
 
@@ -86,9 +86,6 @@ landmark/
 │   └── .releaserc.json       # semantic-release config
 ├── crates/
 │   └── landmark/             # Rust runtime and tests
-├── dist/
-│   ├── landmark              # Checked-in Linux action binary
-│   └── landmark.sha256       # Runtime checksum
 ├── bin/
 │   ├── gate                  # Local verification gate
 │   └── replay-action         # Local consumer replay wrapper

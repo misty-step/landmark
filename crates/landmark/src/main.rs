@@ -54,7 +54,6 @@ pub(crate) type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 pub(crate) const VALID_NOTES: &str = "## Improvements\n\n- Added a replay harness that checks release behavior in a disposable repo.\n- Captured release body updates, artifacts, tags, and structured logs.\n- Kept the run local so no production secrets or GitHub releases are touched.\n";
 pub(crate) const INVALID_NOTES: &str = "hello, here are the release notes";
-pub(crate) const LINUX_ACTION_TARGET: &str = "x86_64-unknown-linux-musl";
 
 fn main() {
     let cli = Cli::parse();

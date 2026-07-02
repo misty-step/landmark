@@ -28,16 +28,12 @@ jobs:
         with:
           toolchain: 1.96.0
 
-      - name: Install Rust targets
-        shell: bash
-        run: rustup target add x86_64-unknown-linux-musl
-
       - name: Prepare release pull request
         id: prepare
         shell: bash
         run: |
           set -euo pipefail
-          ./dist/landmark prepare-self-release \
+          cargo run --locked -- prepare-self-release \
             --repo-root . \
             --repository "${GITHUB_REPOSITORY}" \
             --release-branch landmark/self-release \
@@ -56,13 +52,99 @@ jobs:
             Automated Landmark self-release PR.
 
             - Release tag: `${{ steps.prepare.outputs.release_tag }}`
-            - Generated files: `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, `dist/landmark.sha256`
+            - Generated files: `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, `Cargo.lock`
             - Required pre-merge checks: `merge-gate`, `trufflehog`
+            - Per-target release binaries and checksums are built and attached to the
+              GitHub Release after this PR lands; they are not part of this diff.
 
             The GitHub Release is published only after this PR lands on protected `master`.
 
   publish-landed-release:
     if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      release_tag: ${{ steps.publish.outputs.release_tag }}
+    steps:
+      - name: Checkout landed release
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+
+      - name: Publish landed release metadata
+        id: publish
+        shell: bash
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          cargo run --locked -- publish-self-release \
+            --repo-root . \
+            --github-token "${GH_RELEASE_TOKEN}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --target-sha "${GITHUB_SHA}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+  build-release-assets:
+    needs: publish-landed-release
+    if: needs.publish-landed-release.outputs.published == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout landed release
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        shell: bash
+        run: cargo build --locked --release --target "${{ matrix.target }}"
+
+      - name: Package asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          cp "target/${{ matrix.target }}/release/landmark" "assets/landmark-${{ matrix.target }}"
+          chmod +x "assets/landmark-${{ matrix.target }}"
+
+      - name: Upload asset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: landmark-${{ matrix.target }}
+          path: assets/landmark-${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release-assets:
+    needs: [publish-landed-release, build-release-assets]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -75,26 +157,33 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_RELEASE_TOKEN }}
 
-      - name: Publish landed release metadata
-        id: publish
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: landmark-*
+          path: assets
+          merge-multiple: true
+
+      - name: Checksum release assets
+        shell: bash
+        working-directory: assets
+        run: sha256sum landmark-* > checksums.txt
+
+      - name: Upload release assets
         shell: bash
         env:
-          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          ./dist/landmark publish-self-release \
-            --repo-root . \
-            --github-token "${GH_RELEASE_TOKEN}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --target-sha "${GITHUB_SHA}" \
-            --github-output "${GITHUB_OUTPUT}"
+          gh release upload "${{ needs.publish-landed-release.outputs.release_tag }}" \
+            assets/landmark-* assets/checksums.txt \
+            --repo "${GITHUB_REPOSITORY}" --clobber
 
       - name: Synthesize landed release notes
-        if: steps.publish.outputs.published == 'true'
         uses: ./
         with:
           mode: synthesis-only
-          release-tag: ${{ steps.publish.outputs.release_tag }}
+          release-tag: ${{ needs.publish-landed-release.outputs.release_tag }}
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           synthesis-required: "false"

@@ -1,6 +1,6 @@
 # ADR 0001: Rust Runtime Boundary
 
-Status: accepted
+Status: accepted (the checked-in-binary distribution mechanism is superseded by [ADR 0003](0003-published-release-binaries.md); the Rust-runtime-over-Python decision below still stands)
 Date: 2026-06-11
 
 ## Context

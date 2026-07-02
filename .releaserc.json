@@ -14,7 +14,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "./dist/landmark update-version-metadata --version ${nextRelease.version}"
+        "prepareCmd": "cargo run --locked -- update-version-metadata --version ${nextRelease.version}"
       }
     ],
     [

@@ -35,14 +35,6 @@ pub(crate) fn current_exe() -> PathBuf {
     env::current_exe().expect("current executable")
 }
 
-pub(crate) fn rustc_host_target() -> Result<String> {
-    let version = run_ok("rustc", ["-vV"], Path::new("."))?;
-    version
-        .lines()
-        .find_map(|line| line.strip_prefix("host: ").map(str::to_string))
-        .ok_or_else(|| "rustc -vV did not report a host target".into())
-}
-
 pub(crate) fn temp_file(prefix: &str) -> Result<PathBuf> {
     let path = env::temp_dir().join(format!(
         "{prefix}-{}-{}",

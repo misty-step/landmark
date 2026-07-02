@@ -61,7 +61,6 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         "landmark",
         &next_version,
     )?;
-    refresh_self_release_dist(&args.repo_root, &args.dist_target)?;
 
     let plan = SelfReleasePlan {
         released: true,
@@ -77,72 +76,11 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             "package.json".into(),
             "crates/landmark/Cargo.toml".into(),
             "Cargo.lock".into(),
-            "dist/landmark".into(),
-            "dist/landmark.sha256".into(),
         ],
         changelog,
         commits,
     };
     emit_self_release_plan(&plan, &args.github_output)
-}
-
-pub(crate) fn refresh_self_release_dist(repo_root: &Path, target: &str) -> Result<()> {
-    validate_nonblank(target, "dist-target")?;
-    let binary = build_action_binary(repo_root, target)?;
-    let dist_dir = repo_root.join("dist");
-    fs::create_dir_all(&dist_dir)?;
-    let dest = dist_dir.join("landmark");
-    let temp = dist_dir.join(format!(
-        ".landmark-{}-{}.tmp",
-        std::process::id(),
-        Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    ));
-    fs::copy(&binary, &temp)?;
-    fs::set_permissions(&temp, fs::metadata(&binary)?.permissions())?;
-    fs::rename(&temp, &dest)?;
-
-    let digest = hex::encode(Sha256::digest(fs::read(&dest)?));
-    fs::write(
-        dist_dir.join("landmark.sha256"),
-        format!("{digest}  dist/landmark\n"),
-    )?;
-    Ok(())
-}
-
-pub(crate) fn build_action_binary(repo_root: &Path, target: &str) -> Result<PathBuf> {
-    if target == LINUX_ACTION_TARGET && !rustc_host_target()?.contains("linux") {
-        return Err(
-            "refusing to build checked-in Linux action binary from a non-Linux host; run the release workflow or `bin/build-linux-action --write` so dist/landmark is produced in Linux, or pass --dist-target only for replay fixtures"
-                .to_string()
-        .into());
-    }
-    let output = Command::new("cargo")
-        .args(["build", "--locked", "--release", "--target", target])
-        .current_dir(repo_root)
-        .output()
-        .map_err(|error| {
-            format!("failed to launch cargo for self-release binary build: {error}")
-        })?;
-    if !output.status.success() {
-        return Err(format!(
-            "failed to build Landmark self-release action binary for {target}; install the Rust target and linker for {target}, then retry: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    let binary = repo_root
-        .join("target")
-        .join(target)
-        .join("release")
-        .join("landmark");
-    if !binary.is_file() {
-        return Err(format!(
-            "cargo build completed but {} was not created",
-            binary.display()
-        )
-        .into());
-    }
-    Ok(binary)
 }
 
 pub(crate) fn emit_self_release_plan(plan: &SelfReleasePlan, github_output: &str) -> Result<()> {

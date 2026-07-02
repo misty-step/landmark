@@ -145,6 +145,60 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Bootstrap Landmark binary
+      id: bootstrap
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        version="$(grep -m1 '"version"' "${GITHUB_ACTION_PATH}/package.json" | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
+        if [ -z "${version}" ]; then
+          echo "::error::Landmark bootstrap could not read version from package.json"
+          exit 1
+        fi
+
+        os="$(uname -s)"
+        arch="$(uname -m)"
+        case "${os}-${arch}" in
+          Linux-x86_64) target="x86_64-unknown-linux-musl" ;;
+          Linux-aarch64|Linux-arm64) target="aarch64-unknown-linux-musl" ;;
+          Darwin-arm64) target="aarch64-apple-darwin" ;;
+          Darwin-x86_64) target="x86_64-apple-darwin" ;;
+          *)
+            echo "::error::Landmark has no published release binary for ${os}-${arch}"
+            exit 1
+            ;;
+        esac
+
+        release_tag="v${version}"
+        asset_name="landmark-${target}"
+        base_url="https://github.com/misty-step/landmark/releases/download/${release_tag}"
+        bin_dir="${RUNNER_TEMP}/landmark-bin"
+        mkdir -p "${bin_dir}"
+        bin_path="${bin_dir}/landmark"
+        checksums_path="${bin_dir}/checksums.txt"
+
+        download() {
+          curl --proto '=https' --tlsv1.2 --retry 5 --retry-connrefused \
+            --location --silent --show-error --fail "$1" -o "$2"
+        }
+
+        download "${base_url}/checksums.txt" "${checksums_path}"
+        download "${base_url}/${asset_name}" "${bin_path}"
+
+        expected="$(grep -F " ${asset_name}" "${checksums_path}" | awk '{print $1}' || true)"
+        if [ -z "${expected}" ]; then
+          echo "::error::checksums.txt for ${release_tag} has no entry for ${asset_name}"
+          exit 1
+        fi
+        actual="$(shasum -a 256 "${bin_path}" | awk '{print $1}')"
+        if [ "${expected}" != "${actual}" ]; then
+          echo "::error::Landmark binary checksum mismatch for ${asset_name} (expected ${expected}, got ${actual})"
+          exit 1
+        fi
+        chmod +x "${bin_path}"
+        echo "LANDMARK_BIN=${bin_path}" >> "${GITHUB_ENV}"
+
     - name: Setup Node.js
       if: inputs.mode != 'synthesis-only'
       uses: actions/setup-node@v4
@@ -164,7 +218,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        "${GITHUB_ACTION_PATH}/dist/landmark" manifest-defaults \
+        "${LANDMARK_BIN}" manifest-defaults \
           --repo-root "${GITHUB_WORKSPACE}" \
           --github-output "${GITHUB_OUTPUT}"
 
@@ -187,7 +241,7 @@ runs:
         if [ "${SYNTHESIS_REQUIRED}" != "true" ]; then
           WARN_ONLY_ARGS=(--warn-only)
         fi
-        "${GITHUB_ACTION_PATH}/dist/landmark" healthcheck \
+        "${LANDMARK_BIN}" healthcheck \
           --api-key "${LLM_API_KEY}" \
           --model "${LLM_MODEL}" \
           --api-url "${LLM_API_URL}" \
@@ -199,7 +253,7 @@ runs:
       run: |
         set -euo pipefail
         git fetch --tags --force 2>/dev/null || true
-        "${GITHUB_ACTION_PATH}/dist/landmark" preflight-tags
+        "${LANDMARK_BIN}" preflight-tags
 
     - name: Run semantic-release
       id: semantic_release
@@ -333,7 +387,7 @@ runs:
         fetch_release_body() {
           local target_file="$1"
           local fetch_log="${RUNNER_TEMP}/landmark-fetch-release-body.log"
-          if ! "${GITHUB_ACTION_PATH}/dist/landmark" fetch-release-body \
+          if ! "${LANDMARK_BIN}" fetch-release-body \
             --github-token "${GITHUB_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --release-tag "${release_tag}" \
@@ -348,7 +402,7 @@ runs:
 
         build_pr_changelog() {
           local target_file="$1"
-          "${GITHUB_ACTION_PATH}/dist/landmark" extract-prs \
+          "${LANDMARK_BIN}" extract-prs \
             --github-token "${GITHUB_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --release-tag "${release_tag}" \
@@ -444,7 +498,7 @@ runs:
         if [ -n "${prompt_template}" ]; then
           synth_source_args+=(--prompt-template "${prompt_template}")
         fi
-        if ! "${GITHUB_ACTION_PATH}/dist/landmark" synthesize \
+        if ! "${LANDMARK_BIN}" synthesize \
           --api-key "${api_key}" \
           --model "${LLM_MODEL}" \
           --model-policy "${MODEL_POLICY}" \
@@ -515,7 +569,7 @@ runs:
         SYNTH_FAILURE_MESSAGE: ${{ steps.synthesize.outputs.failure_message }}
       run: |
         set -euo pipefail
-        "${GITHUB_ACTION_PATH}/dist/landmark" release-policy publication \
+        "${LANDMARK_BIN}" release-policy publication \
           --synthesis-required "${SYNTHESIS_REQUIRED}" \
           --synthesis-strict "${SYNTHESIS_STRICT}" \
           --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
@@ -567,7 +621,7 @@ runs:
         fi
 
         update_log="${RUNNER_TEMP}/landmark-update-release.log"
-        if ! "${GITHUB_ACTION_PATH}/dist/landmark" run \
+        if ! "${LANDMARK_BIN}" run \
           --provider github \
           --repo-root "${GITHUB_WORKSPACE}" \
           --repository "${GITHUB_REPOSITORY}" \
@@ -631,7 +685,7 @@ runs:
 
         if [ -f "${NOTES_FILE}" ]; then
           artifacts_log="${RUNNER_TEMP}/landmark-write-artifacts.log"
-          if "${GITHUB_ACTION_PATH}/dist/landmark" run \
+          if "${LANDMARK_BIN}" run \
             --provider github \
             --repo-root "${GITHUB_WORKSPACE}" \
             --repository "${GITHUB_REPOSITORY}" \
@@ -722,7 +776,7 @@ runs:
         rss_log="${RUNNER_TEMP}/landmark-update-rss.log"
 
         if {
-          "${GITHUB_ACTION_PATH}/dist/landmark" run \
+          "${LANDMARK_BIN}" run \
             --provider github \
             --repo-root "${GITHUB_WORKSPACE}" \
             --repository "${GITHUB_REPOSITORY}" \
@@ -796,7 +850,7 @@ runs:
           exit 0
         fi
 
-        if "${GITHUB_ACTION_PATH}/dist/landmark" notify-webhook \
+        if "${LANDMARK_BIN}" notify-webhook \
           --webhook-url "${WEBHOOK_URL}" \
           --webhook-secret "${WEBHOOK_SECRET}" \
           --version "${release_tag}" \
@@ -836,7 +890,7 @@ runs:
           exit 0
         fi
 
-        if "${GITHUB_ACTION_PATH}/dist/landmark" notify-slack \
+        if "${LANDMARK_BIN}" notify-slack \
           --slack-webhook-url "${SLACK_WEBHOOK_URL}" \
           --version "${release_tag}" \
           --repository "${GITHUB_REPOSITORY}" \
@@ -875,7 +929,7 @@ runs:
         CONTEXT_METADATA_FILE: ${{ steps.synthesize.outputs.context_metadata_file }}
       run: |
         set -euo pipefail
-        "${GITHUB_ACTION_PATH}/dist/landmark" release-policy summary \
+        "${LANDMARK_BIN}" release-policy summary \
           --synthesis-enabled "${SYNTHESIS_ENABLED}" \
           --released "${RELEASED}" \
           --synth-succeeded "${SYNTH_STEP_SUCCEEDED}" \
@@ -935,7 +989,7 @@ runs:
           exit 1
         fi
 
-        major_tag="$("${GITHUB_ACTION_PATH}/dist/landmark" floating-tag --release-tag "${release_tag}")"
+        major_tag="$("${LANDMARK_BIN}" floating-tag --release-tag "${release_tag}")"
         if [ -z "${major_tag}" ]; then
           echo "::notice::Skipping floating tag update for pre-release tag ${release_tag}."
           exit 0
@@ -963,7 +1017,7 @@ runs:
           local value="$2"
           printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
         }
-        if "${GITHUB_ACTION_PATH}/dist/landmark" close-resolved-failures \
+        if "${LANDMARK_BIN}" close-resolved-failures \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}"; then
@@ -990,7 +1044,7 @@ runs:
           printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
         }
         run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-        if "${GITHUB_ACTION_PATH}/dist/landmark" report-synthesis-failure \
+        if "${LANDMARK_BIN}" report-synthesis-failure \
           --github-token "${GITHUB_TOKEN}" \
           --repository "${GITHUB_REPOSITORY}" \
           --release-tag "${RELEASE_TAG}" \

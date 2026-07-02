@@ -301,9 +301,8 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
         "### GitHub Action Full Mode",
         "### GitHub Action Synthesis-Only Mode",
         "cargo run --locked -- run --provider local --repo-root .",
-        "dist/landmark is the checked-in",
-        "Linux x86_64 action binary",
-        "Packaged binaries are not published yet",
+        "downloads and checksum-verifies the matching binary itself",
+        "GitHub Release",
         "replay-action --scenario first_run_local_preview",
     ] {
         if !readme.contains(required) {
@@ -548,7 +547,7 @@ pub(crate) fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
         "max_input_tokens:",
         "max_output_tokens:",
         "max_usd:",
-        "dist/landmark doctor --repo-root .",
+        "landmark doctor --repo-root .",
     ];
     required
         .iter()

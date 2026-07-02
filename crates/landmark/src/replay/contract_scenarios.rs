@@ -132,7 +132,7 @@ pub(crate) fn scenario_action_side_effect_coverage(_: &Path) -> Result<Value> {
 }
 
 pub(crate) fn action_landmark_subcommands(action: &str) -> BTreeSet<String> {
-    let re = Regex::new(r#"dist/landmark"\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?"#).unwrap();
+    let re = Regex::new(r#"\$\{LANDMARK_BIN\}"\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?"#).unwrap();
     re.captures_iter(action)
         .map(|caps| {
             let command = caps.get(1).unwrap().as_str();
@@ -853,24 +853,32 @@ pub(crate) fn scenario_action_static_contract(_: &Path) -> Result<Value> {
     if action.contains("python ") || action.contains("setup-python") {
         return Err("action.yml still invokes Python".into());
     }
-    if !action.contains("dist/landmark") {
-        return Err("action.yml does not invoke dist/landmark".into());
+    if action.contains("dist/landmark") {
+        return Err(
+            "action.yml must not reference the removed checked-in dist/landmark binary".into(),
+        );
     }
-    if !action.contains("dist/landmark\" run")
+    if !action.contains("${LANDMARK_BIN}") {
+        return Err("action.yml does not invoke the bootstrapped Landmark binary".into());
+    }
+    if !action.contains("name: Bootstrap Landmark binary") || !action.contains("checksums.txt") {
+        return Err("action.yml is missing the release-binary bootstrap step".into());
+    }
+    if !action.contains("${LANDMARK_BIN}\" run")
         || !action.contains("--provider github")
         || !action.contains("--release-tag \"${RELEASE_TAG}\"")
     {
         return Err("action.yml does not invoke the provider-neutral run command".into());
     }
-    if action.contains("dist/landmark\" update-release") {
+    if action.contains("${LANDMARK_BIN}\" update-release") {
         return Err("action.yml still mutates GitHub releases through update-release".into());
     }
-    if action.contains("dist/landmark\" write-artifacts")
-        || action.contains("dist/landmark\" update-feed")
+    if action.contains("${LANDMARK_BIN}\" write-artifacts")
+        || action.contains("${LANDMARK_BIN}\" update-feed")
     {
         return Err("action.yml still writes release artifacts outside the run command".into());
     }
-    Ok(json!({"checked": ["action.yml", "provider-neutral run"]}))
+    Ok(json!({"checked": ["action.yml", "provider-neutral run", "bootstrap"]}))
 }
 
 pub(crate) fn scenario_action_manifest_defaults_precedence(tmp_root: &Path) -> Result<Value> {

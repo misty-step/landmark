@@ -576,8 +576,6 @@ pub(crate) struct PrepareSelfReleaseArgs {
     pub(crate) repository: String,
     #[arg(long = "release-branch", default_value = "landmark/self-release")]
     pub(crate) release_branch: String,
-    #[arg(long = "dist-target", default_value = LINUX_ACTION_TARGET)]
-    pub(crate) dist_target: String,
     #[arg(long = "github-output", default_value = "")]
     pub(crate) github_output: String,
 }

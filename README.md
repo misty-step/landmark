@@ -40,12 +40,13 @@ writes markdown, plaintext, HTML, JSON, and RSS release artifacts under
 `--dry-run` can print the complete final-mile artifact graph without writing
 files.
 
-Source build is the portable install path today: use `cargo run --locked -- ...`
-or a locally built `target/debug/landmark`. dist/landmark is the checked-in
-Linux x86_64 action binary used by the GitHub Action; do not use it as the
-macOS install path. Packaged binaries are not published yet, so downstream
-projects should use Cargo or their own locally built binary outside GitHub
-Actions.
+Build from source with `cargo run --locked -- ...` or a locally built
+`target/debug/landmark`, or download a published per-target release binary
+(`landmark-x86_64-unknown-linux-musl`, `landmark-aarch64-unknown-linux-musl`,
+`landmark-aarch64-apple-darwin`, `landmark-x86_64-apple-darwin`) plus
+`checksums.txt` from a [GitHub Release](https://github.com/misty-step/landmark/releases).
+The GitHub Action downloads and checksum-verifies the matching binary itself;
+it no longer ships a checked-in binary.
 
 The executable quickstart oracle is:
 
@@ -215,8 +216,8 @@ repo or organization chooses the producers that satisfy those contracts.
 Before wiring a release workflow, run Landmark's setup analyzer from a checkout:
 
 ```bash
-dist/landmark init --repo-root . --output .landmark.yml --dry-run
-dist/landmark setup --repo-root . --output-dir .landmark/setup
+landmark init --repo-root . --output .landmark.yml --dry-run
+landmark setup --repo-root . --output-dir .landmark/setup
 ```
 
 `init` infers a first `.landmark.yml` from package metadata, README content,
@@ -236,16 +237,16 @@ Landmark can plan adoption across many GitHub repositories before opening any
 branches:
 
 ```bash
-dist/landmark fleet scan \
+landmark fleet scan \
   --owner phrazzld \
   --owner misty-step \
   --output .landmark/fleet.json
 
-dist/landmark fleet plan \
+landmark fleet plan \
   --input .landmark/fleet.json \
   --output-dir .landmark/fleet-plan
 
-dist/landmark fleet open-prs \
+landmark fleet open-prs \
   --dry-run \
   --plan-dir .landmark/fleet-plan \
   --output-dir .landmark/fleet-plan/prs
@@ -343,12 +344,12 @@ budget:
   max_usd: 0.25
 ```
 
-Use `dist/landmark doctor --repo-root .` to validate manifest enums before a
-workflow run. Use `dist/landmark setup --repo-root . --output-dir
+Use `landmark doctor --repo-root .` to validate manifest enums before a
+workflow run. Use `landmark setup --repo-root . --output-dir
 .landmark/setup` after editing the manifest to regenerate workflow candidates
 that reflect the durable defaults.
 
-Use `dist/landmark synthesize --dry-run-cost ...` to inspect the release context
+Use `landmark synthesize --dry-run-cost ...` to inspect the release context
 packet without calling an LLM. The dry run reports deterministic repo facts,
 estimated input/output tokens, model tier, selected model, skip/use/escalation
 decision, cost estimate, deterministic release classification, and the final
@@ -366,7 +367,7 @@ if the model would downgrade or skip them, Landmark records the disagreement in
 the synthesis context, preserves a synthesis-worthy classification, and appends
 a short classification notice to the generated release notes.
 
-Use `dist/landmark run --provider local --repo-root .` to write a release-kit
+Use `landmark run --provider local --repo-root .` to write a release-kit
 plan at `.landmark/run/release-kit.json` and record its schema and hash in
 `.landmark/run/evidence.json`. `--dry-run` keeps the filesystem untouched and
 prints the same `release_kit` object inside the stdout evidence packet. Low
@@ -376,7 +377,7 @@ producer-adapter artifacts such as migration guides, docs updates, blog drafts,
 and demo videos with explicit handoff contracts, evidence paths, and pending
 approval state.
 
-Use `dist/landmark backfill --repo-root . --since <tag> --mode artifacts-only
+Use `landmark backfill --repo-root . --since <tag> --mode artifacts-only
 --dry-run` to preview historical artifact migration for repositories that
 already have release tags. For `backfill-first` repos, create the
 operator-approved initial tag only after inspecting the fleet plan
@@ -453,7 +454,7 @@ distribution steps:
   429/5xx). `replay-action --scenario http_resilience_policy` exercises slow,
   throttled, and failing providers, and
   `replay-action --scenario action_side_effect_coverage` fails if `action.yml`
-  invokes a `dist/landmark` subcommand without replay coverage.
+  invokes a Landmark subcommand without replay coverage.
 - Generated `release-notes` output uses a collision-resistant GitHub output
   delimiter so synthesized content cannot truncate the output payload.
 
@@ -497,13 +498,13 @@ Backfill is a Rust-owned CLI path for mature repositories that already have tags
 Preview the migration from an existing tag:
 
 ```bash
-dist/landmark backfill --repo-root . --since v1.0.0 --dry-run
+landmark backfill --repo-root . --since v1.0.0 --dry-run
 ```
 
 Write portable artifacts only, which is the default safe migration mode:
 
 ```bash
-dist/landmark backfill \
+landmark backfill \
   --repo-root . \
   --since v1.0.0 \
   --mode artifacts-only \
@@ -514,7 +515,7 @@ dist/landmark backfill \
 Preview GitHub Release body updates before considering mutation:
 
 ```bash
-dist/landmark backfill \
+landmark backfill \
   --repo-root . \
   --since v1.0.0 \
   --mode release-body \
@@ -697,25 +698,28 @@ The `release-notes` output is still available for custom notifications:
 Landmark releases itself without pushing generated release commits directly to
 protected `master`. The repository workflow has two phases:
 
-- `prepare-release-pr` runs `./dist/landmark prepare-self-release`, updates
-  `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, and
-  `Cargo.lock`, then rebuilds the checked-in Linux action binary and rewrites
-  `dist/landmark.sha256` on `landmark/self-release`. It then opens or updates
-  a release PR, which must pass the normal `merge-gate` before it can land.
-  Hosted Quality Checks rebuild the binary in Ubuntu, upload the fresh binary
-  as evidence, and byte-compare it to `dist/landmark`; that hosted comparison
-  is authoritative for non-Linux developers.
+- `prepare-release-pr` runs `cargo run --locked -- prepare-self-release`,
+  updates `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, and
+  `Cargo.lock` on `landmark/self-release`. It then opens or updates a release
+  PR, which must pass the normal `merge-gate` before it can land.
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
-  Release only when landed metadata is ahead of the latest semver tag, then
-  runs Landmark in `synthesis-only` mode to update the release body and floating
-  major tag. That synthesis pass is non-blocking because the release has already
-  been published; failed or degraded synthesis is surfaced through Landmark
-  outputs without turning a published release into a failed deployment.
+  Release only when landed metadata is ahead of the latest semver tag.
+- `build-release-assets` then builds the release binary for each supported
+  target (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
+  `aarch64-apple-darwin`, `x86_64-apple-darwin`) and `publish-release-assets`
+  uploads them plus a `checksums.txt` to the GitHub Release, then runs
+  Landmark in `synthesis-only` mode to update the release body and floating
+  major tag. That synthesis pass is non-blocking because the release has
+  already been published; failed or degraded synthesis is surfaced through
+  Landmark outputs without turning a published release into a failed
+  deployment. The floating major tag (and any `@v1`-pinned consumer) only
+  moves once release assets are live, so consumers never resolve a tag whose
+  binary is not yet downloadable.
 
 The local replay oracle for this path is:
 
 ```bash
-dist/landmark replay-action \
+cargo run --locked -- replay-action \
   --evidence-dir .landmark/replay \
   --scenario self_release_pr_path
 ```
@@ -725,13 +729,11 @@ dist/landmark replay-action \
 This repository keeps `package.json` and the Rust crate version aligned to release tags:
 
 - `prepare-self-release` updates `package.json`,
-  `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, and
-  `dist/landmark.sha256` before opening the release PR.
-- `.releaserc.json` still runs `./dist/landmark update-version-metadata` for
-  consumers using full semantic-release mode.
+  `crates/landmark/Cargo.toml`, and `Cargo.lock` before opening the release PR.
+- `.releaserc.json` still runs `cargo run --locked -- update-version-metadata`
+  for consumers using full semantic-release mode.
 - The release commit includes `CHANGELOG.md`, `package.json`,
-  `crates/landmark/Cargo.toml`, `Cargo.lock`, `dist/landmark`, and
-  `dist/landmark.sha256`.
+  `crates/landmark/Cargo.toml`, and `Cargo.lock`.
 - CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
 ### Action Contract Validation (Landmark Repo)

@@ -12,7 +12,10 @@ A reusable GitHub Action that handles the complete release pipeline:
 ## Architecture
 Composite GitHub Action with these steps:
 - `semantic-release` handles steps 1-4 (proven, battle-tested)
-- Checked-in Rust runtime handles step 5-6 plus policy, artifacts, notifications, and replay
+- A bootstrap-downloaded Rust runtime handles step 5-6 plus policy, artifacts,
+  notifications, and replay. The action downloads and checksum-verifies the
+  release binary matching the runner's OS/arch from GitHub Releases; there is
+  no checked-in binary.
 
 ## Key Design Decisions
 - **Unix philosophy**: This does ONE thing — releases. Not code review, not monitoring.
@@ -27,9 +30,6 @@ landmark/
 ├── action.yml              # Reusable GitHub Action (called by repos)
 ├── crates/
 │   └── landmark/           # Rust runtime
-├── dist/
-│   ├── landmark            # Linux action binary
-│   └── landmark.sha256     # Checksum
 ├── templates/
 │   └── synthesis-prompt.md # Prompt template for LLM
 ├── configs/

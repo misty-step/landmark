@@ -25,12 +25,17 @@ agent-native contracts, or release-kit producer responsibilities.
 - `bin/check-architecture` ratchets the facade and extracted module sizes; if
   a module needs to grow past its current budget, split ownership first or
   update the ratchet with an explicit architecture reason.
-- `action.yml` is a composite GitHub Action wrapper around `dist/landmark` plus
-  `semantic-release` for full GitHub release mode.
-- `dist/landmark` is the checked-in Linux x86_64 musl binary consumed by the
-  action. On macOS, ARM64 Linux, or any other non-Linux-x86_64 platform, use
+- `action.yml` is a composite GitHub Action wrapper around a bootstrap-
+  downloaded Landmark release binary plus `semantic-release` for full GitHub
+  release mode. The bootstrap step downloads and checksum-verifies the
+  release binary matching the runner's OS/arch from the GitHub Release for
+  the action's own pinned version; there is no checked-in binary.
+- Release binaries are built for `x86_64-unknown-linux-musl`,
+  `aarch64-unknown-linux-musl`, `aarch64-apple-darwin`, and
+  `x86_64-apple-darwin` and published with `checksums.txt` as GitHub Release
+  assets by `.github/workflows/release.yml`. For local development use
   `cargo run --locked -p landmark -- ...` or a locally built
-  `target/debug/landmark`; do not execute `dist/landmark` locally.
+  `target/debug/landmark`.
 - Node is only for `semantic-release` in full mode. Do not add new Node or
   shell orchestration unless the platform boundary requires it.
 - Python is not part of the active runtime. Do not reintroduce Python scripts

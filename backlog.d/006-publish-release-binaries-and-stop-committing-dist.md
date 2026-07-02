@@ -7,8 +7,8 @@ Make Landmark self-dogfood real release binaries and stop growing the checked-in
 Linux action binary history.
 
 ## Oracle
-- [ ] Landmark releases publish per-target binary assets and checksums.
-- [ ] The GitHub Action bootstraps a pinned binary download or equally small
+- [x] Landmark releases publish per-target binary assets and checksums.
+- [x] The GitHub Action bootstraps a pinned binary download or equally small
       packaging shim instead of requiring new `dist/landmark` commits.
 - [ ] After no supported path depends on the committed binary, `dist/` is purged
       from all Git history with `git filter-repo` and `master` is force-pushed
@@ -21,15 +21,22 @@ Linux action binary history.
       rewritten action/tag state.
 - [ ] Before/after repository pack size is reported; the groom baseline was
       187 MiB.
-- [ ] Consumer action parity remains covered by hosted runner artifact
-      comparison or its replacement.
-- [ ] `bin/gate` passes.
+- [x] Consumer action parity remains covered by hosted runner artifact
+      comparison or its replacement (release-time checksum-verified download
+      replaces the old committed-binary byte-compare).
+- [x] `bin/gate` passes.
 
 ## Children
-1. Add release asset production for the supported target matrix.
-2. Publish checksums and verify downloads in the self-release flow.
-3. Change the action packaging path to consume pinned release assets.
-4. Stop adding new `dist/landmark` binary commits.
+1. [x] Add release asset production for the supported target matrix
+   (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
+   `aarch64-apple-darwin`, `x86_64-apple-darwin`) — `.github/workflows/release.yml`.
+2. [x] Publish checksums and verify downloads in the self-release flow
+   (`checksums.txt` release asset + action.yml bootstrap checksum verification).
+3. [x] Change the action packaging path to consume pinned release assets
+   (`action.yml` "Bootstrap Landmark binary" step).
+4. [x] Stop adding new `dist/landmark` binary commits (`prepare-self-release`
+   no longer builds/refreshes `dist/`; `dist/landmark` and `dist/landmark.sha256`
+   removed from the tree and added to `.gitignore`).
 5. Run the authorized `dist/` history purge: `git filter-repo`, force-push
    `master`, re-point `v1` and release tags, and verify a consumer workflow.
 6. Report before/after pack size, using 187 MiB as the known pre-purge baseline.
