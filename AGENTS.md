@@ -64,6 +64,20 @@ agent-native contracts, or release-kit producer responsibilities.
   artifact outputs, release-body mutation, notifications, feeds, or failure
   lifecycle behavior.
 
+## action.yml Safety Patterns
+- Never interpolate an `inputs.*` or `secrets.*` value directly into a `run:`
+  shell block; pass it through an `env:` block and reference the shell
+  variable instead. Direct interpolation is a shell-injection vector (a repo
+  name, commit subject, or synthesized note containing shell metacharacters
+  becomes code). Every `run:` step in `action.yml` follows this today; keep it
+  that way when adding steps.
+- Non-blocking pipeline stages (synthesis, artifact writes, RSS/webhook/Slack
+  notifications) must `exit 0` on failure and record `succeeded`/
+  `failure_stage`/`failure_message` outputs instead. A release must still
+  publish when a best-effort stage fails; only `synthesis-required: "true"`
+  turns a synthesis/publication failure into a hard blocker (see "Enforce
+  synthesis required" in `action.yml`).
+
 ## Backlog And Docs
 - Active work lives in `backlog.d/<nnn>-<slug>.md`; completed items are archived
   under `backlog.d/_done/`.

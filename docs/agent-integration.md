@@ -101,6 +101,23 @@ drafts, essays, announcement copy, social copy, screenshots, images, GIFs, demo
 scripts, and demo videos. Text artifacts may be produced directly by Landmark;
 rich media and publication-specific outputs should stay adapter-owned.
 
+## Glossary
+
+| Term | Definition |
+|------|-----------|
+| synthesis | LLM step that converts a technical changelog into user-facing "What's New" notes |
+| full mode | `semantic-release` (compatibility path) + synthesis pipeline |
+| synthesis-only mode | Skip `semantic-release`; synthesize notes for an existing tag |
+| floating tag | Major-version alias tag (e.g. `v1`) that points to the latest release; Landmark's own release workflow only repoints it once that release's binaries and checksums are confirmed live |
+| changelog-source | Where synthesis pulls its input: `auto`, `changelog`, `release-body`, `prs` |
+| audience | Built-in prompt variant: `general`, `developer`, `end-user`, `enterprise` |
+| synthesis-required | If `true`, fail the action when synthesis or publication policy fails |
+| preflight check | Pre-`semantic-release` validation: tag history integrity, config detection (`landmark preflight-tags`) |
+| version decision | The output of the shared version-decision engine (`crates/landmark/src/version_decision.rs`): a bump plus the decisive commit and any unknown (non-conventional) commits it named rather than silently absorbed |
+| release kit | Typed packet of release facts, recommended outputs, artifact status, provenance, approvals, and producer contracts |
+| producer adapter | Explicit local, browser, service, harness, or human boundary that turns release-kit inputs into a rich artifact such as a video, GIF, image, essay, docs patch, or blog draft |
+| final-mile artifact | Any output needed to ship the release beyond versioning: docs updates, migration guide, demo script, video, GIF, image, blog post, announcement copy, feed item, or social copy |
+
 ## Validation Oracle
 
 An agent can validate this guide and the runtime contract with:
