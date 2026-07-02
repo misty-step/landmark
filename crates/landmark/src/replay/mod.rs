@@ -136,6 +136,10 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_local_provider_run,
     );
     map.insert(
+        "release_kit_classification_uses_structured_commits".to_string(),
+        scenario_release_kit_classification_uses_structured_commits,
+    );
+    map.insert(
         "first_run_local_preview".to_string(),
         scenario_first_run_local_preview,
     );
@@ -213,6 +217,7 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "first_run_local_preview",
         "github_provider_run",
         "local_provider_run",
+        "release_kit_classification_uses_structured_commits",
         "provider_run_parity",
         "manifest_defaults_and_overrides",
         "consumer_release_update_failure",
