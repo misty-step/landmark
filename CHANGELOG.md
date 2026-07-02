@@ -1,3 +1,11 @@
+# [1.26.0](https://github.com/misty-step/landmark/compare/v1.25.0...v1.26.0) (2026-07-02)
+
+### Features
+
+* **classification:** use structured release signals ([a5ab124](https://github.com/misty-step/landmark/commit/a5ab124d547819d7dba14af5a0ce6a2618272957))
+* **classification:** call model classifier before synthesis ([332c6d1](https://github.com/misty-step/landmark/commit/332c6d1c289cafe88d5d6466016575340c5e6b6a))
+* **classification:** surface model disagreement in notes ([baff359](https://github.com/misty-step/landmark/commit/baff3599a2b6fd1c6ed79add936cb8bd4563e964))
+* **release:** publish per-target binaries, bootstrap action via download (#168) ([6647390](https://github.com/misty-step/landmark/commit/6647390a55b79fc5de3a01551528060a9d7d872b))
 # [1.25.0](https://github.com/misty-step/landmark/compare/v1.24.0...v1.25.0) (2026-06-25)
 
 ### Features
