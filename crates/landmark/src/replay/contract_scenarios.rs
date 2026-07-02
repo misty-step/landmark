@@ -317,7 +317,7 @@ pub(crate) fn scenario_agent_native_contracts(tmp_root: &Path) -> Result<Value> 
     }
     let evidence: Value = serde_json::from_slice(&dry_run.stdout)?;
     assert_json_eq(&evidence, "/provider", "local", "dry-run provider")?;
-    release_kit::assert_contract(&evidence["release_kit"], "dry-run release kit")?;
+    release_kit_contract::assert_contract(&evidence["release_kit"], "dry-run release kit")?;
     assert_json_eq(
         &evidence,
         "/artifacts/release_kit_schema",
