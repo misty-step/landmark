@@ -842,6 +842,62 @@ fn failure_classifier_emits_stable_codes_and_redacts_tokens() {
     assert!(redacted.contains("[REDACTED]"));
 }
 
+/// classify_failure is a first-match if/else-if chain over substring checks,
+/// so branch order matters: an added or reordered branch could silently
+/// steal matches from another branch without any test failing unless every
+/// branch has a message that hits it and only it. Each message below is
+/// chosen to avoid every earlier branch's trigger words.
+#[test]
+fn failure_classifier_covers_remaining_branches() {
+    let provider_outage = classify_failure("HTTP 429 too many requests from provider");
+    assert_eq!(provider_outage.code, "provider_outage");
+    assert_eq!(provider_outage.stage, "provider");
+    assert!(provider_outage.retryable);
+
+    let budget_skip = classify_failure("synthesis skipped: budget exceeded for this release");
+    assert_eq!(budget_skip.code, "budget_skip");
+    assert_eq!(budget_skip.stage, "synthesis");
+    assert!(!budget_skip.retryable);
+
+    let synthesis_degradation =
+        classify_failure("synthesis quality degraded; using unvalidated output");
+    assert_eq!(synthesis_degradation.code, "synthesis_degradation");
+    assert_eq!(synthesis_degradation.stage, "synthesis");
+    assert!(!synthesis_degradation.retryable);
+
+    let publication_mutation_failure =
+        classify_failure("landmark could not update the release body; release remains published");
+    assert_eq!(
+        publication_mutation_failure.code,
+        "publication_mutation_failure"
+    );
+    assert_eq!(publication_mutation_failure.stage, "publication");
+    assert!(publication_mutation_failure.retryable);
+
+    let feed_failure = classify_failure("could not update the rss release feed");
+    assert_eq!(feed_failure.code, "feed_failure");
+    assert_eq!(feed_failure.stage, "artifact");
+    assert!(!feed_failure.retryable);
+
+    let artifact_write_failure =
+        classify_failure("failed to write technical changelog output: permission denied");
+    assert_eq!(artifact_write_failure.code, "artifact_write_failure");
+    assert_eq!(artifact_write_failure.stage, "artifact");
+    assert!(!artifact_write_failure.retryable);
+
+    let invalid_input = classify_failure(
+        "unsupported provider 'foo'; this build supports provider=local or provider=github",
+    );
+    assert_eq!(invalid_input.code, "invalid_input");
+    assert_eq!(invalid_input.stage, "configuration");
+    assert!(!invalid_input.retryable);
+
+    let command_failed = classify_failure("unexpected git subprocess exit status 128");
+    assert_eq!(command_failed.code, "command_failed");
+    assert_eq!(command_failed.stage, "runtime");
+    assert!(!command_failed.retryable);
+}
+
 fn test_synthesis_config(
     model_policy: &str,
     max_input_tokens: Option<u64>,

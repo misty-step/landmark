@@ -1,6 +1,6 @@
 # Cover the remaining classify_failure branches with tests
 
-Priority: P2 · Status: ready · Estimate: S
+Priority: P2 · Status: done · Estimate: S
 
 ## Goal
 `classify_failure` (`crates/landmark/src/errors.rs:26-104`) is the function
@@ -10,7 +10,7 @@ behind every `--error-format json` failure envelope's `code`/`stage`/
 have a pinned test today.
 
 ## Oracle
-- [ ] A test exists for each remaining branch of `classify_failure`:
+- [x] A test exists for each remaining branch of `classify_failure`:
       `provider_outage` (429/rate-limit/timeout), `budget_skip`
       (budget/model.policy=off), `synthesis_degradation`
       (degraded/quality), `publication_mutation_failure` (release
@@ -18,10 +18,21 @@ have a pinned test today.
       `artifact_write_failure` (write/file/permission), `invalid_input`
       (unsupported provider/requires/must), and the `command_failed`
       catch-all for a message matching none of the above.
-- [ ] Each test asserts `code`, `stage`, and `retryable` (not just that a
+- [x] Each test asserts `code`, `stage`, and `retryable` (not just that a
       match occurred) so silent branch reordering or overlap regressions get
       caught.
-- [ ] `cargo test --locked` and `bin/gate` pass.
+- [x] `cargo test --locked` and `bin/gate` pass.
+
+## Evidence
+`failure_classifier_covers_remaining_branches` (`crates/landmark/src/tests.rs`)
+adds all 8 remaining cases. Each message was hand-traced against every
+earlier branch's trigger substrings to make sure it hits only its intended
+branch (documented inline: the function is an order-sensitive first-match
+if/else-if chain, e.g. `"could not update the release body"` must avoid
+`"auth"`/`"github-token"`/`"429"`/`"budget"`/`"degraded"` etc. to actually land
+on `publication_mutation_failure` instead of an earlier branch). All 10 cases
+(2 pre-existing + 7 new named branches + the `command_failed` catch-all)
+passed on the first run, confirming the trace was correct.
 
 ## Notes
 Verified live: `grep -rn "classify_failure" crates/landmark/src` shows only
