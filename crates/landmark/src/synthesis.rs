@@ -82,7 +82,7 @@ pub(crate) fn extract_prs(args: ExtractPrsArgs) -> Result<()> {
         git_commit_date(&args.repo_root, &previous_tag)
     };
     let until = git_commit_date(&args.repo_root, &target_tag);
-    let prs = provider.closed_pull_requests(&args.repository)?;
+    let prs = provider.closed_pull_requests(&args.repository, since)?;
     let scoped = filter_prs_by_range(&prs, since, until);
     let mut rendered = String::new();
     for pr in &scoped {
@@ -1148,40 +1148,4 @@ pub(crate) fn normalize_quality(value: &str) -> String {
         "failed" => "failed".to_string(),
         _ => "failed".to_string(),
     }
-}
-
-pub(crate) fn update_release(args: UpdateReleaseArgs) -> Result<()> {
-    let notes = read_nonempty(&args.notes_file)?;
-    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
-    provider.update_release_body(&args.repository, &args.tag, &notes)?;
-    Ok(())
-}
-
-pub(crate) fn compose_release_body(notes: &str, existing: &str) -> String {
-    let stripped = strip_existing_whats_new(existing);
-    if stripped.trim().is_empty() {
-        format!("## What's New\n\n{}\n", notes.trim())
-    } else {
-        format!("## What's New\n\n{}\n\n{}", notes.trim(), stripped.trim())
-    }
-}
-
-pub(crate) fn strip_existing_whats_new(body: &str) -> String {
-    let mut output = Vec::new();
-    let mut skipping = false;
-    let mut skipped = false;
-    for line in body.lines() {
-        if !skipped && line.trim() == "## What's New" {
-            skipping = true;
-            skipped = true;
-            continue;
-        }
-        if skipping && line.starts_with("## ") {
-            skipping = false;
-        }
-        if !skipping {
-            output.push(line);
-        }
-    }
-    output.join("\n").trim().to_string()
 }

@@ -168,6 +168,14 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_extract_prs_scoped_to_release_range,
     );
     map.insert(
+        "release_body_idempotent_across_reruns".to_string(),
+        scenario_release_body_idempotent_across_reruns,
+    );
+    map.insert(
+        "pr_fetch_paginates_past_first_page".to_string(),
+        scenario_pr_fetch_paginates_past_first_page,
+    );
+    map.insert(
         "backfill_release_history".to_string(),
         scenario_backfill_release_history,
     );
@@ -229,6 +237,8 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "self_release_pr_path",
         "synthesis_cost_policy",
         "extract_prs_scoped_to_release_range",
+        "release_body_idempotent_across_reruns",
+        "pr_fetch_paginates_past_first_page",
         "backfill_release_history",
         "publication_degraded_optional",
         "publication_degraded_required",

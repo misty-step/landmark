@@ -258,21 +258,53 @@ impl GitHubProvider {
         Ok(value["html_url"].as_str().unwrap_or("").to_string())
     }
 
-    pub(crate) fn closed_pull_requests(&self, repository: &str) -> Result<Vec<Value>> {
+    /// Fetches closed PRs, paginating past GitHub's 100-per-page cap so a
+    /// high-throughput repo doesn't silently lose in-range PRs off page 1.
+    /// Results come back sorted by creation date descending (GitHub's
+    /// default), so pagination stops once a page's oldest PR was created
+    /// before `since` — the same lower bound `extract_prs` already computes
+    /// from the previous tag's commit date — or once GitHub returns a
+    /// short/empty page. `since` of `None` (no previous tag) paginates to a
+    /// fixed cap instead of walking full repo history.
+    pub(crate) fn closed_pull_requests(
+        &self,
+        repository: &str,
+        since: Option<DateTime<Utc>>,
+    ) -> Result<Vec<Value>> {
         validate_repo(repository)?;
-        let response = curl_json(
-            "GET",
-            &format!(
-                "{}/repos/{repository}/pulls?state=closed&per_page=100",
-                self.api_base_url
-            ),
-            self.token(),
-            None,
-        )?;
-        if !(200..300).contains(&response.status) {
-            return Err(format!("GitHub PR fetch failed with HTTP {}", response.status).into());
+        const PER_PAGE: usize = 100;
+        const MAX_PAGES: usize = 10;
+        let mut all = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let response = curl_json(
+                "GET",
+                &format!(
+                    "{}/repos/{repository}/pulls?state=closed&per_page={PER_PAGE}&page={page}",
+                    self.api_base_url
+                ),
+                self.token(),
+                None,
+            )?;
+            if !(200..300).contains(&response.status) {
+                return Err(format!("GitHub PR fetch failed with HTTP {}", response.status).into());
+            }
+            let batch: Vec<Value> = serde_json::from_str(&response.body)?;
+            let batch_len = batch.len();
+            let oldest_created_at = batch
+                .last()
+                .and_then(|pr| pr["created_at"].as_str())
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                .map(|value| value.with_timezone(&Utc));
+            all.extend(batch);
+            let past_lower_bound = match (since, oldest_created_at) {
+                (Some(since), Some(oldest)) => oldest < since,
+                _ => false,
+            };
+            if batch_len < PER_PAGE || past_lower_bound {
+                break;
+            }
         }
-        Ok(serde_json::from_str(&response.body)?)
+        Ok(all)
     }
 
     pub(crate) fn tree_paths(&self, repository: &str, branch: &str) -> Result<Vec<String>> {

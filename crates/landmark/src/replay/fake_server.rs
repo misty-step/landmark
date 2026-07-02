@@ -37,7 +37,22 @@ pub(crate) fn start_fake_server(mut state: FakeState) -> Result<FakeServer> {
                     }
                 }
                 (Method::Get, url) if url.contains("/pulls") => {
-                    json_response(200, Value::Array(state.pull_requests.clone()))
+                    let page: usize = query_param(url, "page")
+                        .and_then(|value| value.parse().ok())
+                        .unwrap_or(1)
+                        .max(1);
+                    let per_page: usize = query_param(url, "per_page")
+                        .and_then(|value| value.parse().ok())
+                        .unwrap_or(30);
+                    let start = (page - 1) * per_page;
+                    let page_items: Vec<Value> = state
+                        .pull_requests
+                        .iter()
+                        .skip(start)
+                        .take(per_page)
+                        .cloned()
+                        .collect();
+                    json_response(200, Value::Array(page_items))
                 }
                 (Method::Get, url) if url.contains("/releases/tags/") => {
                     let tag = url.rsplit("/releases/tags/").next().unwrap();
@@ -114,6 +129,14 @@ pub(crate) fn start_slow_http_server(delay: Duration) -> Result<String> {
         }
     });
     Ok(format!("http://{addr}/slow"))
+}
+
+fn query_param<'a>(url: &'a str, name: &str) -> Option<&'a str> {
+    let query = url.split_once('?')?.1;
+    query.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=')?;
+        (key == name).then_some(value)
+    })
 }
 
 pub(crate) fn json_response(status: u16, payload: Value) -> Response<std::io::Cursor<Vec<u8>>> {

@@ -28,6 +28,35 @@ fn release_body_replaces_existing_whats_new() {
     assert!(body.contains("## Technical"));
 }
 
+/// Regression for the canary v1.6.0/v1.7.1 incident: synthesized notes commonly
+/// carry their own `## Bug Fixes` / `## Features` subheadings. When two
+/// synthesis runs land on the same release (canary's `release.yml` full-mode
+/// run and its `landmark-release.yml` synthesis-only run both fire for one
+/// `release: published` event), `strip_existing_whats_new` mistook the first
+/// run's inner subheading for the boundary of the "What's New" section and
+/// stopped stripping there, leaving the first run's notes behind for the
+/// second compose to stack on top of. Composing twice must converge on the
+/// latest notes, not accumulate every prior run's content.
+#[test]
+fn release_body_synthesis_is_idempotent_across_reruns() {
+    let footer = "## [1.7.1](https://github.com/misty-step/canary/compare/v1.7.0...v1.7.1) (2026-07-02)\n\n\n### Bug Fixes\n\n* stuff";
+    let first_run_notes = "## Bug Fixes\n\n* Fixed canary-watchman agent recovery deadlock where the watchman's own overdue pressure prevented it from completing recovery check-ins, potentially causing permanent monitoring gaps during high-pressure scenarios.\n\n> Landmark classification notice: ...";
+    let second_run_notes = "## Bug Fixes\n\n* Fixed canary-watchman recovery deadlock where the watchman's own overdue pressure prevented it from completing recovery check-ins, breaking automatic recovery workflows for agent-operated reliability scenarios.\n\n> Landmark classification notice: ...";
+
+    let after_first_run = compose_release_body(first_run_notes, footer);
+    let after_second_run = compose_release_body(second_run_notes, &after_first_run);
+
+    assert_eq!(
+        after_second_run.matches("\n## Bug Fixes\n").count(),
+        1,
+        "expected a single top-level Bug Fixes section, got body:\n{after_second_run}"
+    );
+    assert!(after_second_run.contains("breaking automatic recovery workflows"));
+    assert!(!after_second_run.contains("permanent monitoring gaps"));
+    assert!(after_second_run.contains("### Bug Fixes"));
+    assert!(after_second_run.contains(footer.lines().next().unwrap()));
+}
+
 #[test]
 fn markdown_filters_unsafe_links() {
     let html = markdown_to_html_fragment("[bad](javascript:alert(1)) [ok](https://example.com)");
