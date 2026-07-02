@@ -1,3 +1,14 @@
+# [1.27.0](https://github.com/misty-step/landmark/compare/v1.26.0...v1.27.0) (2026-07-02)
+
+### Features
+
+* **version:** consolidate landmark run and prepare-self-release onto one engine (#170) ([5ba38ad](https://github.com/misty-step/landmark/commit/5ba38ad603fbe0bd56f4db97138c2e144eff8ce3))
+* **schema:** tighten release-context classification/cost, add drift check (#180) ([b335c22](https://github.com/misty-step/landmark/commit/b335c225eb8f7955dd873a2825dc2a888895da2e))
+
+### Bug Fixes
+
+* **release-kit:** classify from structured commits, not rendered text (#177) ([77e1c89](https://github.com/misty-step/landmark/commit/77e1c894d46a7eb1fa994e9d11e3088b028cb622))
+* **release-kit:** populate changed_files in the deterministic context (#178) ([1581d51](https://github.com/misty-step/landmark/commit/1581d5114dfe03e71e5c7d4d38640de832c7896d))
 # [1.26.0](https://github.com/misty-step/landmark/compare/v1.25.0...v1.26.0) (2026-07-02)
 
 ### Features
