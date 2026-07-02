@@ -128,6 +128,22 @@ fn model_classifier_uses_commit_diff_context_and_preserves_floor() {
     let classifier_context: Value =
         serde_json::from_str(payload["messages"][1]["content"].as_str().unwrap()).unwrap();
     assert_eq!(payload["model"], "test/model");
+    // Ticket 014: classification enforces schema-constrained output natively
+    // instead of relying on prompt-text compliance alone.
+    assert_eq!(payload["response_format"]["type"], "json_schema");
+    assert_eq!(payload["response_format"]["json_schema"]["strict"], true);
+    assert_eq!(
+        payload["response_format"]["json_schema"]["schema"]["required"],
+        json!([
+            "categories",
+            "significance",
+            "user_visible",
+            "breaking",
+            "security",
+            "migration_heavy",
+            "reasons"
+        ])
+    );
     assert!(
         classifier_context["deterministic"]["commits"]
             .as_array()

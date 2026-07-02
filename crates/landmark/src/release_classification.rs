@@ -215,47 +215,49 @@ pub(crate) fn request_release_classification(
     sources: &[ContextSource],
     deterministic: &DeterministicReleaseContext,
 ) -> Result<ReleaseClassification> {
+    let output_schema = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+            "categories",
+            "significance",
+            "user_visible",
+            "breaking",
+            "security",
+            "migration_heavy",
+            "reasons"
+        ],
+        "properties": {
+            "categories": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "user-visible",
+                        "docs-only",
+                        "chore-only",
+                        "dependency-only",
+                        "internal-tooling",
+                        "breaking",
+                        "security",
+                        "migration-heavy"
+                    ]
+                }
+            },
+            "significance": { "type": "string", "enum": ["low", "medium", "high"] },
+            "user_visible": { "type": "boolean" },
+            "breaking": { "type": "boolean" },
+            "security": { "type": "boolean" },
+            "migration_heavy": { "type": "boolean" },
+            "reasons": { "type": "array", "items": { "type": "string" } }
+        }
+    });
     let input = json!({
         "task": "classify_release_importance",
         "rendered_changelog_context": technical,
         "context_sources": sources,
         "deterministic": deterministic,
-        "output_schema": {
-            "type": "object",
-            "required": [
-                "categories",
-                "significance",
-                "user_visible",
-                "breaking",
-                "security",
-                "migration_heavy",
-                "reasons"
-            ],
-            "properties": {
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": [
-                            "user-visible",
-                            "docs-only",
-                            "chore-only",
-                            "dependency-only",
-                            "internal-tooling",
-                            "breaking",
-                            "security",
-                            "migration-heavy"
-                        ]
-                    }
-                },
-                "significance": { "type": "string", "enum": ["low", "medium", "high"] },
-                "user_visible": { "type": "boolean" },
-                "breaking": { "type": "boolean" },
-                "security": { "type": "boolean" },
-                "migration_heavy": { "type": "boolean" },
-                "reasons": { "type": "array", "items": { "type": "string" } }
-            }
-        }
+        "output_schema": output_schema.clone()
     });
     let payload = json!({
         "model": model,
@@ -270,7 +272,20 @@ pub(crate) fn request_release_classification(
             }
         ],
         "temperature": 0,
-        "max_tokens": 700
+        "max_tokens": 700,
+        // Native schema enforcement, not just the prompt-text instruction
+        // above. Every model in the classification roster (DeepSeek V4,
+        // Claude, GPT-5.x families) supports response_format: json_schema
+        // strict mode on OpenRouter as of mid-2026 — see
+        // backlog.d/014-adopt-structured-output-mode-for-classification.md.
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "release_classification",
+                "strict": true,
+                "schema": output_schema
+            }
+        }
     });
     let response = curl_json("POST", api_url, Some(api_key), Some(&payload))?;
     if !(200..300).contains(&response.status) {
@@ -310,6 +325,14 @@ pub(crate) fn parse_model_release_classification(
     })
 }
 
+/// Kept as a defensive fallback, not removed: `response_format: json_schema`
+/// (strict mode) makes `content` a bare JSON object for every model that
+/// honors it, so the `starts_with('{')` fast path below covers the common
+/// case in one comparison. The brace-scan only does real work against a
+/// provider that ignores `response_format` and wraps the object in prose or
+/// markdown fencing — cheap insurance, not the primary compliance mechanism
+/// anymore. See
+/// backlog.d/014-adopt-structured-output-mode-for-classification.md.
 pub(crate) fn extract_json_object(content: &str) -> Result<&str> {
     let trimmed = content.trim();
     if trimmed.starts_with('{') && trimmed.ends_with('}') {
