@@ -1,5 +1,11 @@
 # Landmark Agent Contract
 
+*A reusable GitHub Action that handles the complete release pipeline: analyze
+conventional commits to determine version bump, generate a technical
+changelog (CHANGELOG.md), push the version bump + changelog to the repo,
+create a GitHub Release, LLM-synthesize user-facing release notes from the
+technical changelog, and update the GitHub Release body with those notes.*
+
 ## Product Boundary
 Landmark is a portable release-intelligence runtime. The GitHub Action is one
 packaging layer, not the product boundary. Keep release analysis, synthesis,
@@ -19,6 +25,8 @@ Read `VISION.md` before changing release boundaries, adoption modes,
 agent-native contracts, or release-kit producer responsibilities.
 
 ## Architecture
+
+### Runtime Structure
 - `crates/landmark/src/main.rs` is the Rust binary facade: parse CLI, dispatch,
   and render top-level errors. Runtime responsibilities should live in focused
   modules under `crates/landmark/src/`.
@@ -40,6 +48,22 @@ agent-native contracts, or release-kit producer responsibilities.
   shell orchestration unless the platform boundary requires it.
 - Python is not part of the active runtime. Do not reintroduce Python scripts
   for release behavior.
+
+### Pipeline Steps
+Composite GitHub Action with these steps:
+- `semantic-release` handles steps 1-4 (analyze commits, generate changelog,
+  push version bump + changelog, create GitHub Release) — proven,
+  battle-tested.
+- A bootstrap-downloaded Rust runtime handles step 5-6 (LLM-synthesize
+  user-facing release notes, update the GitHub Release body) plus policy,
+  artifacts, notifications, and replay.
+
+## Key Design Decisions
+- **Unix philosophy**: This does ONE thing — releases. Not code review, not monitoring.
+- **Wraps semantic-release**: Don't reinvent the wheel. Extend it.
+- **LLM synthesis is the value-add**: Technical changelogs exist. User-facing notes don't.
+- **OpenRouter by default**: Supports provider choice and model fallback chains.
+- **Reusable Action**: Any repo can opt in with a simple workflow file.
 
 ## Portability Direction
 - A non-GitHub caller must be able to drive Landmark through CLI commands,
@@ -77,6 +101,54 @@ agent-native contracts, or release-kit producer responsibilities.
   publish when a best-effort stage fails; only `synthesis-required: "true"`
   turns a synthesis/publication failure into a hard blocker (see "Enforce
   synthesis required" in `action.yml`).
+
+## File Structure
+```
+landmark/
+├── action.yml              # Reusable GitHub Action (called by repos)
+├── crates/
+│   └── landmark/           # Rust runtime
+├── templates/
+│   └── synthesis-prompt.md # Prompt template for LLM
+├── configs/
+│   └── .releaserc.json    # Default semantic-release config
+├── README.md
+├── AGENTS.md               # Canonical agent contract (CLAUDE.md is a symlink to this file)
+└── package.json            # For semantic-release deps
+```
+
+## How Repos Use It
+```yaml
+name: Release
+on:
+  push:
+    branches: [master, main]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: misty-step/landmark@v1
+        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional:
+          # llm-model: anthropic/claude-sonnet-4
+          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+```
+
+## Requirements
+- Node.js 22+
+- Rust stable
+- `GH_RELEASE_TOKEN` secret (PAT with repo write + admin bypass)
+- `OPENROUTER_API_KEY` secret (or another compatible provider API key)
 
 ## Backlog And Docs
 - Active work lives in `backlog.d/<nnn>-<slug>.md`; completed items are archived
