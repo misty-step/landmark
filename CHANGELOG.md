@@ -1,3 +1,20 @@
+# [1.27.0](https://github.com/misty-step/landmark/compare/v1.26.0...v1.27.0) (2026-07-02)
+
+### Features
+
+* **version:** consolidate landmark run and prepare-self-release onto one engine (#170) ([5ba38ad](https://github.com/misty-step/landmark/commit/5ba38ad603fbe0bd56f4db97138c2e144eff8ce3))
+* **schema:** tighten release-context classification/cost, add drift check (#180) ([b335c22](https://github.com/misty-step/landmark/commit/b335c225eb8f7955dd873a2825dc2a888895da2e))
+* **release-kit:** adopt native structured output for classification (#188) ([61a39da](https://github.com/misty-step/landmark/commit/61a39dac51a90d5e06d040911c92359ee22ca533))
+* **release:** publish landmark to crates.io on landed releases (#190) ([0c92c67](https://github.com/misty-step/landmark/commit/0c92c67a4d4ea861d2b83a94dd031d9e5f306f44))
+
+### Bug Fixes
+
+* **release-kit:** classify from structured commits, not rendered text (#177) ([77e1c89](https://github.com/misty-step/landmark/commit/77e1c894d46a7eb1fa994e9d11e3088b028cb622))
+* **release-kit:** populate changed_files in the deterministic context (#178) ([1581d51](https://github.com/misty-step/landmark/commit/1581d5114dfe03e71e5c7d4d38640de832c7896d))
+* **release-kit:** scope extract-prs to the release's tag range (#183) ([a3cffca](https://github.com/misty-step/landmark/commit/a3cffca786728c4b79e47e46d6d779457c51c413))
+* **release-kit:** stop synthesizing release notes from the wrong changelog section (#184) ([07bfaf3](https://github.com/misty-step/landmark/commit/07bfaf382b1def80f5271256c359ab43a4f1377a))
+* **release-kit:** refresh stale model pins, fix classification config-override bug (#187) ([fd2c10c](https://github.com/misty-step/landmark/commit/fd2c10cbccdf84e42d209db71a3c99ea20e7685d))
+* **release-kit:** make release-body synthesis idempotent, paginate PR fetch (#191) ([02bc948](https://github.com/misty-step/landmark/commit/02bc9489c2669080aabc1977b21a2a047d9c260e))
 # [1.26.0](https://github.com/misty-step/landmark/compare/v1.25.0...v1.26.0) (2026-07-02)
 
 ### Features
