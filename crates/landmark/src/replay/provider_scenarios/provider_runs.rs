@@ -135,7 +135,7 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
                 .into(),
         );
     }
-    release_kit::assert_contract(&evidence["release_kit"], "local run release kit")?;
+    release_kit_contract::assert_contract(&evidence["release_kit"], "local run release kit")?;
     let markdown = repo.join("docs/releases/v1.1.0.md");
     let plaintext = repo.join("docs/releases/v1.1.0.txt");
     let html = repo.join("docs/releases/v1.1.0.html");
@@ -282,7 +282,10 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     {
         return Err("local run did not treat BREAKING CHANGE footer as a major bump".into());
     }
-    release_kit::assert_contract(&breaking_evidence["release_kit"], "breaking release kit")?;
+    release_kit_contract::assert_contract(
+        &breaking_evidence["release_kit"],
+        "breaking release kit",
+    )?;
     let breaking_artifacts = breaking_evidence["release_kit"]["artifacts"]
         .as_array()
         .ok_or("breaking release kit artifacts missing")?;
@@ -357,7 +360,10 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     let internal_evidence_path = internal_repo.join(".landmark/run/evidence.json");
     let internal_evidence: Value =
         serde_json::from_str(&fs::read_to_string(&internal_evidence_path)?)?;
-    release_kit::assert_contract(&internal_evidence["release_kit"], "internal release kit")?;
+    release_kit_contract::assert_contract(
+        &internal_evidence["release_kit"],
+        "internal release kit",
+    )?;
     let internal_artifacts = internal_evidence["release_kit"]["artifacts"]
         .as_array()
         .ok_or("internal release kit artifacts missing")?;

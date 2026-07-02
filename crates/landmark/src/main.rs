@@ -28,6 +28,9 @@ mod manifest;
 mod providers;
 mod release_classification;
 mod release_kit;
+mod release_kit_contract;
+#[cfg(test)]
+mod release_kit_tests;
 mod release_ops;
 mod replay;
 mod self_release;
