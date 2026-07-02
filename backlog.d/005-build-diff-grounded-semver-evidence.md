@@ -30,3 +30,19 @@ Landmark can distinguish inferred intent, declared intent, and actual breakage.
 ## Notes
 This is the differentiator arc, but it stays behind `003` and `004` so it does
 not build trust claims on top of keyword classification or split version truth.
+
+**Scope widened 2026-07-02** (model usage audit,
+`~/.factory-lanes/wave1/landmark-model-audit.md`): the "ground the model in the
+real diff, not commit-subject text" principle this ticket names for version
+*decisions* applies equally to synthesis *content*. Classification already
+consumes range-scoped `deterministic.commits`/`diff_stats`; synthesis sources
+its "what happened" facts from a separate, independently-resolved changelog
+string (`resolve_technical_changelog`) that can diverge from what
+classification saw. Two production incidents this audit found
+(bitterblossom v1.79.0 unfiltered-PR leak, canary v1.6.0/v1.7.0 stale
+changelog-section fallback) both stemmed from that divergence. The immediate
+grounding bugs are fixed (`extract_prs` now scopes to the release tag range;
+`extract_release_section` no longer silently falls back to the wrong
+section), but the two independent resolution paths still exist. See
+`backlog.d/011-unify-classification-and-synthesis-grounding.md` for the
+sibling ticket that tracks collapsing them into one.
