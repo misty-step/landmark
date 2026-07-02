@@ -637,3 +637,97 @@ pub(crate) fn scenario_provider_run_parity(tmp_root: &Path) -> Result<Value> {
         "requests": state.requests,
     }))
 }
+
+pub(crate) fn scenario_release_kit_classification_uses_structured_commits(
+    tmp_root: &Path,
+) -> Result<Value> {
+    // Reproduces the landmark v1.25.0 shape (feat/feat/fix, all scoped) that
+    // silently misfired to `significance: low` in release_kit::plan before it
+    // was switched from the bare-text classifier to the structured,
+    // commit-type-aware one. Scoped conventional headers ("feat(scope): ...")
+    // never contain the literal substring "feat:" the bare classifier looked
+    // for, and one of these three real subjects contains the literal word
+    // "workflows", which the bare classifier's internal-tooling heuristic
+    // matches -- landing exactly on `low` for what shipped two real features.
+    let repo = tmp_root.join("release-kit-classification");
+    init_fixture_repo(&repo, "v1.24.0")?;
+    fs::write(repo.join("fleet.txt"), "backfill-first adoption lane\n")?;
+    run_ok("git", ["add", "fleet.txt"], &repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(fleet): deliver backfill-first adoption lane",
+        ],
+        &repo,
+    )?;
+    fs::write(repo.join("kit.txt"), "release kit artifact graph\n")?;
+    run_ok("git", ["add", "kit.txt"], &repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(run): emit release kit artifact graph",
+        ],
+        &repo,
+    )?;
+    fs::write(repo.join("workflow.txt"), "attach to existing workflows\n")?;
+    run_ok("git", ["add", "workflow.txt"], &repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "fix(fleet): attach to existing release workflows",
+        ],
+        &repo,
+    )?;
+
+    let result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let evidence: Value = serde_json::from_slice(&result.stdout)?;
+    let classification = &evidence["release_kit"]["classification"];
+    if classification["importance"] == "low" {
+        return Err(format!(
+            "release_kit classification regressed to the bare-text misfire: {classification}"
+        )
+        .into());
+    }
+    let needs_rich_artifacts = matches!(
+        classification["importance"].as_str(),
+        Some("high" | "launch" | "migration" | "security")
+    );
+    let audiences = classification["audiences"]
+        .as_array()
+        .map(|values| values.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let has_rich_audiences =
+        audiences.contains(&"release-operator") && audiences.contains(&"docs-owner");
+    if needs_rich_artifacts != has_rich_audiences {
+        return Err(format!(
+            "release_kit_needs_rich_artifacts disagreed with planned audiences for importance={}: {audiences:?}",
+            classification["importance"]
+        )
+        .into());
+    }
+    Ok(json!({
+        "evidence": evidence,
+        "classification": classification,
+    }))
+}

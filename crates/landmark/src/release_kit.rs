@@ -1,6 +1,8 @@
 use super::{
-    LandmarkManifest, Result, RunArgs, RunArtifactRecord, RunPublicationRecord, RunReleaseContext,
-    RunVersionDecision, classify_release_context, context_source, sha256_hex, trimmed_option,
+    ContextCommit, DeterministicReleaseContext, LandmarkManifest, Result, RunArgs,
+    RunArtifactRecord, RunPublicationRecord, RunReleaseContext, RunVersionDecision,
+    classify_release_context_with_deterministic, context_source, conventional_commit_type,
+    is_breaking_commit, sha256_hex, trimmed_option,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -170,7 +172,27 @@ pub(super) fn plan(input: PlanInput<'_>) -> ReleaseKit {
         context_source("technical_changelog", "git_range", technical_changelog),
         context_source("public_notes", "generated", notes),
     ];
-    let release_classification = classify_release_context(&classification_text, &context_sources);
+    let deterministic = DeterministicReleaseContext {
+        commits: release
+            .commits
+            .iter()
+            .map(|commit| ContextCommit {
+                conventional_type: conventional_commit_type(&commit.subject)
+                    .unwrap_or("")
+                    .to_string(),
+                breaking: is_breaking_commit(commit),
+                subject: commit.subject.clone(),
+                body: commit.body.clone(),
+                short_hash: commit.short_hash.clone(),
+            })
+            .collect(),
+        ..DeterministicReleaseContext::default()
+    };
+    let release_classification = classify_release_context_with_deterministic(
+        &classification_text,
+        &context_sources,
+        &deterministic,
+    );
     let importance = release_kit_importance(&release_classification, &release.decision);
     let primary_audience = manifest
         .audience

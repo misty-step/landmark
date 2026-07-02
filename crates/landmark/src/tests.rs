@@ -703,7 +703,11 @@ model:
 
 #[test]
 fn release_classifier_defaults_unknown_context_to_user_visible_medium() {
-    let classification = classify_release_context("## [1.2.3]\n\n- improve output\n", &[]);
+    let classification = classify_release_context_from_text(
+        "## [1.2.3]\n\n- improve output\n",
+        &[],
+        "rendered-text",
+    );
 
     assert!(classification.user_visible);
     assert_eq!(classification.significance, "medium");

@@ -1,12 +1,5 @@
 use crate::*;
 
-pub(crate) fn classify_release_context(
-    technical: &str,
-    sources: &[ContextSource],
-) -> ReleaseClassification {
-    classify_release_context_from_text(technical, sources, "rendered-text")
-}
-
 pub(crate) fn classify_release_context_with_deterministic(
     technical: &str,
     sources: &[ContextSource],
