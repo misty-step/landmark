@@ -2,6 +2,12 @@
 name = "landmark"
 version = "1.26.0"
 edition = "2024"
+description = "Portable release-intelligence runtime for repositories using conventional commits"
+license = "MIT"
+repository = "https://github.com/misty-step/landmark"
+readme = "../../README.md"
+keywords = ["release", "changelog", "semver", "conventional-commits", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
