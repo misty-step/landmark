@@ -17,7 +17,7 @@ inputs:
     description: API key for LLM synthesis (OpenRouter, OpenAI, or any compatible provider).
     required: false
   llm-model:
-    description: Primary model ID for synthesis (e.g., 'anthropic/claude-sonnet-4', 'openai/gpt-4o-mini').
+    description: Primary model ID for synthesis (e.g., 'anthropic/claude-sonnet-5', 'anthropic/claude-haiku-4.5').
     default: ""
     required: false
   llm-fallback-models:
@@ -227,7 +227,7 @@ runs:
       shell: bash
       env:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
-        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || 'anthropic/claude-sonnet-4' }}
+        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || 'anthropic/claude-sonnet-5' }}
         MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
@@ -330,7 +330,7 @@ runs:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
         LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
-        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models || 'google/gemini-2.5-flash,openai/gpt-4o-mini' }}
+        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models || 'google/gemini-2.5-flash,anthropic/claude-haiku-4.5' }}
         MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}

@@ -360,8 +360,8 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     errors.extend(validate_docs_link_targets(repo_root, &readme));
     errors.extend(validate_readme_command_names(&readme));
     for required_model in [
-        "anthropic/claude-sonnet-4",
-        "openai/gpt-4o-mini",
+        "anthropic/claude-sonnet-5",
+        "anthropic/claude-haiku-4.5",
         "google/gemini-2.5-flash",
     ] {
         if !readme.contains(required_model) {
@@ -566,7 +566,7 @@ pub(crate) fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
                 "cheap, balanced, rich, off",
                 "full # full or synthesis-only",
                 "Non-empty action inputs still win over manifest values.",
-                "cheap` uses `openai/gpt-4o-mini`",
+                "cheap` uses `anthropic/claude-haiku-4.5`",
                 "synthesize --dry-run-cost",
             ]
             .iter()

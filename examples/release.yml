@@ -49,8 +49,8 @@ jobs:
           # OpenRouter API key for synthesized "What's New" notes.
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks.
-          # llm-model: anthropic/claude-sonnet-4
-          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+          # llm-model: anthropic/claude-sonnet-5
+          # llm-fallback-models: "google/gemini-2.5-flash,anthropic/claude-haiku-4.5"
           # Optional: custom chat-completions endpoint (OpenAI-compatible).
           # llm-api-url: https://api.openai.com/v1/chat/completions
           # Optional Node.js version for semantic-release.

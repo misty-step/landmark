@@ -120,8 +120,8 @@ jobs:
           github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks
-          # llm-model: anthropic/claude-sonnet-4
-          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+          # llm-model: anthropic/claude-sonnet-5
+          # llm-fallback-models: "google/gemini-2.5-flash,anthropic/claude-haiku-4.5"
 ```
 
 Landmark is language-agnostic. Your repo does not need `package.json` or Node.js
@@ -319,8 +319,8 @@ keeps product context, audience, voice, changelog source, artifact outputs, and
 model policy in the repo instead of requiring every workflow to repeat them.
 Non-empty action inputs still win over manifest values.
 When `model.primary` is omitted, `model.policy` selects Landmark's built-in
-default model tier: `cheap` uses `openai/gpt-4o-mini`, while `balanced` and
-`rich` use `anthropic/claude-sonnet-4`. `off` disables LLM synthesis while
+default model tier: `cheap` uses `anthropic/claude-haiku-4.5`, while `balanced`
+and `rich` use `anthropic/claude-sonnet-5`. `off` disables LLM synthesis while
 still publishing the technical release.
 
 ```yaml
@@ -341,10 +341,10 @@ release:
   profile: full # full or synthesis-only
 model:
   policy: balanced # cheap, balanced, rich, off
-  primary: anthropic/claude-sonnet-4
+  primary: anthropic/claude-sonnet-5
   fallbacks:
     - google/gemini-2.5-flash
-    - openai/gpt-4o-mini
+    - anthropic/claude-haiku-4.5
 budget:
   max_input_tokens: 12000
   max_output_tokens: 1200
@@ -366,9 +366,11 @@ security, and migration-heavy releases escalate to the rich tier.
 
 During real synthesis runs with `model.policy` enabled and an API key present,
 Landmark first sends the parsed commits, commit bodies, diff statistics, and the
-rendered changelog context through a cheap OpenAI-compatible classifier. On the
-default OpenRouter endpoint this preflight uses `openai/gpt-4o-mini`; custom
-endpoints use the configured primary model. Conventional `feat`, `fix`, `perf`,
+rendered changelog context through a cheap OpenAI-compatible classifier. It
+uses the configured `model.primary` when set, falling back to
+`deepseek/deepseek-v4-flash` (with `anthropic/claude-haiku-4.5` as a further
+fallback) when no primary model is configured — the same precedence on every
+endpoint. Conventional `feat`, `fix`, `perf`,
 security, migration, and breaking-change signals remain the deterministic floor:
 if the model would downgrade or skip them, Landmark records the disagreement in
 the synthesis context, preserves a synthesis-worthy classification, and appends
@@ -400,7 +402,7 @@ release-mutating workflow.
 | `github-token` | Yes | - | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
-| `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,openai/gpt-4o-mini` | Comma-separated fallback model IDs tried in order if primary fails. |
+| `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,anthropic/claude-haiku-4.5` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
@@ -590,7 +592,7 @@ The `synthesis-status` output is a compact JSON object for automation:
   "failure_message": "",
   "model_attempts": [
     {
-      "model": "anthropic/claude-sonnet-4",
+      "model": "anthropic/claude-sonnet-5",
       "succeeded": true,
       "quality": "valid",
       "message": "",
@@ -598,7 +600,7 @@ The `synthesis-status` output is a compact JSON object for automation:
         "input_tokens": 1800,
         "output_tokens": 1000,
         "model_tier": "balanced",
-        "model": "anthropic/claude-sonnet-4",
+        "model": "anthropic/claude-sonnet-5",
         "estimated_usd": 0.0068,
         "skip": false,
         "skip_reason": ""
@@ -643,7 +645,7 @@ The `synthesis-status` output is a compact JSON object for automation:
       "security": false,
       "migration_heavy": false,
       "source": "model",
-      "model": "openai/gpt-4o-mini",
+      "model": "deepseek/deepseek-v4-flash",
       "deterministic_signals": ["conventional:feat"],
       "disagreements": [],
       "reasons": ["model classified the parsed release evidence as user-visible"]
@@ -652,7 +654,7 @@ The `synthesis-status` output is a compact JSON object for automation:
       "input_tokens": 1800,
       "output_tokens": 1000,
       "model_tier": "balanced",
-      "model": "anthropic/claude-sonnet-4",
+      "model": "anthropic/claude-sonnet-5",
       "estimated_usd": 0.0068,
       "skip": false,
       "skip_reason": ""

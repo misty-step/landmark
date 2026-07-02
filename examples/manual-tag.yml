@@ -42,4 +42,4 @@ jobs:
           changelog-source: auto
           # Optional: customize synthesis behavior.
           # audience: developer
-          # llm-model: anthropic/claude-sonnet-4
+          # llm-model: anthropic/claude-sonnet-5

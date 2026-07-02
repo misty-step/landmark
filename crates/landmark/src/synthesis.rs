@@ -276,12 +276,35 @@ pub(crate) fn optional_or_default(
 }
 
 pub(crate) fn policy_default_model(policy: Option<&str>) -> Option<String> {
-    match policy.and_then(trimmed_option).as_deref() {
-        Some("off") => Some("off".into()),
-        Some("cheap") => Some("openai/gpt-4o-mini".into()),
-        Some("balanced") => Some("anthropic/claude-sonnet-4".into()),
-        Some("rich") => Some("anthropic/claude-sonnet-4".into()),
-        _ => Some("anthropic/claude-sonnet-4".into()),
+    let tier = match policy.and_then(trimmed_option).as_deref() {
+        Some("off") => "off",
+        Some("cheap") => "cheap",
+        Some("rich") => "rich",
+        _ => "balanced",
+    };
+    Some(default_model_for_tier(tier).into())
+}
+
+/// Single source of truth for model-tier pins. `cheap_model()`, `rich_model()`,
+/// `policy_default_model()`, and `release_classification_models()` all read
+/// their defaults from here instead of hardcoding literals independently —
+/// that independent hardcoding is exactly how `openai/gpt-4o-mini` and
+/// `anthropic/claude-sonnet-4` went stale without anyone noticing. When a
+/// pin needs to move, update it once, here, and bump the review date.
+/// See backlog.d/013-refresh-model-defaults-and-fix-config-override-bug.md.
+pub(crate) fn default_model_for_tier(tier: &str) -> &'static str {
+    match tier {
+        "off" => "off",
+        // model pin reviewed: 2026-07
+        "cheap" => "anthropic/claude-haiku-4.5",
+        // model pin reviewed: 2026-07
+        "rich" | "balanced" => "anthropic/claude-sonnet-5",
+        // model pin reviewed: 2026-07
+        "classification" => "deepseek/deepseek-v4-flash",
+        // model pin reviewed: 2026-07
+        "classification-fallback" => "anthropic/claude-haiku-4.5",
+        // model pin reviewed: 2026-07
+        _ => "anthropic/claude-sonnet-5",
     }
 }
 
@@ -428,7 +451,7 @@ pub(crate) fn synthesis_context_packet_with_model(
     }
     let sources = synthesis_context_sources(args, config, technical, prompt);
     let deterministic = deterministic_release_context(args, config);
-    let models = release_classification_models(config, &args.api_url);
+    let models = release_classification_models(config);
     let classification = classify_release_context_with_model(
         technical,
         &sources,
@@ -840,7 +863,7 @@ pub(crate) fn cheap_model(config: &EffectiveSynthesisConfig) -> String {
     if config.model != "off" && !config.model.trim().is_empty() {
         config.model.clone()
     } else {
-        "openai/gpt-4o-mini".into()
+        default_model_for_tier("cheap").into()
     }
 }
 
@@ -848,7 +871,7 @@ pub(crate) fn rich_model(config: &EffectiveSynthesisConfig) -> String {
     if config.model != "off" && !config.model.trim().is_empty() {
         config.model.clone()
     } else {
-        "anthropic/claude-sonnet-4".into()
+        default_model_for_tier("rich").into()
     }
 }
 

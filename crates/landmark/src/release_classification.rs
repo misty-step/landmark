@@ -175,22 +175,16 @@ pub(crate) fn classify_release_context_with_model(
     classification
 }
 
-pub(crate) fn release_classification_models(
-    config: &EffectiveSynthesisConfig,
-    api_url: &str,
-) -> Vec<String> {
+pub(crate) fn release_classification_models(config: &EffectiveSynthesisConfig) -> Vec<String> {
     if config.model_policy.trim().eq_ignore_ascii_case("off") {
         return Vec::new();
     }
     let mut models = Vec::new();
     let primary = config.model.trim();
-    let openrouter = api_url.to_ascii_lowercase().contains("openrouter.ai");
-    if openrouter && !config.model_policy.trim().eq_ignore_ascii_case("cheap") {
-        push_unique_model(&mut models, "openai/gpt-4o-mini");
-    } else if !primary.is_empty() && primary != "off" {
+    if !primary.is_empty() && primary != "off" {
         push_unique_model(&mut models, primary);
     } else {
-        push_unique_model(&mut models, "openai/gpt-4o-mini");
+        push_unique_model(&mut models, default_model_for_tier("classification"));
     }
     for model in config
         .fallback_models
@@ -200,9 +194,10 @@ pub(crate) fn release_classification_models(
     {
         push_unique_model(&mut models, model);
     }
-    if openrouter {
-        push_unique_model(&mut models, "openai/gpt-4o-mini");
-    }
+    push_unique_model(
+        &mut models,
+        default_model_for_tier("classification-fallback"),
+    );
     models
 }
 

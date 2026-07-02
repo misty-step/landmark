@@ -698,7 +698,7 @@ model:
     )
     .unwrap();
     let policy_default = resolve_synthesis_config(&args).unwrap();
-    assert_eq!(policy_default.model, "anthropic/claude-sonnet-4");
+    assert_eq!(policy_default.model, "anthropic/claude-sonnet-5");
 }
 
 #[test]

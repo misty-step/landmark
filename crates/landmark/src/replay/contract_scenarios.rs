@@ -927,18 +927,18 @@ model:
     let defaults = parse_outputs(&output)?;
     let effective_audience = action_value("", defaults.get("audience"), "general");
     let explicit_audience = action_value("developer", defaults.get("audience"), "general");
-    let effective_model = action_value("", defaults.get("llm_model"), "anthropic/claude-sonnet-4");
+    let effective_model = action_value("", defaults.get("llm_model"), "anthropic/claude-sonnet-5");
     let explicit_model = action_value(
         "explicit/model",
         defaults.get("llm_model"),
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-5",
     );
     let effective_markdown = action_value("", defaults.get("notes_output_file"), "");
     let explicit_markdown = action_value("docs/explicit.md", defaults.get("notes_output_file"), "");
 
     if effective_audience != "enterprise"
         || explicit_audience != "developer"
-        || effective_model != "openai/gpt-4o-mini"
+        || effective_model != "anthropic/claude-haiku-4.5"
         || explicit_model != "explicit/model"
         || effective_markdown != "docs/releases/{version}.md"
         || explicit_markdown != "docs/explicit.md"
@@ -951,7 +951,7 @@ model:
             "manifest-defaults github output",
             "empty action input uses manifest default",
             "explicit action input overrides manifest default",
-            "model.policy cheap selects openai/gpt-4o-mini"
+            "model.policy cheap selects anthropic/claude-haiku-4.5"
         ],
         "defaults": defaults,
         "effective": {

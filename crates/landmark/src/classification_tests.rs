@@ -147,6 +147,41 @@ fn model_classifier_uses_commit_diff_context_and_preserves_floor() {
 }
 
 #[test]
+fn release_classification_models_honors_configured_primary_over_hardcoded_default() {
+    // Regression for the bug where a non-"cheap" policy silently discarded
+    // `config.model` (manifest.model.primary) and pushed a hardcoded
+    // literal first instead. See
+    // backlog.d/013-refresh-model-defaults-and-fix-config-override-bug.md.
+    let config = test_synthesis_config("balanced");
+    assert_eq!(config.model, "primary/model");
+
+    let models = release_classification_models(&config);
+
+    assert_eq!(
+        models[0], "primary/model",
+        "configured model.primary must win regardless of policy: {models:?}"
+    );
+}
+
+#[test]
+fn release_classification_models_falls_back_to_tier_default_when_unset() {
+    let mut config = test_synthesis_config("balanced");
+    config.model = String::new();
+
+    let models = release_classification_models(&config);
+
+    assert_eq!(
+        models[0],
+        default_model_for_tier("classification"),
+        "{models:?}"
+    );
+    assert!(
+        models.contains(&default_model_for_tier("classification-fallback").to_string()),
+        "{models:?}"
+    );
+}
+
+#[test]
 fn dry_run_context_packet_does_not_call_model_classifier() {
     let repo = fixture_repo_with_landmark_125_commits();
     let mut args = test_synthesize_args(repo.path(), "v1.25.0");
