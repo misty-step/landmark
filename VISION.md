@@ -90,23 +90,37 @@ than quiet skips.
 
 ## Current Bets
 
-1. Replace keyword classification with model-native classification over parsed
-   commits and diff statistics, with conventional commits as the floor signal.
-2. Collapse the three version-decision paths into one Rust engine before adding
-   more release-intent policy.
-3. Publish real release binaries and stop growing the checked-in `dist/`
-   artifact practice; history rewrite remains an explicit operator decision.
-4. Keep the CLI boundary sharp while the GitHub Action remains the easiest
+1. Keep the CLI boundary sharp while the GitHub Action remains the easiest
    adoption path.
-5. Make Landmark the default release layer for Misty Step projects before
+2. Make Landmark the default release layer for Misty Step projects before
    asking strangers to trust it.
-6. Make `release-kit` the durable artifact graph for richer release workflows:
+3. Make `release-kit` the durable artifact graph for richer release workflows:
    docs patches, blog drafts, screenshots, demo GIFs, videos, and other
    intelligent release artifacts.
-7. Treat schema registry coverage as part of the product, especially for
+4. Treat schema registry coverage as part of the product, especially for
    agents.
-8. Prefer portable local and generic-CI modes over GitHub-only affordances.
-9. Turn every failure class into a stable envelope with a clear `user_action`.
+5. Prefer portable local and generic-CI modes over GitHub-only affordances.
+6. Turn every failure class into a stable envelope with a clear `user_action`.
+7. Back version decisions with a second, independent signal beyond commit
+   intent — diff-grounded semver evidence (e.g. `cargo-semver-checks` for Rust
+   consumers) reconciled against the conventional-commit bump, with a typed
+   waiver for declared product intent that legitimately overrides both
+   (backlog 005/002/009 — the differentiator arc, deliberately staged behind
+   the bets below until it can build on settled ground).
+8. Thin `action.yml`'s ~1,000 lines of embedded bash into one replayable Rust
+   `landmark action-run` command, with `semantic-release` remaining only as an
+   explicitly named compatibility path (backlog 007, then 010).
+9. Make the fleet self-healing: detect drift between installed consumer
+   workflows/manifests and current templates, and open the fix as a PR instead
+   of letting copy-pasted integration rot silently (backlog 008).
+
+### Recently landed
+Model-native classification over parsed commits and diff statistics (with
+conventional commits as the deterministic floor signal), one shared Rust
+version-decision engine across every entry point (unknown commits are named,
+never silently patched), and published per-target release binaries with the
+`dist/` history purge — all three were open bets as of the 2026-07-01 groom;
+treat this file, not that snapshot, as current.
 
 ## Where The Depth Lives
 
