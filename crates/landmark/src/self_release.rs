@@ -19,16 +19,33 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             changed_files: Vec::new(),
             changelog: String::new(),
             commits: Vec::new(),
+            decisive_commit: None,
+            unknown_commits: Vec::new(),
         };
         return emit_self_release_plan(&plan, &args.github_output);
     }
 
-    let commits = self_release_commits(&args.repo_root, &format!("v{latest_version}"))?;
-    let bump = release_bump(&commits);
-    let Some(bump) = bump else {
+    let classified = self_release_commits(&args.repo_root, &format!("v{latest_version}"))?;
+    let decision = decide_version(&classified);
+    let changelog_commits = release_worthy_commits(&classified);
+    let unknown_commits: Vec<String> = decision
+        .unknown_commits
+        .iter()
+        .map(ClassifiedCommit::evidence_line)
+        .collect();
+    let Some(bump) = decision.bump else {
+        let reason = if unknown_commits.is_empty() {
+            "no release-worthy conventional commits since latest tag".to_string()
+        } else {
+            format!(
+                "refusing to release: {} commit(s) since latest tag do not follow conventional-commit format and no feat/fix/perf/breaking/revert signal was found: {}",
+                unknown_commits.len(),
+                unknown_commits.join("; ")
+            )
+        };
         let plan = SelfReleasePlan {
             released: false,
-            reason: "no release-worthy conventional commits since latest tag".into(),
+            reason,
             latest_version,
             next_version: package_version,
             release_tag: String::new(),
@@ -37,10 +54,16 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             commit_message: String::new(),
             changed_files: Vec::new(),
             changelog: String::new(),
-            commits,
+            commits: changelog_commits,
+            decisive_commit: None,
+            unknown_commits,
         };
         return emit_self_release_plan(&plan, &args.github_output);
     };
+    let decisive_commit = decision
+        .decisive
+        .as_ref()
+        .map(ClassifiedCommit::evidence_line);
 
     let next_version = bump_version(&latest_version, bump)?;
     let release_tag = format!("v{next_version}");
@@ -49,7 +72,7 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         &latest_version,
         &next_version,
         &release_tag,
-        &commits,
+        &changelog_commits,
     );
     prepend_changelog(&args.repo_root.join("CHANGELOG.md"), &changelog)?;
     update_version_metadata(UpdateVersionArgs {
@@ -78,7 +101,9 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             "Cargo.lock".into(),
         ],
         changelog,
-        commits,
+        commits: changelog_commits,
+        decisive_commit,
+        unknown_commits,
     };
     emit_self_release_plan(&plan, &args.github_output)
 }
@@ -175,13 +200,6 @@ pub(crate) fn emit_self_release_publish(
     Ok(())
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub(crate) enum ReleaseBump {
-    Patch,
-    Minor,
-    Major,
-}
-
 pub(crate) fn latest_repo_version(repo_root: &Path) -> Result<String> {
     let tags = run_ok("git", ["tag", "--merged", "HEAD"], repo_root)?;
     latest_semver_version(tags.lines()).ok_or("no semver tags found".into())
@@ -196,7 +214,7 @@ pub(crate) fn package_version(repo_root: &Path) -> Result<String> {
         .ok_or("package.json missing version".into())
 }
 
-pub(crate) fn self_release_commits(repo_root: &Path, tag: &str) -> Result<Vec<SelfReleaseCommit>> {
+pub(crate) fn self_release_commits(repo_root: &Path, tag: &str) -> Result<Vec<ClassifiedCommit>> {
     let range = format!("{tag}..HEAD");
     let log = run_ok(
         "git",
@@ -216,68 +234,49 @@ pub(crate) fn self_release_commits(repo_root: &Path, tag: &str) -> Result<Vec<Se
         if subject.starts_with("chore(release):") {
             continue;
         }
-        if let Some(commit) = classify_release_commit(&hash, &subject, &body) {
-            commits.push(commit);
-        }
+        commits.push(classify_commit(&hash, &subject, &body));
     }
     Ok(commits)
 }
 
-pub(crate) fn classify_release_commit(
-    hash: &str,
-    subject: &str,
-    body: &str,
-) -> Option<SelfReleaseCommit> {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"^([A-Za-z]+)(?:\(([^)]+)\))?(!)?: (.+)$").unwrap());
-    let caps = re.captures(subject)?;
-    let kind = caps.get(1)?.as_str().to_ascii_lowercase();
-    let scope = caps.get(2).map(|m| m.as_str()).unwrap_or("").to_string();
-    let breaking = caps.get(3).is_some() || body.contains("BREAKING CHANGE:");
-    let category = if breaking {
-        "breaking"
-    } else {
-        match kind.as_str() {
-            "feat" => "features",
-            "fix" => "fixes",
-            "perf" => "performance",
-            _ => return None,
-        }
-    };
-    Some(SelfReleaseCommit {
-        hash: hash.to_string(),
-        short_hash: hash.chars().take(7).collect(),
-        subject: subject.to_string(),
-        category: category.to_string(),
-        scope,
-        description: caps.get(4)?.as_str().to_string(),
-        breaking,
-    })
+/// The changelog only ever renders commits that actually drove (or could have
+/// driven) a version bump; `chore`/`docs`/unparseable commits are excluded.
+pub(crate) fn release_worthy_commits(commits: &[ClassifiedCommit]) -> Vec<SelfReleaseCommit> {
+    commits
+        .iter()
+        .filter(|commit| {
+            matches!(
+                commit.category,
+                CommitCategory::Breaking | CommitCategory::Feature | CommitCategory::Fix
+            )
+        })
+        .map(|commit| SelfReleaseCommit {
+            hash: commit.id.clone(),
+            short_hash: commit.id.chars().take(7).collect(),
+            subject: commit.subject.clone(),
+            category: if commit.breaking {
+                "breaking".to_string()
+            } else {
+                match commit.kind.as_str() {
+                    "feat" => "features".to_string(),
+                    "perf" => "performance".to_string(),
+                    "revert" => "reverts".to_string(),
+                    _ => "fixes".to_string(),
+                }
+            },
+            scope: commit.scope.clone(),
+            description: commit.description.clone(),
+            breaking: commit.breaking,
+        })
+        .collect()
 }
 
-pub(crate) fn release_bump(commits: &[SelfReleaseCommit]) -> Option<ReleaseBump> {
-    let mut bump: Option<ReleaseBump> = None;
-    for commit in commits {
-        let candidate = if commit.breaking {
-            ReleaseBump::Major
-        } else {
-            match commit.category.as_str() {
-                "features" => ReleaseBump::Minor,
-                "fixes" | "performance" => ReleaseBump::Patch,
-                _ => continue,
-            }
-        };
-        bump = Some(bump.map_or(candidate, |current| current.max(candidate)));
-    }
-    bump
-}
-
-pub(crate) fn bump_version(version: &str, bump: ReleaseBump) -> Result<String> {
+pub(crate) fn bump_version(version: &str, bump: VersionBump) -> Result<String> {
     let (major, minor, patch) = semver_key(version)?;
     Ok(match bump {
-        ReleaseBump::Major => format!("{}.0.0", major + 1),
-        ReleaseBump::Minor => format!("{major}.{}.0", minor + 1),
-        ReleaseBump::Patch => format!("{major}.{minor}.{}", patch + 1),
+        VersionBump::Major => format!("{}.0.0", major + 1),
+        VersionBump::Minor => format!("{major}.{}.0", minor + 1),
+        VersionBump::Patch => format!("{major}.{minor}.{}", patch + 1),
     })
 }
 
@@ -312,6 +311,7 @@ pub(crate) fn render_self_release_changelog(
         ("features", "### Features"),
         ("fixes", "### Bug Fixes"),
         ("performance", "### Performance Improvements"),
+        ("reverts", "### Reverts"),
     ];
     for (category, heading) in sections {
         let entries: Vec<_> = commits
