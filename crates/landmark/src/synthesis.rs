@@ -295,7 +295,7 @@ pub(crate) fn resolve_technical_changelog(
         if text.trim().is_empty() {
             None
         } else {
-            Some(extract_release_section(&text, &args.version))
+            extract_release_section(&text, &args.version)
         }
     } else {
         None
@@ -307,7 +307,13 @@ pub(crate) fn resolve_technical_changelog(
             .or(from_release_body)
             .or(from_prs)
             .ok_or_else(|| "no changelog source found".into()),
-        "changelog" => from_changelog.ok_or_else(|| "CHANGELOG.md is missing or empty".into()),
+        "changelog" => from_changelog.ok_or_else(|| {
+            format!(
+                "CHANGELOG.md is missing, empty, or has no section for {}",
+                args.version
+            )
+            .into()
+        }),
         "release-body" => {
             from_release_body.ok_or_else(|| "release body source is missing or empty".into())
         }
@@ -328,14 +334,11 @@ pub(crate) fn read_optional_file(path: &Path) -> Result<Option<String>> {
     }
 }
 
-pub(crate) fn extract_release_section(text: &str, version: &str) -> String {
+pub(crate) fn extract_release_section(text: &str, version: &str) -> Option<String> {
     let normalized =
         normalize_version(version).unwrap_or_else(|_| version.trim_start_matches('v').to_string());
     let heading = Regex::new(r"(?m)^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9][^\]\s]*)\]?.*$").unwrap();
     let matches: Vec<_> = heading.find_iter(text).collect();
-    if matches.is_empty() {
-        return text.to_string();
-    }
     for (index, mat) in matches.iter().enumerate() {
         let line = text[mat.start()..mat.end()].to_string();
         if line.contains(&normalized) || line.contains(version) {
@@ -343,15 +346,14 @@ pub(crate) fn extract_release_section(text: &str, version: &str) -> String {
                 .get(index + 1)
                 .map(|next| next.start())
                 .unwrap_or(text.len());
-            return text[mat.start()..end].trim().to_string();
+            return Some(text[mat.start()..end].trim().to_string());
         }
     }
-    let first = matches[0];
-    let end = matches
-        .get(1)
-        .map(|next| next.start())
-        .unwrap_or(text.len());
-    text[first.start()..end].trim().to_string()
+    // No heading matches this release. Silently returning the first (most recent)
+    // section here used to hand the model a stale, unrelated changelog as ground
+    // truth for the release actually being synthesized — return None instead and
+    // let the caller fail loudly or fall back to a different source.
+    None
 }
 
 pub(crate) fn render_prompt(
@@ -929,7 +931,7 @@ pub(crate) fn notes_with_classification_notice(
         classification.deterministic_signals.join(", ")
     };
     format!(
-        "{}\n\n> Landmark classification notice: deterministic release signals ({signals}) disagreed with model classification; synthesis proceeded. {}",
+        "{}\n\n<details>\n<summary>Release classification notes</summary>\n\nLandmark classification notice: deterministic release signals ({signals}) disagreed with model classification; synthesis proceeded. {}\n\n</details>",
         notes.trim(),
         classification.disagreements.join("; ")
     )

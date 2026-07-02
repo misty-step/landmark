@@ -40,6 +40,8 @@ mod self_release;
 mod setup_fleet;
 mod synthesis;
 #[cfg(test)]
+mod synthesis_tests;
+#[cfg(test)]
 mod tests;
 mod util;
 mod version_decision;

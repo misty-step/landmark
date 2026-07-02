@@ -224,6 +224,10 @@ model:
     - fallback/model
 "#,
     )?;
+    fs::write(
+        repo.join("CHANGELOG.md"),
+        "## [1.2.3]\n\n- feat(cli): add a fleet command\n",
+    )?;
     let mut fallback_fake = FakeState {
         llm_status: 200,
         llm_notes: VALID_NOTES.to_string(),
