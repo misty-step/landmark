@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "x-landmark-artifact": "landmark run evidence packet",
-  "required": ["provider", "generated_at", "repo_root", "repository", "release_tag", "version", "previous_tag", "source", "technical_changelog_sha256", "notes_sha256", "version_decision", "artifacts", "release_kit", "publication"],
+  "required": ["provider", "generated_at", "repo_root", "repository", "release_tag", "version", "previous_tag", "source", "technical_changelog_sha256", "notes_sha256", "version_decision", "changed_files", "artifacts", "release_kit", "publication"],
   "properties": {
     "provider": { "type": "string", "enum": ["local", "github"] },
     "generated_at": { "type": "string" },
@@ -30,6 +30,10 @@
         "unknown_commits": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": false
+    },
+    "changed_files": {
+      "type": "array",
+      "items": { "type": "string" }
     },
     "artifacts": {
       "type": "object",

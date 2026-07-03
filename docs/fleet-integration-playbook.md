@@ -169,6 +169,11 @@ GitHub workflows need:
 - `OPENROUTER_API_KEY`: LLM synthesis. Missing or stale keys should not block
   release unless the repo deliberately sets `synthesis-required: "true"`.
 
+Optional release-kit feed delivery uses `RELEASE_FEED_URL` and
+`RELEASE_FEED_SECRET`. When either is missing, `landmark notify-release-feed`
+skips cleanly; when both are present, it signs the full release-kit JSON with
+`X-Signature-256` and POSTs it to `/v1/events`.
+
 Declare `contents: write`, `issues: write`, and `pull-requests: write`.
 
 ## Verification

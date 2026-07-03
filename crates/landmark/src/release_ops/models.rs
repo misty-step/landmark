@@ -196,6 +196,7 @@ pub(crate) struct RunEvidence {
     pub(crate) technical_changelog_sha256: String,
     pub(crate) notes_sha256: String,
     pub(crate) version_decision: RunVersionDecision,
+    pub(crate) changed_files: Vec<String>,
     pub(crate) artifacts: RunArtifactRecord,
     pub(crate) release_kit: release_kit::ReleaseKit,
     pub(crate) publication: RunPublicationRecord,

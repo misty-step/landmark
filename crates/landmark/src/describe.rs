@@ -292,6 +292,15 @@ pub(crate) fn command_contracts() -> Vec<CommandContract> {
             json_output: false,
         },
         CommandContract {
+            command: "notify-release-feed",
+            mode: "producer-adapter",
+            mutates: true,
+            preview: "cleanly skips when receiver URL or secret config is absent; otherwise sends one signed release-kit event",
+            stdout: "ReleaseFeedReceipt JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
             command: "notify-slack",
             mode: "notification-adapter",
             mutates: true,

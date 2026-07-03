@@ -208,6 +208,9 @@ jobs:
 
       - name: Synthesize landed release notes
         uses: ./
+        env:
+          RELEASE_FEED_URL: ${{ secrets.RELEASE_FEED_URL }}
+          RELEASE_FEED_SECRET: ${{ secrets.RELEASE_FEED_SECRET }}
         with:
           mode: synthesis-only
           release-tag: ${{ needs.publish-landed-release.outputs.release_tag }}

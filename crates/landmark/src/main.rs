@@ -31,6 +31,8 @@ mod pr_range;
 mod providers;
 mod release_body;
 mod release_classification;
+#[cfg(test)]
+mod release_feed_tests;
 mod release_kit;
 mod release_kit_contract;
 #[cfg(test)]

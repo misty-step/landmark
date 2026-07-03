@@ -378,13 +378,26 @@ a short classification notice to the generated release notes.
 
 Use `landmark run --provider local --repo-root .` to write a release-kit
 plan at `.landmark/run/release-kit.json` and record its schema and hash in
-`.landmark/run/evidence.json`. `--dry-run` keeps the filesystem untouched and
-prints the same `release_kit` object inside the stdout evidence packet. Low
-internal releases keep the kit to Landmark-owned changelog and notes evidence;
+`.landmark/run/evidence.json`; the evidence packet includes the deterministic
+version decision and changed-file list so downstream producers do not have to
+re-read git state. `--dry-run` keeps the filesystem untouched and prints the
+same `release_kit` object inside the stdout evidence packet. Low internal
+releases keep the kit to Landmark-owned changelog and notes evidence;
 high-importance, security, breaking, or migration-heavy releases add planned
 producer-adapter artifacts such as migration guides, docs updates, blog drafts,
 and demo videos with explicit handoff contracts, evidence paths, and pending
 approval state.
+
+`landmark notify-release-feed` is the first remote-service producer adapter for
+the release kit. It reads `.landmark/run/evidence.json` and
+`.landmark/run/release-kit.json`, fills the text-floor artifacts
+(`version-decision`, `changed-files`, and `changelog-diff`) as produced
+producer-adapter outputs, and POSTs the full `landmark.release-kit.v1` JSON body
+to the receiver. The adapter uses the same signature scheme as `notify-webhook`:
+`X-Signature-256: sha256=<hmac>`, computed over the raw JSON body. Configure it
+with `RELEASE_FEED_URL` and `RELEASE_FEED_SECRET`; `LANDMARK_RELEASE_FEED_*` and
+`RELEASE_KIT_FEED_*` are accepted aliases. Missing URL or secret config is a
+clean skip.
 
 Use `landmark backfill --repo-root . --since <tag> --mode artifacts-only
 --dry-run` to preview historical artifact migration for repositories that
@@ -458,10 +471,11 @@ distribution steps:
   balanced policy, or manifest budget limits are treated as successful policy
   outcomes. Release-body mutation and artifact writes are skipped, while
   `synthesis-status.context.cost` records the reason.
-- External GitHub, webhook, Slack, and LLM calls made by the Rust runtime use
-  the shared `curl_json` policy (`--connect-timeout`, `--max-time`, retries for
+- External GitHub, webhook, release-feed, Slack, and LLM calls made by the Rust
+  runtime use bounded curl calls (`--connect-timeout`, `--max-time`, retries for
   429/5xx). `replay-action --scenario http_resilience_policy` exercises slow,
-  throttled, and failing providers, and
+  throttled, and failing providers, `replay-action --scenario release_feed_adapter`
+  exercises the signed release-kit receiver path, and
   `replay-action --scenario action_side_effect_coverage` fails if `action.yml`
   invokes a Landmark subcommand without replay coverage.
 - Generated `release-notes` output uses a collision-resistant GitHub output
