@@ -216,3 +216,5 @@ jobs:
           synthesis-required: "false"
           floating-tags: "true"
           changelog-source: release-body
+          webhook-url: ${{ secrets.LANDMARK_WEBHOOK_URL }}
+          webhook-secret: ${{ secrets.LANDMARK_WEBHOOK_SECRET }}
