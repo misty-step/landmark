@@ -193,6 +193,10 @@ pub(crate) fn action_subcommand_replay_coverage() -> BTreeMap<&'static str, Vec<
             ],
         ),
         ("notify-webhook", vec!["http_resilience_policy"]),
+        (
+            "notify-release-feed",
+            vec!["release_feed_adapter", "http_resilience_policy"],
+        ),
         ("notify-slack", vec!["http_resilience_policy"]),
         ("floating-tag", vec!["consumer_floating_tag_behavior"]),
         (

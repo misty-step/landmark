@@ -863,6 +863,56 @@ runs:
           echo "::warning::Webhook notification failed; release continues."
         fi
 
+    - name: Send release kit feed event
+      id: notify_release_feed
+      if: steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        set_output() {
+          local key="$1"
+          local value="$2"
+          printf '%s=%s\n' "${key}" "${value}" >> "${GITHUB_OUTPUT}"
+        }
+
+        set_output "sent" "false"
+        set_output "skipped" "false"
+
+        receiver_url="${RELEASE_FEED_URL:-}"
+        if [ -z "${receiver_url}" ]; then
+          receiver_url="${LANDMARK_RELEASE_FEED_URL:-}"
+        fi
+        if [ -z "${receiver_url}" ]; then
+          receiver_url="${RELEASE_KIT_FEED_URL:-}"
+        fi
+
+        receiver_secret="${RELEASE_FEED_SECRET:-}"
+        if [ -z "${receiver_secret}" ]; then
+          receiver_secret="${LANDMARK_RELEASE_FEED_SECRET:-}"
+        fi
+        if [ -z "${receiver_secret}" ]; then
+          receiver_secret="${RELEASE_KIT_FEED_SECRET:-}"
+        fi
+
+        if [ -z "${receiver_url}" ] || [ -z "${receiver_secret}" ]; then
+          echo "::notice::Release kit feed event skipped: receiver URL or secret is not configured."
+          set_output "skipped" "true"
+          exit 0
+        fi
+
+        feed_log="${RUNNER_TEMP}/landmark-release-feed.log"
+        if "${LANDMARK_BIN}" notify-release-feed \
+          --evidence-file "${RUNNER_TEMP}/landmark-artifacts-evidence.json" \
+          --release-kit-file "${RUNNER_TEMP}/landmark-run/release-kit.json" \
+          --receipt-file "${RUNNER_TEMP}/landmark-release-feed-receipt.json" \
+          > "${RUNNER_TEMP}/landmark-release-feed.stdout" \
+          2> "${feed_log}"; then
+          set_output "sent" "true"
+        else
+          echo "::warning::Release kit feed event failed; release continues."
+        fi
+
     - name: Send Slack notification
       id: notify_slack
       if: inputs.slack-webhook-url != '' && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'

@@ -37,7 +37,9 @@ landmark run --provider local --repo-root . --dry-run
 plan, and embedded `release_kit` without writing artifacts or mutating a remote
 release. A normal local run writes the same release-kit artifact to
 `.landmark/run/release-kit.json` and records its schema and hash in
-`.landmark/run/evidence.json`.
+`.landmark/run/evidence.json`. The evidence packet also carries the
+deterministic version decision and changed-file list for producer adapters that
+need text evidence without re-reading the repository.
 
 For a GitHub-backed pipeline, keep publication explicit:
 
@@ -95,6 +97,21 @@ or browser-capture pipelines in the core runtime. Route those through producer
 adapters such as local CLIs, browser automation, external services, harness
 skills, or human approval. Producers consume release-kit inputs and return
 artifact paths, hashes, evidence, and status.
+
+The remote-service feed adapter is:
+
+```bash
+landmark notify-release-feed \
+  --evidence-file .landmark/run/evidence.json \
+  --release-kit-file .landmark/run/release-kit.json
+```
+
+It reads `RELEASE_FEED_URL` and `RELEASE_FEED_SECRET` from the environment
+(`LANDMARK_RELEASE_FEED_*` and `RELEASE_KIT_FEED_*` aliases are also accepted),
+enriches the kit with produced text-floor artifacts, and POSTs the full
+`landmark.release-kit.v1` JSON body to `POST /v1/events`. The request signature
+matches Landmark's webhook scheme: `X-Signature-256: sha256=<hmac>` over the raw
+body. Missing receiver config is a clean skip.
 
 Typical release-kit artifacts include migration guides, docs patches, blog
 drafts, essays, announcement copy, social copy, screenshots, images, GIFs, demo

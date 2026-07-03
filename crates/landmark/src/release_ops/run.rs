@@ -74,6 +74,7 @@ pub(crate) fn run_pipeline(args: RunArgs) -> Result<()> {
         technical_changelog_sha256: sha256_hex(technical_changelog.as_bytes()),
         notes_sha256: sha256_hex(notes.as_bytes()),
         version_decision: release.decision,
+        changed_files: context_changed_files(&args.repo_root, &release.version),
         artifacts,
         release_kit,
         publication,

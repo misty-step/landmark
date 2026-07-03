@@ -41,6 +41,8 @@ pub(crate) enum Commands {
     UpdateFeed(UpdateFeedArgs),
     /// POST release notes to a configured webhook endpoint
     NotifyWebhook(NotifyWebhookArgs),
+    /// POST an enriched release-kit event to a configured release feed receiver
+    NotifyReleaseFeed(NotifyReleaseFeedArgs),
     /// POST release notes to a configured Slack webhook
     NotifySlack(NotifySlackArgs),
     /// Compute a release decision and write technical/public release artifacts
@@ -357,6 +359,23 @@ pub(crate) struct NotifyWebhookArgs {
     pub(crate) release_url: String,
     #[arg(long = "notes-file")]
     pub(crate) notes_file: PathBuf,
+}
+
+#[derive(Args)]
+pub(crate) struct NotifyReleaseFeedArgs {
+    #[arg(long = "receiver-url", alias = "feed-url", default_value = "")]
+    pub(crate) receiver_url: String,
+    #[arg(long = "receiver-secret", alias = "feed-secret", default_value = "")]
+    pub(crate) receiver_secret: String,
+    #[arg(long = "evidence-file", default_value = ".landmark/run/evidence.json")]
+    pub(crate) evidence_file: PathBuf,
+    #[arg(
+        long = "release-kit-file",
+        default_value = ".landmark/run/release-kit.json"
+    )]
+    pub(crate) release_kit_file: PathBuf,
+    #[arg(long = "receipt-file", default_value = "")]
+    pub(crate) receipt_file: PathBuf,
 }
 
 #[derive(Args)]
@@ -768,6 +787,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Commands::WriteArtifacts(args) => write_artifacts(args),
         Commands::UpdateFeed(args) => update_feed(args),
         Commands::NotifyWebhook(args) => notify_webhook(args),
+        Commands::NotifyReleaseFeed(args) => notify_release_feed(args),
         Commands::NotifySlack(args) => notify_slack(args),
         Commands::Run(args) => run_pipeline(args),
         Commands::FloatingTag(args) => {
