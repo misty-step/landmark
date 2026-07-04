@@ -380,8 +380,14 @@ Use `landmark run --provider local --repo-root .` to write a release-kit
 plan at `.landmark/run/release-kit.json` and record its schema and hash in
 `.landmark/run/evidence.json`; the evidence packet includes the deterministic
 version decision and changed-file list so downstream producers do not have to
-re-read git state. `--dry-run` keeps the filesystem untouched and prints the
-same `release_kit` object inside the stdout evidence packet. Low internal
+re-read git state. For Rust crate repositories, the version decision also runs
+`cargo semver-checks --baseline-rev <previous-tag>` against the current checkout
+and records the public API evidence as `version_decision.api_evidence`.
+Conventional commits remain the deterministic floor: semver evidence can
+upgrade the bump, a provider skip or failure is recorded without silently
+changing the floor, and a commit/API disagreement records a typed waiver need
+instead of hiding the conflict. `--dry-run` keeps the filesystem untouched and
+prints the same `release_kit` object inside the stdout evidence packet. Low internal
 releases keep the kit to Landmark-owned changelog and notes evidence;
 high-importance, security, breaking, or migration-heavy releases add planned
 producer-adapter artifacts such as migration guides, docs updates, blog drafts,
@@ -782,6 +788,13 @@ The command writes `.landmark/replay/replay-result.json` with action outputs,
 generated notes, release body before/after state, git tags, structured logs, and
 fake service requests. CI runs a bounded replay on pull requests, the full replay
 on `master`, and uploads the evidence packet for inspection.
+
+The diff-grounded version-decision scenarios are:
+`semver_evidence_agrees`, `semver_evidence_upgrades`,
+`semver_evidence_absent`, and `semver_evidence_tool_failure`. They use
+disposable fixture repos and a fake `cargo semver-checks` binary so the replay
+proves Landmark's reconciliation and evidence schema without depending on a
+developer machine's installed cargo subcommands.
 
 For a local one-command gate, run:
 

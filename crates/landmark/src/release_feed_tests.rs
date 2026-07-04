@@ -27,11 +27,36 @@ fn notify_release_feed_posts_signed_release_kit_with_text_floor_artifacts() {
             "version_decision": {
                 "latest_tag": "v1.2.2",
                 "bump": "minor",
+                "commit_bump": "minor",
+                "api_evidence_bump": "none",
+                "reconciliation": "unavailable",
                 "commit_count": 1,
                 "conventional_commit_count": 1,
                 "range": "v1.2.2..HEAD",
                 "decisive_commit": "feat(feed): publish release evidence (abc1234)",
-                "unknown_commits": []
+                "decisive_signals": [
+                    "commit:abc1234 feat(feed): publish release evidence",
+                    "api-evidence:none skipped no evidence provider: no Cargo.toml at repository root"
+                ],
+                "unknown_commits": [],
+                "api_evidence": {
+                    "provider": "none",
+                    "status": "skipped",
+                    "bump": "none",
+                    "baseline": "",
+                    "target": "",
+                    "command": "",
+                    "exit_code": 0,
+                    "summary": "no evidence provider: no Cargo.toml at repository root",
+                    "findings": [],
+                    "failure_message": ""
+                },
+                "waiver": {
+                    "required": false,
+                    "status": "not-required",
+                    "kind": "",
+                    "reason": ""
+                }
             }
         },
         "classification": {"importance": "medium", "audiences": ["developer"], "why_it_matters": "release feed evidence"},

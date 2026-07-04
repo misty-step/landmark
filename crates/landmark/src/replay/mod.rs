@@ -146,6 +146,22 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_release_grounding_unified_path,
     );
     map.insert(
+        "semver_evidence_agrees".to_string(),
+        scenario_semver_evidence_agrees,
+    );
+    map.insert(
+        "semver_evidence_upgrades".to_string(),
+        scenario_semver_evidence_upgrades,
+    );
+    map.insert(
+        "semver_evidence_absent".to_string(),
+        scenario_semver_evidence_absent,
+    );
+    map.insert(
+        "semver_evidence_tool_failure".to_string(),
+        scenario_semver_evidence_tool_failure,
+    );
+    map.insert(
         "first_run_local_preview".to_string(),
         scenario_first_run_local_preview,
     );
@@ -241,6 +257,10 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "local_provider_run",
         "release_kit_classification_uses_structured_commits",
         "release_grounding_unified_path",
+        "semver_evidence_agrees",
+        "semver_evidence_upgrades",
+        "semver_evidence_absent",
+        "semver_evidence_tool_failure",
         "provider_run_parity",
         "manifest_defaults_and_overrides",
         "consumer_release_update_failure",

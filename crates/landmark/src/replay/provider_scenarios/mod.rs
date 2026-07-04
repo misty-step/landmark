@@ -7,6 +7,7 @@ mod pr_scoping;
 mod provider_runs;
 mod release_body_idempotency;
 mod self_release;
+mod semver_evidence;
 mod synthesis_cost;
 
 pub(crate) use consumers::*;
@@ -17,6 +18,7 @@ pub(crate) use pr_scoping::*;
 pub(crate) use provider_runs::*;
 pub(crate) use release_body_idempotency::*;
 pub(crate) use self_release::*;
+pub(crate) use semver_evidence::*;
 pub(crate) use synthesis_cost::*;
 
 #[derive(Default)]

@@ -24,6 +24,35 @@ pub(crate) fn init_fixture_repo(path: &Path, release_tag: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn init_rust_fixture_repo(path: &Path, release_tag: &str) -> Result<()> {
+    fs::create_dir_all(path.join("src"))?;
+    run_ok("git", ["init", "-q"], path)?;
+    run_ok("git", ["config", "user.name", "Landmark Replay"], path)?;
+    run_ok(
+        "git",
+        ["config", "user.email", "replay@example.invalid"],
+        path,
+    )?;
+    fs::write(path.join("README.md"), "# Rust Fixture\n")?;
+    fs::write(
+        path.join("Cargo.toml"),
+        "[package]\nname = \"landmark-replay-fixture\"\nversion = \"1.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n",
+    )?;
+    fs::write(path.join("src/lib.rs"), "pub fn stable_api() {}\n")?;
+    fs::write(
+        path.join("CHANGELOG.md"),
+        format!("## {release_tag}\n\n- feat: replay Rust fixture\n"),
+    )?;
+    run_ok("git", ["add", "."], path)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "feat: seed Rust replay fixture"],
+        path,
+    )?;
+    run_ok("git", ["tag", release_tag], path)?;
+    Ok(())
+}
+
 pub(crate) fn git_tags(path: &Path) -> Result<Vec<String>> {
     Ok(run_ok("git", ["tag", "--list", "--sort=refname"], path)?
         .lines()

@@ -206,3 +206,72 @@ fn rename_commit_alongside_real_signal_never_blocks_the_release() {
     assert_eq!(decision.unknown_commits.len(), 1);
     assert_eq!(decision.unknown_commits[0].id, "a");
 }
+
+fn api_evidence(status: &str, bump: &str) -> VersionApiEvidence {
+    VersionApiEvidence {
+        provider: "cargo-semver-checks".into(),
+        status: status.into(),
+        bump: bump.into(),
+        baseline: "v1.0.0".into(),
+        target: "HEAD".into(),
+        command: "cargo semver-checks --baseline-rev v1.0.0".into(),
+        exit_code: 0,
+        summary: format!("fixture {status}"),
+        findings: Vec::new(),
+        failure_message: String::new(),
+    }
+}
+
+#[test]
+fn api_evidence_can_upgrade_commit_floor_but_never_downgrade_it() {
+    let commits = [commit("a", "feat(api): add helper", "")];
+    let reconciled = decide_version_with_api_evidence(&commits, api_evidence("findings", "major"));
+    assert_eq!(reconciled.bump, Some(VersionBump::Major));
+    assert_eq!(reconciled.commit_bump, "minor");
+    assert_eq!(reconciled.api_evidence_bump, "major");
+    assert_eq!(reconciled.reconciliation, "upgraded");
+    assert!(
+        reconciled
+            .decisive_signals
+            .iter()
+            .any(|signal| signal.contains("api-evidence:cargo-semver-checks"))
+    );
+
+    let floor = decide_version_with_api_evidence(
+        &[commit("b", "feat(api)!: rename helper", "")],
+        api_evidence("passed", "none"),
+    );
+    assert_eq!(floor.bump, Some(VersionBump::Major));
+    assert_eq!(floor.reconciliation, "conflict");
+    assert_eq!(floor.waiver.status, "missing");
+    assert!(floor.waiver.required);
+}
+
+#[test]
+fn absent_or_failed_api_evidence_keeps_the_floor_loudly() {
+    let commits = [commit("a", "fix(cli): patch output", "")];
+    let absent =
+        decide_version_with_api_evidence(&commits, no_version_api_evidence("no Cargo.toml"));
+    assert_eq!(absent.bump, Some(VersionBump::Patch));
+    assert_eq!(absent.reconciliation, "unavailable");
+    assert_eq!(absent.api_evidence.status, "skipped");
+    assert!(
+        absent
+            .decisive_signals
+            .iter()
+            .any(|signal| signal.contains("api-evidence:none skipped"))
+    );
+
+    let mut failed = api_evidence("failed", "none");
+    failed.failure_message = "cargo semver-checks exited 2".into();
+    let failed = decide_version_with_api_evidence(&commits, failed);
+    assert_eq!(failed.bump, Some(VersionBump::Patch));
+    assert_eq!(failed.reconciliation, "unverified");
+    assert_eq!(failed.waiver.status, "not-required");
+    assert!(
+        failed
+            .decisive_signals
+            .iter()
+            .any(|signal| signal.contains("api-evidence:cargo-semver-checks failed"))
+    );
+}

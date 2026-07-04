@@ -41,6 +41,7 @@ mod release_kit_tests;
 mod release_ops;
 mod replay;
 mod self_release;
+mod semver_evidence;
 mod setup_fleet;
 mod synthesis;
 #[cfg(test)]
@@ -51,6 +52,7 @@ mod util;
 mod version_decision;
 #[cfg(test)]
 mod version_decision_tests;
+mod version_reconciliation;
 
 pub(crate) use cli::*;
 pub(crate) use describe::*;
@@ -64,10 +66,12 @@ pub(crate) use release_grounding::*;
 pub(crate) use release_ops::*;
 pub(crate) use replay::*;
 pub(crate) use self_release::*;
+pub(crate) use semver_evidence::*;
 pub(crate) use setup_fleet::*;
 pub(crate) use synthesis::*;
 pub(crate) use util::*;
 pub(crate) use version_decision::*;
+pub(crate) use version_reconciliation::*;
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn Error>>;
 

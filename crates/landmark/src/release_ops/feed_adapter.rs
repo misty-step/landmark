@@ -93,6 +93,7 @@ fn enrich_release_feed_kit(
     let version_decision = evidence
         .get("version_decision")
         .ok_or("evidence missing version_decision")?;
+    validate_release_feed_version_decision(version_decision)?;
     let changed_files = evidence
         .get("changed_files")
         .and_then(Value::as_array)
@@ -132,7 +133,7 @@ fn enrich_release_feed_kit(
             "sha256": sha256_json(version_decision)?,
             "acceptance": [
                 "Carries the exact deterministic version decision from run-evidence.v1.",
-                "Names the bump, release range, decisive commit, and unknown commits."
+                "Names the bump, release range, decisive signals, API evidence, and waiver state."
             ]
         }),
     )?;
@@ -217,6 +218,46 @@ fn enrich_release_feed_kit(
 
 fn sha256_json(value: &Value) -> Result<String> {
     Ok(sha256_hex(&serde_json::to_vec(value)?))
+}
+
+fn validate_release_feed_version_decision(version_decision: &Value) -> Result<()> {
+    for pointer in [
+        "/latest_tag",
+        "/bump",
+        "/commit_bump",
+        "/api_evidence_bump",
+        "/reconciliation",
+        "/range",
+        "/api_evidence/provider",
+        "/api_evidence/status",
+        "/api_evidence/summary",
+        "/waiver/status",
+    ] {
+        if version_decision
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            return Err(format!("version_decision missing string at {pointer}").into());
+        }
+    }
+    for pointer in ["/decisive_signals", "/unknown_commits"] {
+        if version_decision
+            .pointer(pointer)
+            .and_then(Value::as_array)
+            .is_none()
+        {
+            return Err(format!("version_decision missing array at {pointer}").into());
+        }
+    }
+    if version_decision
+        .pointer("/waiver/required")
+        .and_then(Value::as_bool)
+        .is_none()
+    {
+        return Err("version_decision missing boolean at /waiver/required".into());
+    }
+    Ok(())
 }
 
 fn upsert_artifact(release_kit: &mut Value, artifact: Value) -> Result<()> {
