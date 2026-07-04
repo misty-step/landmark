@@ -39,7 +39,10 @@ release. A normal local run writes the same release-kit artifact to
 `.landmark/run/release-kit.json` and records its schema and hash in
 `.landmark/run/evidence.json`. The evidence packet also carries the
 deterministic version decision and changed-file list for producer adapters that
-need text evidence without re-reading the repository.
+need text evidence without re-reading the repository. Rust crate repositories
+also record `cargo-semver-checks` public API evidence against the previous
+release tag when the provider can run; skips and tool failures are explicit
+evidence statuses, not silent omissions.
 
 For a GitHub-backed pipeline, keep publication explicit:
 
@@ -130,7 +133,7 @@ rich media and publication-specific outputs should stay adapter-owned.
 | audience | Built-in prompt variant: `general`, `developer`, `end-user`, `enterprise` |
 | synthesis-required | If `true`, fail the action when synthesis or publication policy fails |
 | preflight check | Pre-`semantic-release` validation: tag history integrity, config detection (`landmark preflight-tags`) |
-| version decision | The output of the shared version-decision engine (`crates/landmark/src/version_decision.rs`): a bump plus the decisive commit and any unknown (non-conventional) commits it named rather than silently absorbed |
+| version decision | The output of the shared version-decision engine (`crates/landmark/src/version_decision.rs`): the final bump, commit-derived floor, public API evidence bump, reconciliation status, decisive signals, unknown commits, and any typed waiver state |
 | release kit | Typed packet of release facts, recommended outputs, artifact status, provenance, approvals, and producer contracts |
 | producer adapter | Explicit local, browser, service, harness, or human boundary that turns release-kit inputs into a rich artifact such as a video, GIF, image, essay, docs patch, or blog draft |
 | final-mile artifact | Any output needed to ship the release beyond versioning: docs updates, migration guide, demo script, video, GIF, image, blog post, announcement copy, feed item, or social copy |

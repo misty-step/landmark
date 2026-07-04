@@ -15,11 +15,36 @@ pub(crate) fn scenario_release_feed_adapter(tmp_root: &Path) -> Result<Value> {
     let version_decision = json!({
         "latest_tag": "v1.2.2",
         "bump": "minor",
+        "commit_bump": "minor",
+        "api_evidence_bump": "none",
+        "reconciliation": "unavailable",
         "commit_count": 1,
         "conventional_commit_count": 1,
         "range": "v1.2.2..HEAD",
         "decisive_commit": "feat(feed): publish release evidence (abc1234)",
-        "unknown_commits": []
+        "decisive_signals": [
+            "commit:abc1234 feat(feed): publish release evidence",
+            "api-evidence:none skipped no evidence provider: no Cargo.toml at repository root"
+        ],
+        "unknown_commits": [],
+        "api_evidence": {
+            "provider": "none",
+            "status": "skipped",
+            "bump": "none",
+            "baseline": "",
+            "target": "",
+            "command": "",
+            "exit_code": 0,
+            "summary": "no evidence provider: no Cargo.toml at repository root",
+            "findings": [],
+            "failure_message": ""
+        },
+        "waiver": {
+            "required": false,
+            "status": "not-required",
+            "kind": "",
+            "reason": ""
+        }
     });
     let release_kit = json!({
         "schema_version": "landmark.release-kit.v1",

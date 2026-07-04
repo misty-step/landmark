@@ -23,11 +23,22 @@ fn baseline_decision() -> RunVersionDecision {
     RunVersionDecision {
         latest_tag: "v1.0.0".into(),
         bump: "minor".into(),
+        commit_bump: "minor".into(),
+        api_evidence_bump: "none".into(),
+        reconciliation: "unavailable".into(),
         commit_count: 1,
         conventional_commit_count: 1,
         range: "v1.0.0..HEAD".into(),
         decisive_commit: None,
+        decisive_signals: Vec::new(),
         unknown_commits: Vec::new(),
+        api_evidence: no_version_api_evidence("test fixture"),
+        waiver: VersionDecisionWaiver {
+            required: false,
+            status: "not-required".into(),
+            kind: String::new(),
+            reason: String::new(),
+        },
     }
 }
 

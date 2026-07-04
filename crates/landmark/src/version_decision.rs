@@ -15,6 +15,15 @@ impl VersionBump {
             VersionBump::Major => "major",
         }
     }
+
+    pub(crate) fn from_str(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "patch" => Some(VersionBump::Patch),
+            "minor" => Some(VersionBump::Minor),
+            "major" => Some(VersionBump::Major),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

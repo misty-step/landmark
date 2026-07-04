@@ -206,11 +206,17 @@ pub(crate) struct RunEvidence {
 pub(crate) struct RunVersionDecision {
     pub(crate) latest_tag: String,
     pub(crate) bump: String,
+    pub(crate) commit_bump: String,
+    pub(crate) api_evidence_bump: String,
+    pub(crate) reconciliation: String,
     pub(crate) commit_count: usize,
     pub(crate) conventional_commit_count: usize,
     pub(crate) range: String,
     pub(crate) decisive_commit: Option<String>,
+    pub(crate) decisive_signals: Vec<String>,
     pub(crate) unknown_commits: Vec<String>,
+    pub(crate) api_evidence: VersionApiEvidence,
+    pub(crate) waiver: VersionDecisionWaiver,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -10,7 +10,63 @@
     "schema_version": { "type": "string", "const": "landmark.release-kit.v1" },
     "generated_at": { "type": "string" },
     "product": { "type": "object" },
-    "release": { "type": "object" },
+    "release": {
+      "type": "object",
+      "required": ["tag", "version", "previous_tag", "repository", "release_url", "version_decision"],
+      "properties": {
+        "tag": { "type": "string" },
+        "version": { "type": "string" },
+        "previous_tag": { "type": "string" },
+        "repository": { "type": "string" },
+        "release_url": { "type": "string" },
+        "version_decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["latest_tag", "bump", "commit_bump", "api_evidence_bump", "reconciliation", "commit_count", "conventional_commit_count", "range", "decisive_commit", "decisive_signals", "unknown_commits", "api_evidence", "waiver"],
+          "properties": {
+            "latest_tag": { "type": "string" },
+            "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+            "commit_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+            "api_evidence_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+            "reconciliation": { "type": "string", "enum": ["agreed", "compatible", "upgraded", "conflict", "unavailable", "unverified"] },
+            "commit_count": { "type": "integer" },
+            "conventional_commit_count": { "type": "integer" },
+            "range": { "type": "string" },
+            "decisive_commit": { "type": ["string", "null"] },
+            "decisive_signals": { "type": "array", "items": { "type": "string" } },
+            "unknown_commits": { "type": "array", "items": { "type": "string" } },
+            "api_evidence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["provider", "status", "bump", "baseline", "target", "command", "exit_code", "summary", "findings", "failure_message"],
+              "properties": {
+                "provider": { "type": "string" },
+                "status": { "type": "string", "enum": ["skipped", "passed", "findings", "failed"] },
+                "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+                "baseline": { "type": "string" },
+                "target": { "type": "string" },
+                "command": { "type": "string" },
+                "exit_code": { "type": "integer" },
+                "summary": { "type": "string" },
+                "findings": { "type": "array", "items": { "type": "string" } },
+                "failure_message": { "type": "string" }
+              }
+            },
+            "waiver": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["required", "status", "kind", "reason"],
+              "properties": {
+                "required": { "type": "boolean" },
+                "status": { "type": "string", "enum": ["not-required", "missing", "accepted"] },
+                "kind": { "type": "string" },
+                "reason": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     "classification": {
       "type": "object",
       "additionalProperties": false,

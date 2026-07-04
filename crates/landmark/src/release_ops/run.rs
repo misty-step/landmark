@@ -113,13 +113,18 @@ pub(crate) fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext>
         .iter()
         .map(|commit| classify_commit(&commit.short_hash, &commit.subject, &commit.body))
         .collect();
-    let decision = decide_version(&classified);
+    let api_evidence = CargoSemverChecksProvider.collect(&VersionApiEvidenceRequest {
+        repo_root: &args.repo_root,
+        previous_tag: &previous_tag,
+        target_ref: &target_ref,
+    });
+    let decision = decide_version_with_api_evidence(&classified, api_evidence);
     let bump = decision.bump.map(VersionBump::as_str).unwrap_or("none");
     let release_tag =
         explicit_release_tag.unwrap_or_else(|| next_release_tag(latest_tag.as_ref(), bump));
     let version = release_tag.trim_start_matches('v').to_string();
     let range = if previous_tag.is_empty() {
-        target_ref
+        target_ref.clone()
     } else {
         format!("{previous_tag}..{target_ref}")
     };
@@ -131,15 +136,21 @@ pub(crate) fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext>
         decision: RunVersionDecision {
             latest_tag: latest_tag.map(|tag| tag.tag).unwrap_or_default(),
             bump: bump.to_string(),
+            commit_bump: decision.commit_bump,
+            api_evidence_bump: decision.api_evidence_bump,
+            reconciliation: decision.reconciliation,
             commit_count: commits.len(),
             conventional_commit_count,
             range,
             decisive_commit: decision.decisive.map(|commit| commit.evidence_line()),
+            decisive_signals: decision.decisive_signals,
             unknown_commits: decision
                 .unknown_commits
                 .iter()
                 .map(ClassifiedCommit::evidence_line)
                 .collect(),
+            api_evidence: decision.api_evidence,
+            waiver: decision.waiver,
         },
         commits,
     })
