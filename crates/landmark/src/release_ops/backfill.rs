@@ -404,6 +404,23 @@ pub(crate) fn backfill_write_artifacts(
     feed_items: &mut Vec<FeedItem>,
 ) -> Result<BackfillArtifactRecord> {
     let artifact = ReleaseNoteArtifact::from_markdown(&tag.tag, notes);
+    let manifest =
+        load_manifest(&args.repo_root)?.unwrap_or_else(|| infer_manifest(&args.repo_root));
+    let audience = manifest
+        .audience
+        .as_deref()
+        .and_then(trimmed_option)
+        .unwrap_or_else(|| "general".into());
+    let release_url = if repository.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{}/{repository}/releases/tag/{}",
+            github_server_url_from_api(&args.api_base_url),
+            tag.tag
+        )
+    };
+    let entry_context = ReleaseNoteEntryContext::new(repository, &release_url, &audience);
     let markdown = backfill_write_template_if_requested(
         &args.repo_root,
         &args.output_file,
@@ -425,12 +442,12 @@ pub(crate) fn backfill_write_artifacts(
     let json_path = if args.output_json.trim().is_empty() {
         PathBuf::new()
     } else {
-        backfill_append_json(&args.repo_root, &args.output_json, &artifact)?
-    };
-    let release_url = if repository.is_empty() {
-        String::new()
-    } else {
-        format!("https://github.com/{repository}/releases/tag/{}", tag.tag)
+        backfill_append_json(
+            &args.repo_root,
+            &args.output_json,
+            &artifact,
+            &entry_context,
+        )?
     };
     if !args.rss_feed_file.trim().is_empty() {
         feed_items.retain(|item| item.guid != tag.tag);
@@ -508,6 +525,7 @@ pub(crate) fn backfill_append_json(
     repo_root: &Path,
     template: &str,
     artifact: &ReleaseNoteArtifact,
+    context: &ReleaseNoteEntryContext,
 ) -> Result<PathBuf> {
     let path = repo_root.join(template.replace("{version}", &artifact.tag));
     let mut entries = if path.is_file() {
@@ -519,7 +537,7 @@ pub(crate) fn backfill_append_json(
         entry["tag"].as_str() != Some(&artifact.tag)
             && entry["version"].as_str() != Some(&artifact.version)
     });
-    entries.insert(0, artifact.json_entry());
+    entries.insert(0, artifact.json_entry(context));
     ensure_parent(&path)?;
     fs::write(&path, serde_json::to_string_pretty(&entries)? + "\n")?;
     Ok(path)
@@ -534,11 +552,17 @@ pub(crate) fn backfill_write_feed(
         return Ok(());
     }
     let path = args.repo_root.join(&args.rss_feed_file);
+    let channel_link = if repository.is_empty() {
+        default_release_url_base(repository)
+    } else {
+        format!(
+            "{}/{}",
+            github_server_url_from_api(&args.api_base_url),
+            repository
+        )
+    };
     ensure_parent(&path)?;
-    fs::write(
-        path,
-        render_feed(repository, &default_release_url_base(repository), &items),
-    )?;
+    fs::write(path, render_feed(repository, &channel_link, &items))?;
     Ok(())
 }
 
@@ -569,6 +593,17 @@ pub(crate) fn backfill_update_release_body(
         )
         .into())
     }
+}
+
+pub(crate) fn github_server_url_from_api(api_base_url: &str) -> String {
+    let trimmed = api_base_url.trim().trim_end_matches('/');
+    if trimmed == "https://api.github.com" || trimmed == "http://api.github.com" {
+        return trimmed.replace("api.github.com", "github.com");
+    }
+    if let Some(server) = trimmed.strip_suffix("/api/v3") {
+        return server.to_string();
+    }
+    trimmed.to_string()
 }
 
 pub(crate) fn estimate_prompt_tokens(text: &str) -> usize {

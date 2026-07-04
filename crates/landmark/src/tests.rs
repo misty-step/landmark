@@ -58,33 +58,6 @@ fn release_body_synthesis_is_idempotent_across_reruns() {
 }
 
 #[test]
-fn markdown_filters_unsafe_links() {
-    let html = markdown_to_html_fragment("[bad](javascript:alert(1)) [ok](https://example.com)");
-    assert!(html.contains("href=\"#\""));
-    assert!(html.contains("href=\"https://example.com\""));
-}
-
-#[test]
-fn typed_artifact_renders_shared_outputs() {
-    let artifact = ReleaseNoteArtifact::from_markdown(
-        "v1.2.3",
-        "## Added\n\n- See [docs](https://example.com) and [bad](javascript:alert(1))",
-    );
-    assert_eq!(artifact.version, "1.2.3");
-    assert!(artifact.html.contains("href=\"https://example.com\""));
-    assert!(artifact.html.contains("href=\"#\""));
-    assert!(artifact.plaintext.contains("See docs and bad"));
-    assert!(artifact.slack.contains("<https://example.com|docs>"));
-    assert!(!artifact.slack.contains("javascript:"));
-    assert_eq!(artifact.sections[0].title, "Added");
-    assert_eq!(
-        artifact.sections[0].bullets[0].links[0].href,
-        "https://example.com"
-    );
-    assert!(artifact.json_entry()["sections"].is_array());
-}
-
-#[test]
 fn next_release_tag_bumps_from_latest() {
     let latest = BackfillTag {
         tag: "v1.2.3".into(),

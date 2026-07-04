@@ -7,8 +7,12 @@
   "x-landmark-artifact": "release notes JSON entry",
   "required": ["version", "tag", "notes", "markdown", "html", "plaintext", "slack", "sections", "published_at"],
   "properties": {
+    "schema_version": { "type": "string", "const": "landmark.public-release-notes.v1" },
     "version": { "type": "string" },
     "tag": { "type": "string" },
+    "repository": { "type": "string" },
+    "release_url": { "type": "string" },
+    "audience": { "type": "string" },
     "notes": { "type": "string" },
     "markdown": { "type": "string" },
     "html": { "type": "string" },

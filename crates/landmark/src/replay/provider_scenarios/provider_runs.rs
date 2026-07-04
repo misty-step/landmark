@@ -79,6 +79,13 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
         ["commit", "-q", "-m", "feat(cli): add portable release run"],
         &repo,
     )?;
+    fs::write(repo.join("lane.txt"), "agent lane maintenance\n")?;
+    run_ok("git", ["add", "lane.txt"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "chore(ci): refresh agent lane"],
+        &repo,
+    )?;
     let result = Command::new(current_exe())
         .args([
             "run",
@@ -164,9 +171,44 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
     if !notes.contains("Add portable release run") {
         return Err("local run release notes did not include the feature commit".into());
     }
+    let releases: Value = serde_json::from_str(&fs::read_to_string(&json_path)?)?;
+    let entry = releases
+        .as_array()
+        .and_then(|entries| entries.first())
+        .ok_or("local run release JSON did not include a release entry")?;
+    assert_public_release_entry_contract(entry)?;
+    if entry["schema_version"] != "landmark.public-release-notes.v1"
+        || entry["repository"] != "local-provider-run"
+        || entry["release_url"] != "local://local-provider-run/releases/v1.1.0"
+        || entry["audience"] != "general"
+    {
+        return Err(format!(
+            "local run release JSON is not a self-contained public site artifact: {entry}"
+        )
+        .into());
+    }
+    let entry_text = serde_json::to_string(entry)?;
+    for leaked in ["feat(", "chore(ci)", "agent lane", "Technical Changelog"] {
+        if entry_text.contains(leaked) {
+            return Err(format!(
+                "local run release JSON leaked internal release-process detail `{leaked}`: {entry_text}"
+            )
+            .into());
+        }
+    }
+    let plaintext = entry["plaintext"].as_str().unwrap_or_default();
+    if plaintext.contains("Technical Changelog") {
+        return Err(format!(
+            "local run release JSON leaked internal release-process detail: {plaintext}"
+        )
+        .into());
+    }
     let technical = fs::read_to_string(repo.join(".landmark/run/technical.md"))?;
     if !technical.contains("feat(cli): add portable release run") {
         return Err("local run technical changelog did not include the raw commit".into());
+    }
+    if !technical.contains("chore(ci): refresh agent lane") {
+        return Err("local run technical changelog dropped the internal commit".into());
     }
     run_ok("git", ["tag", "v1.1.0"], &repo)?;
     fs::write(repo.join("after-release.txt"), "post release work\n")?;
@@ -219,7 +261,7 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
         )
         .into());
     }
-    if tagged_evidence["version_decision"]["commit_count"] != 1 {
+    if tagged_evidence["version_decision"]["commit_count"] != 2 {
         return Err("existing-tag run included commits outside the tagged range".into());
     }
     let tagged_technical = fs::read_to_string(repo.join(".landmark/tagged-run/technical.md"))?;
@@ -394,6 +436,48 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "release_kit": release_kit,
         }
     }))
+}
+
+pub(crate) fn assert_public_release_entry_contract(entry: &Value) -> Result<()> {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../../schemas/release-entry.v1.schema.json"
+    ))?;
+    let required = schema["required"]
+        .as_array()
+        .ok_or("release-entry schema missing required field list")?;
+    for field in required {
+        let field = field
+            .as_str()
+            .ok_or("release-entry required field was not a string")?;
+        if entry.get(field).is_none() {
+            return Err(
+                format!("public release entry missing schema-required field `{field}`").into(),
+            );
+        }
+    }
+    for field in ["schema_version", "repository", "release_url", "audience"] {
+        if entry[field].as_str().unwrap_or_default().trim().is_empty() {
+            return Err(format!("public release entry missing static-site field `{field}`").into());
+        }
+    }
+    for field in [
+        "version",
+        "tag",
+        "notes",
+        "markdown",
+        "html",
+        "plaintext",
+        "slack",
+        "published_at",
+    ] {
+        if entry[field].as_str().unwrap_or_default().trim().is_empty() {
+            return Err(format!("public release entry has empty required field `{field}`").into());
+        }
+    }
+    if entry["sections"].as_array().is_none_or(Vec::is_empty) {
+        return Err("public release entry has no parsed sections".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn scenario_github_provider_run(tmp_root: &Path) -> Result<Value> {

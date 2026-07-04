@@ -11,6 +11,13 @@ pub(crate) struct ReleaseNoteArtifact {
     published_at: String,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ReleaseNoteEntryContext {
+    pub(crate) repository: String,
+    pub(crate) release_url: String,
+    pub(crate) audience: String,
+}
+
 #[derive(Clone, Serialize)]
 pub(crate) struct NoteSection {
     pub(crate) title: String,
@@ -44,10 +51,14 @@ impl ReleaseNoteArtifact {
         }
     }
 
-    pub(crate) fn json_entry(&self) -> Value {
+    pub(crate) fn json_entry(&self, context: &ReleaseNoteEntryContext) -> Value {
         json!({
+            "schema_version": "landmark.public-release-notes.v1",
             "version": self.version,
             "tag": self.tag,
+            "repository": context.repository,
+            "release_url": context.release_url,
+            "audience": context.audience,
             "notes": self.notes,
             "markdown": self.notes,
             "html": self.html,
@@ -83,6 +94,16 @@ impl ReleaseNoteArtifact {
     }
 }
 
+impl ReleaseNoteEntryContext {
+    pub(crate) fn new(repository: &str, release_url: &str, audience: &str) -> Self {
+        Self {
+            repository: repository.trim().to_string(),
+            release_url: release_url.trim().to_string(),
+            audience: trimmed_option(audience).unwrap_or_else(|| "general".into()),
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct SynthesisStatus {
     pub(crate) synthesis_enabled: bool,
@@ -107,6 +128,25 @@ pub(crate) struct DestinationStatus {
 pub(crate) fn write_artifacts(args: WriteArtifactsArgs) -> Result<()> {
     let notes = read_nonempty(&args.notes_file)?;
     let artifact = ReleaseNoteArtifact::from_markdown(&args.version, &notes);
+    let repository = trimmed_option(&args.repository)
+        .or_else(|| {
+            env::var("GITHUB_REPOSITORY")
+                .ok()
+                .and_then(|value| trimmed_option(&value))
+        })
+        .unwrap_or_default();
+    let release_url = trimmed_option(&args.release_url).unwrap_or_else(|| {
+        if repository.is_empty() {
+            String::new()
+        } else {
+            release_link(
+                &default_release_url_base(&repository),
+                &repository,
+                &args.version,
+            )
+        }
+    });
+    let context = ReleaseNoteEntryContext::new(&repository, &release_url, &args.audience);
     if !args.output_file.trim().is_empty() {
         write_notes_file(&artifact.notes, &args.output_file, &args.version)?;
     }
@@ -117,7 +157,7 @@ pub(crate) fn write_artifacts(args: WriteArtifactsArgs) -> Result<()> {
         write_notes_file(&artifact.html, &args.output_html_file, &args.version)?;
     }
     if !args.output_json.trim().is_empty() {
-        append_json_entry(&args.output_json, &artifact)?;
+        append_json_entry(&args.output_json, &artifact, &context)?;
     }
     print!("{}", artifact.notes);
     Ok(())

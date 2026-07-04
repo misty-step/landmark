@@ -208,6 +208,14 @@ pub(crate) fn conventional_commit_type(subject: &str) -> Option<&str> {
     }
 }
 
+pub(crate) fn conventional_commit_scope(subject: &str) -> Option<&str> {
+    let subject = subject.trim();
+    let header = subject.split(':').next()?.trim_end_matches('!');
+    let scope_start = header.find('(')?;
+    let scope_end = header[scope_start + 1..].find(')')? + scope_start + 1;
+    Some(&header[scope_start + 1..scope_end])
+}
+
 pub(crate) fn is_breaking_commit(commit: &RunCommit) -> bool {
     commit.subject.contains("!:")
         || commit.subject.contains(")!:")
@@ -279,13 +287,81 @@ pub(crate) fn render_local_public_notes(
             "- {product} has no user-visible commit entries in this release range.\n"
         ));
     } else {
-        for commit in &release.commits {
+        let public_notes: Vec<_> = release
+            .commits
+            .iter()
+            .filter_map(public_note_for_commit)
+            .collect();
+        if public_notes.is_empty() {
+            markdown.push_str(&format!(
+                "- {product} shipped maintenance changes with no user-visible release notes.\n"
+            ));
+            return markdown;
+        }
+        for note in public_notes {
             markdown.push_str("- ");
-            markdown.push_str(&humanize_commit_subject(&commit.subject));
+            markdown.push_str(&note);
             markdown.push('\n');
         }
     }
     markdown
+}
+
+pub(crate) fn public_note_for_commit(commit: &RunCommit) -> Option<String> {
+    let subject = commit.subject.trim();
+    if internal_process_subject(subject) {
+        return None;
+    }
+    if let Some(reverted) = reverted_subject(subject)
+        && internal_process_subject(reverted)
+    {
+        return None;
+    }
+    if is_breaking_commit(commit) {
+        return Some(humanize_commit_subject(subject));
+    }
+    if subject.starts_with("revert:") || subject.starts_with("Revert ") {
+        return Some(humanize_commit_subject(subject));
+    }
+    match conventional_commit_type(subject) {
+        Some("feat" | "fix" | "perf") => Some(humanize_commit_subject(subject)),
+        _ => None,
+    }
+}
+
+pub(crate) fn internal_process_subject(subject: &str) -> bool {
+    let internal_types = ["build", "chore", "ci", "refactor", "style", "test", "tests"];
+    let internal_scopes = [
+        "agent",
+        "agents",
+        "build",
+        "ci",
+        "dependency",
+        "dependencies",
+        "deps",
+        "dev",
+        "infra",
+        "internal",
+        "test",
+        "tests",
+        "workflow",
+        "workflows",
+    ];
+    conventional_commit_type(subject).is_some_and(|kind| internal_types.contains(&kind))
+        || conventional_commit_scope(subject).is_some_and(|scope| {
+            internal_scopes.contains(&scope.trim().to_ascii_lowercase().as_str())
+        })
+}
+
+pub(crate) fn reverted_subject(subject: &str) -> Option<&str> {
+    let subject = subject.trim();
+    if let Some(rest) = subject.strip_prefix("revert:") {
+        return Some(rest.trim());
+    }
+    subject
+        .strip_prefix("Revert \"")
+        .and_then(|rest| rest.strip_suffix('"'))
+        .map(str::trim)
 }
 
 impl RunCommit {
@@ -321,6 +397,14 @@ pub(crate) fn write_run_artifacts(
     notes: &str,
 ) -> Result<RunArtifactRecord> {
     let artifact = ReleaseNoteArtifact::from_markdown(release_tag, notes);
+    let public_notes_audience = manifest
+        .audience
+        .as_deref()
+        .and_then(trimmed_option)
+        .unwrap_or_else(|| "general".into());
+    let release_url = release_link(release_url_base, repository, release_tag);
+    let entry_context =
+        ReleaseNoteEntryContext::new(repository, &release_url, &public_notes_audience);
     let technical = run_template_path(&args.repo_root, &args.technical_changelog_file, release_tag);
     if !args.dry_run && !technical.as_os_str().is_empty() {
         write_path(&technical, technical_changelog)?;
@@ -342,7 +426,12 @@ pub(crate) fn write_run_artifacts(
     } else if args.dry_run {
         run_template_path(&args.repo_root, &args.output_json, release_tag)
     } else {
-        backfill_append_json(&args.repo_root, &args.output_json, &artifact)?
+        backfill_append_json(
+            &args.repo_root,
+            &args.output_json,
+            &artifact,
+            &entry_context,
+        )?
     };
     let rss_path = if args.rss_feed_file.trim().is_empty() {
         PathBuf::new()
@@ -357,7 +446,7 @@ pub(crate) fn write_run_artifacts(
             0,
             FeedItem {
                 title: format!("{repository} {release_tag}"),
-                link: release_link(release_url_base, repository, release_tag),
+                link: release_url.clone(),
                 guid: release_tag.to_string(),
                 description: artifact.html,
                 pub_date: Utc::now().to_rfc2822(),
@@ -375,11 +464,7 @@ pub(crate) fn write_run_artifacts(
         technical_changelog_audience: "internal-developer-operator".into(),
         technical_changelog_schema: "landmark.internal-technical-changelog.v1".into(),
         markdown: markdown.display().to_string(),
-        public_notes_audience: manifest
-            .audience
-            .as_deref()
-            .and_then(trimmed_option)
-            .unwrap_or_else(|| "general".into()),
+        public_notes_audience,
         public_notes_schema: "landmark.public-release-notes.v1".into(),
         plaintext: plaintext.display().to_string(),
         html: html.display().to_string(),
