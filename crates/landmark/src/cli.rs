@@ -317,6 +317,12 @@ pub(crate) struct WriteArtifactsArgs {
     pub(crate) notes_file: PathBuf,
     #[arg(long)]
     pub(crate) version: String,
+    #[arg(long, default_value = "")]
+    pub(crate) repository: String,
+    #[arg(long = "release-url", default_value = "")]
+    pub(crate) release_url: String,
+    #[arg(long, default_value = "")]
+    pub(crate) audience: String,
     #[arg(long = "output-file", default_value = "")]
     pub(crate) output_file: String,
     #[arg(long = "output-text-file", default_value = "")]

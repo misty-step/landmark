@@ -40,6 +40,13 @@ writes markdown, plaintext, HTML, JSON, and RSS release artifacts under
 `--dry-run` can print the complete final-mile artifact graph without writing
 files.
 
+The JSON artifact is the zero-runtime marketing-site export. Each
+`docs/releases/releases.json` entry declares
+`schema_version: landmark.public-release-notes.v1` plus `repository`,
+`release_url`, `audience`, `markdown`, `html`, `plaintext`, and parsed
+`sections`, so a static site can render the latest public notes without loading
+Landmark or re-reading git history.
+
 Build from source with `cargo run --locked -- ...` or a locally built
 `target/debug/landmark`, or download a published per-target release binary
 (`landmark-x86_64-unknown-linux-musl`, `landmark-aarch64-unknown-linux-musl`,

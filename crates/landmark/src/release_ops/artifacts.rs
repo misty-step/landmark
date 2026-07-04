@@ -6,7 +6,11 @@ pub(crate) fn write_notes_file(content: &str, template: &str, version: &str) -> 
     Ok(path)
 }
 
-pub(crate) fn append_json_entry(template: &str, artifact: &ReleaseNoteArtifact) -> Result<()> {
+pub(crate) fn append_json_entry(
+    template: &str,
+    artifact: &ReleaseNoteArtifact,
+    context: &ReleaseNoteEntryContext,
+) -> Result<()> {
     let path = PathBuf::from(template.replace("{version}", &artifact.tag));
     let mut entries = if path.is_file() {
         serde_json::from_str::<Vec<Value>>(&fs::read_to_string(&path)?)?
@@ -17,7 +21,7 @@ pub(crate) fn append_json_entry(template: &str, artifact: &ReleaseNoteArtifact) 
         entry["tag"].as_str() != Some(&artifact.tag)
             && entry["version"].as_str() != Some(&artifact.version)
     });
-    entries.push(artifact.json_entry());
+    entries.push(artifact.json_entry(context));
     ensure_parent(&path)?;
     fs::write(path, serde_json::to_string_pretty(&entries)? + "\n")?;
     Ok(())

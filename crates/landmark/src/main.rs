@@ -29,6 +29,8 @@ mod extract_prs_tests;
 mod manifest;
 mod pr_range;
 mod providers;
+#[cfg(test)]
+mod release_artifact_tests;
 mod release_body;
 mod release_classification;
 #[cfg(test)]
