@@ -97,7 +97,18 @@
           "acceptance": { "type": "array", "items": { "type": "string" } },
           "depends_on": { "type": "array", "items": { "type": "string" } },
           "blocker": { "type": "string" },
-          "waiver": { "type": "string" }
+          "waiver": { "type": "string" },
+          "draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["voice_card", "variants", "angle", "evidence_link"],
+            "properties": {
+              "voice_card": { "type": "string" },
+              "variants": { "type": "array", "items": { "type": "string" } },
+              "angle": { "type": "string" },
+              "evidence_link": { "type": "string" }
+            }
+          }
         }
       }
     },

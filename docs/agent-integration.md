@@ -120,6 +120,11 @@ Typical release-kit artifacts include migration guides, docs patches, blog
 drafts, essays, announcement copy, social copy, screenshots, images, GIFs, demo
 scripts, and demo videos. Text artifacts may be produced directly by Landmark;
 rich media and publication-specific outputs should stay adapter-owned.
+When a release passes the deterministic social-draft gate, the kit embeds
+`social-post-drafts` as draft-only `social_copy`: two short variants, an angle
+note, the release evidence link, and the configured voice card. Its approval
+state remains `pending`; downstream systems may route it to an operator review
+queue, but Landmark does not publish or autopost it.
 
 ## Glossary
 

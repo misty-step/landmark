@@ -79,6 +79,9 @@ pub(crate) fn assert_contract(value: &Value, label: &str) -> Result<()> {
         {
             return Err(format!("{label} artifact missing acceptance checks").into());
         }
+        if artifact["id"] == "social-post-drafts" {
+            assert_social_draft_artifact(artifact, label)?;
+        }
     }
     for provenance in value["provenance"]
         .as_array()
@@ -110,6 +113,19 @@ pub(crate) fn assert_contract(value: &Value, label: &str) -> Result<()> {
         if approval["state"].as_str().unwrap_or_default().is_empty() {
             return Err(format!("{label} approval missing state").into());
         }
+    }
+    if artifacts
+        .iter()
+        .any(|artifact| artifact["id"] == "social-post-drafts")
+        && !value["approvals"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|approval| {
+                approval["artifact_id"] == "social-post-drafts" && approval["state"] == "pending"
+            })
+    {
+        return Err(format!("{label} social draft artifact is not pending operator review").into());
     }
     for contract in value["producer_contracts"]
         .as_array()
@@ -164,6 +180,51 @@ pub(crate) fn assert_contract(value: &Value, label: &str) -> Result<()> {
                     .into());
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+fn assert_social_draft_artifact(artifact: &Value, label: &str) -> Result<()> {
+    if artifact["kind"] != "social_copy" {
+        return Err(format!("{label} social draft artifact must be social_copy").into());
+    }
+    if artifact["owner"] != "landmark" {
+        return Err(format!("{label} social draft artifact must be Landmark-owned").into());
+    }
+    let blocker = artifact["blocker"].as_str().unwrap_or_default();
+    if !blocker.contains("autopost") {
+        return Err(format!("{label} social draft artifact must keep autopost blocked").into());
+    }
+    let draft = artifact
+        .get("draft")
+        .ok_or_else(|| format!("{label} social draft artifact missing draft payload"))?;
+    for pointer in ["/voice_card", "/angle", "/evidence_link"] {
+        if draft
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            return Err(format!("{label} social draft missing string at {pointer}").into());
+        }
+    }
+    let variants = draft["variants"]
+        .as_array()
+        .ok_or_else(|| format!("{label} social draft variants must be an array"))?;
+    if variants.len() != 2 {
+        return Err(format!("{label} social draft must include exactly two variants").into());
+    }
+    for variant in variants {
+        let variant = variant
+            .as_str()
+            .ok_or_else(|| format!("{label} social draft variant must be a string"))?;
+        if variant.trim().is_empty() {
+            return Err(format!("{label} social draft variant is empty").into());
+        }
+        if variant.chars().count() > 280 {
+            return Err(format!("{label} social draft variant exceeds 280 characters").into());
         }
     }
     Ok(())

@@ -2,7 +2,7 @@ use super::{
     ContextCommit, DeterministicReleaseContext, LandmarkManifest, RunArgs, RunArtifactRecord,
     RunPublicationRecord, RunReleaseContext, RunVersionDecision,
     classify_release_context_with_deterministic, context_changed_files, context_source,
-    conventional_commit_type, is_breaking_commit, sha256_hex, trimmed_option,
+    conventional_commit_type, is_breaking_commit, sanitize_text, sha256_hex, trimmed_option,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -10,6 +10,10 @@ use std::path::PathBuf;
 
 pub(crate) const SCHEMA_VERSION: &str = "landmark.release-kit.v1";
 const PRODUCER_EVIDENCE_DIR: &str = ".landmark/run/producers";
+const SOCIAL_DRAFT_ARTIFACT_ID: &str = "social-post-drafts";
+const SOCIAL_POST_LIMIT: usize = 280;
+const DEFAULT_SOCIAL_VOICE_CARD: &str =
+    "clear, specific, user-facing release voice grounded in release evidence";
 
 #[derive(Clone, Debug, Serialize)]
 pub(super) struct ReleaseKit {
@@ -68,6 +72,16 @@ struct ReleaseKitArtifact {
     blocker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     waiver: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    draft: Option<ReleaseKitSocialDraft>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReleaseKitSocialDraft {
+    voice_card: String,
+    variants: Vec<String>,
+    angle: String,
+    evidence_link: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -130,6 +144,19 @@ struct ReleaseKitArtifactSpec<'a> {
     sha256: Option<String>,
     acceptance: &'a [&'a str],
     depends_on: &'a [&'a str],
+}
+
+struct SocialDraftInput<'a> {
+    dry_run: bool,
+    primary_audience: &'a str,
+    product_name: &'a str,
+    version: &'a str,
+    release_tag: &'a str,
+    release_url: &'a str,
+    notes: &'a str,
+    classification: &'a super::ReleaseClassification,
+    decision: &'a RunVersionDecision,
+    voice: Option<&'a str>,
 }
 
 pub(super) fn schema_version() -> &'static str {
@@ -215,6 +242,11 @@ pub(super) fn plan(input: PlanInput<'_>) -> ReleaseKit {
     let feed_status = artifact_status(args.dry_run, &artifacts.rss);
     let technical_sha = sha256_hex(technical_changelog.as_bytes());
     let notes_sha = sha256_hex(notes.as_bytes());
+    let social_draft_eligible = release_kit_social_draft_eligible(
+        &release_classification,
+        &release.decision,
+        technical_changelog,
+    );
 
     let mut kit_artifacts = vec![
         release_kit_artifact(ReleaseKitArtifactSpec {
@@ -262,6 +294,20 @@ pub(super) fn plan(input: PlanInput<'_>) -> ReleaseKit {
             depends_on: &["release-notes"],
         }));
     }
+    if social_draft_eligible {
+        kit_artifacts.push(social_post_draft_artifact(SocialDraftInput {
+            dry_run: args.dry_run,
+            primary_audience: &primary_audience,
+            product_name: &product_name,
+            version: &release.version,
+            release_tag: &release.release_tag,
+            release_url: &publication.release_url,
+            notes,
+            classification: &release_classification,
+            decision: &release.decision,
+            voice: manifest.voice.as_deref(),
+        }));
+    }
 
     let rich_artifacts = release_kit_needs_rich_artifacts(&importance);
     if rich_artifacts {
@@ -299,7 +345,17 @@ pub(super) fn plan(input: PlanInput<'_>) -> ReleaseKit {
     let approvals = kit_artifacts
         .iter()
         .map(|artifact| {
-            if artifact.owner == "producer-adapter" {
+            if artifact.id == SOCIAL_DRAFT_ARTIFACT_ID {
+                ReleaseKitApproval {
+                    artifact_id: artifact.id.clone(),
+                    state: "pending".into(),
+                    approver: None,
+                    reason: Some(
+                        "operator review queue: social drafts are gated and Landmark has no autopost path"
+                            .into(),
+                    ),
+                }
+            } else if artifact.owner == "producer-adapter" {
                 ReleaseKitApproval {
                     artifact_id: artifact.id.clone(),
                     state: "pending".into(),
@@ -328,9 +384,7 @@ pub(super) fn plan(input: PlanInput<'_>) -> ReleaseKit {
     let status_summary = if args.dry_run {
         "dry-run release kit printed in evidence; no artifacts were written".to_string()
     } else if pending_approvals > 0 {
-        format!(
-            "release kit generated with {pending_approvals} producer-owned artifact approvals pending"
-        )
+        format!("release kit generated with {pending_approvals} artifact approvals pending")
     } else if complete {
         "release kit complete for Landmark-owned outputs".into()
     } else {
@@ -447,6 +501,153 @@ fn rich_release_artifacts(primary_audience: &str, release_tag: &str) -> Vec<Rele
     ]
 }
 
+fn social_post_draft_artifact(input: SocialDraftInput<'_>) -> ReleaseKitArtifact {
+    let note = primary_social_note(input.notes);
+    let angle = social_post_angle(input.classification, input.decision);
+    let evidence_link = social_evidence_link(input.release_url, input.release_tag);
+    let voice_card = input
+        .voice
+        .and_then(trimmed_option)
+        .unwrap_or_else(|| DEFAULT_SOCIAL_VOICE_CARD.into());
+    let voice_label = social_voice_label(&voice_card);
+    let variants = vec![
+        social_post_variant(
+            &voice_label,
+            &format!("{} {}", input.product_name, input.version),
+            &note,
+            &evidence_link,
+        ),
+        social_post_variant(
+            &voice_label,
+            &format!("{} {}: {angle}", input.product_name, input.release_tag),
+            &note,
+            &evidence_link,
+        ),
+    ];
+    let mut artifact = release_kit_artifact(ReleaseKitArtifactSpec {
+        id: SOCIAL_DRAFT_ARTIFACT_ID,
+        kind: "social_copy",
+        audience: input.primary_audience,
+        owner: "landmark",
+        status: if input.dry_run { "planned" } else { "produced" },
+        path: None,
+        sha256: None,
+        acceptance: &[
+            "Contains exactly two short-post variants, one angle note, and the release evidence link.",
+            "Applies the configured voice card without inventing release claims.",
+            "Remains draft-only with pending operator review; Landmark provides no autopost path.",
+        ],
+        depends_on: &["release-notes"],
+    });
+    artifact.blocker = Some("pending operator review; draft must not be autoposted".into());
+    artifact.draft = Some(ReleaseKitSocialDraft {
+        voice_card,
+        variants,
+        angle,
+        evidence_link,
+    });
+    artifact
+}
+
+pub(crate) fn release_kit_social_draft_eligible(
+    classification: &super::ReleaseClassification,
+    decision: &RunVersionDecision,
+    technical_changelog: &str,
+) -> bool {
+    if matches!(decision.bump.as_str(), "none" | "patch") {
+        return false;
+    }
+    let signals = &classification.deterministic_signals;
+    let breaking = classification.breaking || decision.bump == "major";
+    let capability =
+        decision.bump == "minor" && signals.iter().any(|signal| signal == "conventional:feat");
+    let proof_backed_perf = signals.iter().any(|signal| signal == "conventional:perf")
+        && has_crucible_receipt(technical_changelog);
+    breaking || capability || proof_backed_perf
+}
+
+fn has_crucible_receipt(technical_changelog: &str) -> bool {
+    let lower = technical_changelog.to_ascii_lowercase();
+    lower.contains("crucible") && lower.contains("receipt")
+}
+
+fn primary_social_note(notes: &str) -> String {
+    for line in notes.lines() {
+        let trimmed = line.trim();
+        if let Some(bullet) = trimmed.strip_prefix("- ") {
+            return sanitize_text(bullet.trim());
+        }
+    }
+    notes
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(sanitize_text)
+        .unwrap_or_else(|| "Release notes are ready for operator review".into())
+}
+
+fn social_post_angle(
+    classification: &super::ReleaseClassification,
+    decision: &RunVersionDecision,
+) -> String {
+    if classification.breaking || decision.bump == "major" {
+        "the interesting bit is the upgrade moment and what operators need to notice".into()
+    } else if classification
+        .deterministic_signals
+        .iter()
+        .any(|signal| signal == "conventional:perf")
+    {
+        "the interesting bit is the proof-backed performance change".into()
+    } else {
+        "the interesting bit is the new user-facing capability".into()
+    }
+}
+
+fn social_evidence_link(release_url: &str, release_tag: &str) -> String {
+    trimmed_option(release_url).unwrap_or_else(|| format!("release-kit:{release_tag}"))
+}
+
+pub(crate) fn social_voice_label(voice_card: &str) -> String {
+    let lower = voice_card.to_ascii_lowercase();
+    if lower.contains("operator") {
+        "Operator note".into()
+    } else if lower.contains("developer") || lower.contains("maintainer") {
+        "Maintainer note".into()
+    } else if lower.contains("user") || lower.contains("public") {
+        "User-facing note".into()
+    } else {
+        "Release note".into()
+    }
+}
+
+fn social_post_variant(voice_label: &str, prefix: &str, note: &str, evidence_link: &str) -> String {
+    let suffix = format!(" Evidence: {evidence_link}");
+    let voice_label = sanitize_text(voice_label);
+    let prefix = sanitize_text(prefix);
+    let reserved =
+        voice_label.chars().count() + prefix.chars().count() + suffix.chars().count() + 4;
+    let note_limit = SOCIAL_POST_LIMIT.saturating_sub(reserved);
+    let note = truncate_for_social(note, note_limit);
+    sanitize_text(&format!("{voice_label}: {prefix}: {note}.{suffix}"))
+}
+
+fn truncate_for_social(text: &str, max_chars: usize) -> String {
+    let clean = sanitize_text(text);
+    if clean.chars().count() <= max_chars {
+        clean
+    } else if max_chars <= 3 {
+        clean.chars().take(max_chars).collect()
+    } else {
+        let truncated = clean
+            .chars()
+            .take(max_chars - 3)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+        format!("{truncated}...")
+    }
+}
+
 fn artifact_status(dry_run: bool, path: &str) -> String {
     if dry_run || path.trim().is_empty() {
         "planned".into()
@@ -526,6 +727,7 @@ fn release_kit_artifact(spec: ReleaseKitArtifactSpec<'_>) -> ReleaseKitArtifact 
         depends_on: spec.depends_on.iter().map(|item| (*item).into()).collect(),
         blocker: None,
         waiver: None,
+        draft: None,
     }
 }
 
