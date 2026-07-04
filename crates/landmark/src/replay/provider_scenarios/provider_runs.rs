@@ -167,6 +167,60 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "local run evidence release kit did not match written release-kit artifact".into(),
         );
     }
+    let social_draft = release_kit_artifact(&release_kit_file, "social-post-drafts")
+        .ok_or("local run did not emit social-post-drafts for a feature release")?;
+    let social_draft_payload = &social_draft["draft"];
+    if social_draft["kind"] != "social_copy"
+        || social_draft["status"] != "produced"
+        || social_draft_payload["variants"]
+            .as_array()
+            .is_none_or(|variants| variants.len() != 2)
+        || social_draft_payload["angle"]
+            .as_str()
+            .is_none_or(|angle| !angle.contains("user-facing capability"))
+        || social_draft_payload["voice_card"]
+            .as_str()
+            .is_none_or(|voice_card| voice_card.trim().is_empty())
+        || social_draft_payload["evidence_link"] != "local://local-provider-run/releases/v1.1.0"
+    {
+        return Err(format!(
+            "local run social draft did not include two variants, angle, and evidence link: {social_draft}"
+        )
+        .into());
+    }
+    if !release_kit_file["approvals"]
+        .as_array()
+        .is_some_and(|approvals| {
+            approvals.iter().any(|approval| {
+                approval["artifact_id"] == "social-post-drafts" && approval["state"] == "pending"
+            })
+        })
+    {
+        return Err("local run social draft was not gated behind pending operator review".into());
+    }
+    if release_kit_file["producer_contracts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|contract| {
+            contract["output_artifacts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+        })
+        .any(|artifact| artifact == "social-post-drafts")
+    {
+        return Err("local run social draft unexpectedly had a producer/autopost contract".into());
+    }
+    let social_text = serde_json::to_string(social_draft_payload)?;
+    for leaked in ["feat(", "chore(ci)", "agent lane", "autopost"] {
+        if social_text.contains(leaked) {
+            return Err(format!(
+                "local run social draft leaked internal or publication detail `{leaked}`: {social_text}"
+            )
+            .into());
+        }
+    }
     let notes = fs::read_to_string(&markdown)?;
     if !notes.contains("Add portable release run") {
         return Err("local run release notes did not include the feature commit".into());
@@ -416,6 +470,7 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
         || internal_artifacts
             .iter()
             .any(|artifact| artifact["owner"] == "producer-adapter")
+        || release_kit_artifact(&internal_evidence["release_kit"], "social-post-drafts").is_some()
     {
         return Err("low-importance internal release kit did not stay small".into());
     }
@@ -436,6 +491,13 @@ pub(crate) fn scenario_local_provider_run(tmp_root: &Path) -> Result<Value> {
             "release_kit": release_kit,
         }
     }))
+}
+
+fn release_kit_artifact<'a>(release_kit: &'a Value, id: &str) -> Option<&'a Value> {
+    release_kit["artifacts"]
+        .as_array()?
+        .iter()
+        .find(|artifact| artifact["id"] == id)
 }
 
 pub(crate) fn assert_public_release_entry_contract(entry: &Value) -> Result<()> {
@@ -819,5 +881,74 @@ pub(crate) fn scenario_release_kit_classification_uses_structured_commits(
     Ok(json!({
         "evidence": evidence,
         "classification": classification,
+    }))
+}
+
+pub(crate) fn scenario_misty_step_landmark_social_draft(_: &Path) -> Result<Value> {
+    let repo = env::current_dir()?;
+    let result = Command::new(current_exe())
+        .args([
+            "run",
+            "--provider",
+            "local",
+            "--repo-root",
+            repo.to_str().unwrap_or("."),
+            "--repository",
+            "misty-step/landmark",
+            "--release-tag",
+            "v1.27.0",
+            "--dry-run",
+        ])
+        .output()?;
+    if !result.status.success() {
+        return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
+    }
+    let evidence: Value = serde_json::from_slice(&result.stdout)?;
+    if evidence["release_tag"] != "v1.27.0" || evidence["version_decision"]["bump"] != "minor" {
+        return Err("real Landmark release proof did not exercise v1.27.0 minor release".into());
+    }
+    release_kit_contract::assert_contract(&evidence["release_kit"], "real Landmark release kit")?;
+    let social = release_kit_artifact(&evidence["release_kit"], "social-post-drafts")
+        .ok_or("real Landmark release did not emit social-post-drafts")?;
+    let draft = &social["draft"];
+    if social["status"] != "planned"
+        || social["kind"] != "social_copy"
+        || draft["variants"]
+            .as_array()
+            .is_none_or(|variants| variants.len() != 2)
+        || draft["voice_card"]
+            .as_str()
+            .is_none_or(|voice_card| voice_card.trim().is_empty())
+        || draft["evidence_link"] != "https://github.com/misty-step/landmark/releases/tag/v1.27.0"
+    {
+        return Err(
+            format!("real Landmark release social draft missing draft shape: {social}").into(),
+        );
+    }
+    let variants = draft["variants"].as_array().unwrap();
+    if !variants
+        .iter()
+        .filter_map(Value::as_str)
+        .all(|variant| variant.starts_with("User-facing note:"))
+    {
+        return Err(format!(
+            "real Landmark release social variants did not apply the voice label: {variants:?}"
+        )
+        .into());
+    }
+    if !evidence["release_kit"]["approvals"]
+        .as_array()
+        .is_some_and(|approvals| {
+            approvals.iter().any(|approval| {
+                approval["artifact_id"] == "social-post-drafts" && approval["state"] == "pending"
+            })
+        })
+    {
+        return Err("real Landmark release social draft was not pending operator review".into());
+    }
+    Ok(json!({
+        "release_tag": evidence["release_tag"],
+        "version_decision": evidence["version_decision"],
+        "social": social,
     }))
 }

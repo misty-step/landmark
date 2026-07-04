@@ -1,5 +1,6 @@
 use super::release_kit::{
     release_kit_audiences, release_kit_importance, release_kit_needs_rich_artifacts,
+    release_kit_social_draft_eligible, social_voice_label,
 };
 use super::*;
 
@@ -184,4 +185,76 @@ fn audiences_add_release_operator_and_docs_owner_only_when_rich_artifacts_needed
             "{importance} should not add docs-owner"
         );
     }
+}
+
+#[test]
+fn social_draft_gate_excludes_chore_and_patch_noise() {
+    let mut chore = baseline_classification();
+    chore.user_visible = false;
+    chore.significance = "low".into();
+    chore.categories = vec!["chore-only".into()];
+    chore.deterministic_signals = vec!["conventional:chore".into()];
+    let patch_decision = RunVersionDecision {
+        bump: "patch".into(),
+        commit_bump: "patch".into(),
+        ..baseline_decision()
+    };
+    assert!(!release_kit_social_draft_eligible(
+        &chore,
+        &patch_decision,
+        "## Technical\n\n- chore(ci): refresh workflow"
+    ));
+
+    let mut fix = baseline_classification();
+    fix.deterministic_signals = vec!["conventional:fix".into()];
+    assert!(!release_kit_social_draft_eligible(
+        &fix,
+        &patch_decision,
+        "## Technical\n\n- fix(cli): handle empty config"
+    ));
+
+    let mut perf = baseline_classification();
+    perf.deterministic_signals = vec!["conventional:perf".into()];
+    assert!(!release_kit_social_draft_eligible(
+        &perf,
+        &patch_decision,
+        "## Technical\n\n- perf(api): reduce feed latency\n\nCrucible receipt: https://example.invalid/receipts/perf"
+    ));
+}
+
+#[test]
+fn social_draft_gate_allows_capabilities_and_breaking_changes() {
+    let mut capability = baseline_classification();
+    capability.deterministic_signals = vec!["conventional:feat".into()];
+    assert!(release_kit_social_draft_eligible(
+        &capability,
+        &baseline_decision(),
+        "## Technical\n\n- feat(cli): add release preview"
+    ));
+
+    let mut breaking = baseline_classification();
+    breaking.breaking = true;
+    assert!(release_kit_social_draft_eligible(
+        &breaking,
+        &RunVersionDecision {
+            bump: "major".into(),
+            commit_bump: "major".into(),
+            ..baseline_decision()
+        },
+        "## Technical\n\n- feat(api)!: rename release field"
+    ));
+}
+
+#[test]
+fn social_voice_card_changes_draft_label() {
+    assert_eq!(
+        social_voice_label("operator-facing, concrete, low-hype"),
+        "Operator note"
+    );
+    assert_eq!(
+        social_voice_label("developer and maintainer focused"),
+        "Maintainer note"
+    );
+    assert_eq!(social_voice_label("public user-facing"), "User-facing note");
+    assert_eq!(social_voice_label("plain and quiet"), "Release note");
 }

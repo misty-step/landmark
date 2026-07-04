@@ -395,8 +395,12 @@ upgrade the bump, a provider skip or failure is recorded without silently
 changing the floor, and a commit/API disagreement records a typed waiver need
 instead of hiding the conflict. `--dry-run` keeps the filesystem untouched and
 prints the same `release_kit` object inside the stdout evidence packet. Low internal
-releases keep the kit to Landmark-owned changelog and notes evidence;
-high-importance, security, breaking, or migration-heavy releases add planned
+releases keep the kit to Landmark-owned changelog and notes evidence. Eligible
+non-patch release moments also embed gated social post drafts in the kit: two
+short variants, an angle note, the release evidence link, and the configured
+voice card. Those drafts are Landmark-owned text artifacts, but their approval
+state stays pending for operator review and Landmark has no autopost path.
+High-importance, security, breaking, or migration-heavy releases add planned
 producer-adapter artifacts such as migration guides, docs updates, blog drafts,
 and demo videos with explicit handoff contracts, evidence paths, and pending
 approval state.
