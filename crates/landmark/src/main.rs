@@ -33,6 +33,7 @@ mod release_body;
 mod release_classification;
 #[cfg(test)]
 mod release_feed_tests;
+mod release_grounding;
 mod release_kit;
 mod release_kit_contract;
 #[cfg(test)]
@@ -59,6 +60,7 @@ pub(crate) use pr_range::*;
 pub(crate) use providers::*;
 pub(crate) use release_body::*;
 pub(crate) use release_classification::*;
+pub(crate) use release_grounding::*;
 pub(crate) use release_ops::*;
 pub(crate) use replay::*;
 pub(crate) use self_release::*;

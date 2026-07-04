@@ -109,6 +109,79 @@ fn resolve_technical_changelog_explicit_changelog_source_fails_loudly_on_missing
 }
 
 #[test]
+fn resolve_technical_changelog_auto_uses_release_commits_when_changelog_is_stale() {
+    let repo = fixture_release_repo("feat: add billing export");
+    fs::write(repo.path().join("CHANGELOG.md"), STALE_CHANGELOG).unwrap();
+
+    let args = synthesize_args_with_repo(repo.path(), "v1.1.0");
+    let mut config = test_synthesis_config();
+    config.changelog_source = "auto".into();
+
+    let technical = resolve_technical_changelog(&args, &config).expect("grounded changelog");
+
+    assert!(
+        technical.contains("feat: add billing export"),
+        "auto source should be grounded in the release commit range:\n{technical}"
+    );
+    assert!(
+        !technical.contains("stale unrelated bugfix"),
+        "stale changelog section must not silently ground synthesis:\n{technical}"
+    );
+}
+
+#[test]
+fn resolve_technical_changelog_auto_rejects_pr_text_that_does_not_match_release_commits() {
+    let repo = fixture_release_repo("fix: recover canary check-ins");
+    fs::write(
+        repo.path().join("pr-changelog.md"),
+        "- ancient unrelated dashboard rewrite (#41) by @octocat\n",
+    )
+    .unwrap();
+
+    let args = synthesize_args_with_repo(repo.path(), "v1.1.0");
+    let mut config = test_synthesis_config();
+    config.changelog_source = "auto".into();
+
+    let technical = resolve_technical_changelog(&args, &config).expect("grounded changelog");
+
+    assert!(
+        technical.contains("fix: recover canary check-ins"),
+        "auto source should keep the release-scoped commit:\n{technical}"
+    );
+    assert!(
+        !technical.contains("ancient unrelated dashboard rewrite"),
+        "out-of-range PR text must not become synthesis ground truth:\n{technical}"
+    );
+}
+
+#[test]
+fn resolve_technical_changelog_explicit_source_keeps_mismatch_visible() {
+    let repo = fixture_release_repo("fix: ship the actual release");
+    fs::write(
+        repo.path().join("CHANGELOG.md"),
+        "## [1.1.0]\n\n- feat: stale unrelated dashboard rewrite\n",
+    )
+    .unwrap();
+
+    let args = synthesize_args_with_repo(repo.path(), "v1.1.0");
+    let mut config = test_synthesis_config();
+    config.changelog_source = "changelog".into();
+
+    let technical = resolve_technical_changelog(&args, &config).expect("explicit source retained");
+
+    assert!(technical.contains("fix: ship the actual release"));
+    assert!(technical.contains("feat: stale unrelated dashboard rewrite"));
+    assert!(
+        technical.contains("selected changelog source does not match release commits"),
+        "explicit mismatch should be visible, not silently trusted:\n{technical}"
+    );
+    assert!(
+        technical.contains("Selected technical source (changelog; does not match release commits)"),
+        "selected source status should be rendered for model and operator review:\n{technical}"
+    );
+}
+
+#[test]
 fn classification_notice_is_collapsed_out_of_the_visible_release_body() {
     let notes = "## Improvements\n\n- Added a safer classifier.\n";
     let classification = ReleaseClassification {
@@ -134,4 +207,26 @@ fn classification_notice_is_collapsed_out_of_the_visible_release_body() {
     assert!(rendered.contains("Landmark classification notice"));
     // The published body up top should read as plain release notes, not debug output.
     assert!(rendered.starts_with("## Improvements"));
+}
+
+fn fixture_release_repo(release_subject: &str) -> tempfile::TempDir {
+    let repo = tempfile::tempdir().unwrap();
+    run_ok("git", ["init", "-q"], repo.path()).unwrap();
+    run_ok("git", ["config", "user.name", "Landmark Test"], repo.path()).unwrap();
+    run_ok(
+        "git",
+        ["config", "user.email", "landmark@example.invalid"],
+        repo.path(),
+    )
+    .unwrap();
+    fs::write(repo.path().join("README.md"), "# Fixture\n").unwrap();
+    run_ok("git", ["add", "README.md"], repo.path()).unwrap();
+    run_ok("git", ["commit", "-q", "-m", "chore: seed"], repo.path()).unwrap();
+    run_ok("git", ["tag", "v1.0.0"], repo.path()).unwrap();
+
+    fs::write(repo.path().join("release.txt"), release_subject).unwrap();
+    run_ok("git", ["add", "release.txt"], repo.path()).unwrap();
+    run_ok("git", ["commit", "-q", "-m", release_subject], repo.path()).unwrap();
+    run_ok("git", ["tag", "v1.1.0"], repo.path()).unwrap();
+    repo
 }

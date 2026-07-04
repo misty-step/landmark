@@ -77,6 +77,7 @@ pub(crate) struct EffectiveSynthesisConfig {
 pub(crate) struct SynthesisContextPacket {
     pub(crate) product: ContextProduct,
     pub(crate) release: ContextRelease,
+    pub(crate) grounding: ReleaseGroundingMetadata,
     pub(crate) deterministic: DeterministicReleaseContext,
     pub(crate) sources: Vec<ContextSource>,
     pub(crate) classification: ReleaseClassification,
@@ -96,6 +97,18 @@ pub(crate) struct ContextRelease {
     pub(crate) version: String,
     pub(crate) changelog_source: String,
     pub(crate) model_policy: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct ReleaseGroundingMetadata {
+    pub(crate) selected_source: String,
+    pub(crate) selected_source_status: String,
+    pub(crate) warnings: Vec<String>,
+    pub(crate) commit_count: usize,
+    pub(crate) diff_stat_count: usize,
+    pub(crate) changelog_section: ContextOptionalSource,
+    pub(crate) release_body: ContextOptionalSource,
+    pub(crate) pull_requests: ContextOptionalSource,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -1,6 +1,7 @@
 use crate::*;
 mod consumers;
 mod failures;
+mod grounding;
 mod pr_pagination;
 mod pr_scoping;
 mod provider_runs;
@@ -10,6 +11,7 @@ mod synthesis_cost;
 
 pub(crate) use consumers::*;
 pub(crate) use failures::*;
+pub(crate) use grounding::*;
 pub(crate) use pr_pagination::*;
 pub(crate) use pr_scoping::*;
 pub(crate) use provider_runs::*;

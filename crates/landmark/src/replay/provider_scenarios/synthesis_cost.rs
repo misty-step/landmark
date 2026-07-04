@@ -13,9 +13,16 @@ model:
   policy: balanced
 "#,
     )?;
+    fs::write(repo.join("README.md"), "# Fixture\n\nDocs refresh.\n")?;
+    run_ok("git", ["add", "README.md"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "docs: update README.md"],
+        &repo,
+    )?;
     fs::write(
         repo.join("CHANGELOG.md"),
-        "## [1.2.3]\n\n- docs: update README.md\n",
+        "## [1.2.4]\n\n- docs: update README.md\n",
     )?;
     let dry_run = Command::new(current_exe())
         .args([
@@ -25,7 +32,7 @@ model:
             "--api-url",
             "http://127.0.0.1:1/chat/completions",
             "--version",
-            "v1.2.3",
+            "v1.2.4",
             "--changelog-file",
             "CHANGELOG.md",
             "--templates-dir",
@@ -305,8 +312,25 @@ model:
 "#,
     )?;
     fs::write(
+        repo.join("security.txt"),
+        "tokens moved to a new manifest field\n",
+    )?;
+    run_ok("git", ["add", "security.txt"], &repo)?;
+    run_ok(
+        "git",
+        [
+            "commit",
+            "-q",
+            "-m",
+            "feat(api)!: rotate security-sensitive release token configuration",
+            "-m",
+            "BREAKING CHANGE: tokens moved to a new manifest field.",
+        ],
+        &repo,
+    )?;
+    fs::write(
         repo.join("CHANGELOG.md"),
-        "## [1.2.3]\n\n- feat(api)!: rotate security-sensitive release token configuration\n\nBREAKING CHANGE: tokens moved to a new manifest field.\n",
+        "## [1.2.5]\n\n- feat(api)!: rotate security-sensitive release token configuration\n\nBREAKING CHANGE: tokens moved to a new manifest field.\n",
     )?;
     let rich = Command::new(current_exe())
         .args([
@@ -316,7 +340,7 @@ model:
             "--api-url",
             "http://127.0.0.1:1/chat/completions",
             "--version",
-            "v1.2.3",
+            "v1.2.5",
             "--changelog-file",
             "CHANGELOG.md",
             "--templates-dir",
@@ -356,7 +380,7 @@ model:
             "--api-url",
             "http://127.0.0.1:1/chat/completions",
             "--version",
-            "v1.2.3",
+            "v1.2.5",
             "--changelog-file",
             "CHANGELOG.md",
             "--templates-dir",
@@ -401,7 +425,7 @@ model:
             "--api-url",
             "http://127.0.0.1:1/chat/completions",
             "--version",
-            "v1.2.3",
+            "v1.2.5",
             "--changelog-file",
             "CHANGELOG.md",
             "--templates-dir",
@@ -449,7 +473,7 @@ model:
             "--api-url",
             &format!("{}/chat/completions", provider_failure_server.url),
             "--version",
-            "v1.2.3",
+            "v1.2.5",
             "--changelog-file",
             "CHANGELOG.md",
             "--templates-dir",
