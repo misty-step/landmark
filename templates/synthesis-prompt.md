@@ -8,6 +8,8 @@ Transform the technical changelog below into user-facing release notes.
 
 {{BREAKING_CHANGES_SECTION}}
 
+Grounding rule: treat the release commit list in the source below as authoritative. If supplemental changelog, release-body, or PR text conflicts with those commits or the diff stats, ignore the supplemental text.
+
 ## Writing guidelines
 
 - **Breaking changes:** If breaking changes are provided above, write them first under `## Breaking Changes`. 2-3 sentences each: what changed, why, migration steps. Do not repeat them in other sections.

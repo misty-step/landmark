@@ -39,4 +39,6 @@ Do not add any intro, outro, summary, or sign-off text. Start directly with the 
 
 Technical changelog source:
 
+Grounding rule: treat the release commit list in the source below as authoritative. If supplemental changelog, release-body, or PR text conflicts with those commits or the diff stats, ignore the supplemental text.
+
 {{TECHNICAL_CHANGELOG}}

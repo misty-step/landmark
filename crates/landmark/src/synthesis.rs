@@ -101,12 +101,12 @@ pub(crate) fn extract_prs(args: ExtractPrsArgs) -> Result<()> {
 
 pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
     let config = resolve_synthesis_config(&args)?;
-    let technical = resolve_technical_changelog(&args, &config)?;
-    let prompt = render_prompt(&args, &config, &technical)?;
+    let grounding = resolve_release_grounding(&args, &config)?;
+    let prompt = render_prompt(&args, &config, &grounding.technical_changelog)?;
     let context = if args.dry_run_cost {
-        synthesis_context_packet(&args, &config, &technical, &prompt)
+        synthesis_context_packet(&args, &config, &grounding, &prompt)
     } else {
-        synthesis_context_packet_with_model(&args, &config, &technical, &prompt)
+        synthesis_context_packet_with_model(&args, &config, &grounding, &prompt)
     };
     write_json_if_requested(&args.context_metadata_file, &context)?;
     if args.dry_run_cost {
@@ -308,43 +308,6 @@ pub(crate) fn default_model_for_tier(tier: &str) -> &'static str {
     }
 }
 
-pub(crate) fn resolve_technical_changelog(
-    args: &SynthesizeArgs,
-    config: &EffectiveSynthesisConfig,
-) -> Result<String> {
-    let source = config.changelog_source.to_ascii_lowercase();
-    let from_changelog = if args.changelog_file.is_file() {
-        let text = fs::read_to_string(&args.changelog_file)?;
-        if text.trim().is_empty() {
-            None
-        } else {
-            extract_release_section(&text, &args.version)
-        }
-    } else {
-        None
-    };
-    let from_release_body = read_optional_file(&args.release_body_file)?;
-    let from_prs = read_optional_file(&args.pr_changelog_file)?;
-    match source.as_str() {
-        "auto" => from_changelog
-            .or(from_release_body)
-            .or(from_prs)
-            .ok_or_else(|| "no changelog source found".into()),
-        "changelog" => from_changelog.ok_or_else(|| {
-            format!(
-                "CHANGELOG.md is missing, empty, or has no section for {}",
-                args.version
-            )
-            .into()
-        }),
-        "release-body" => {
-            from_release_body.ok_or_else(|| "release body source is missing or empty".into())
-        }
-        "prs" => from_prs.ok_or_else(|| "PR changelog source is missing or empty".into()),
-        _ => Err(format!("invalid changelog-source {source}").into()),
-    }
-}
-
 pub(crate) fn read_optional_file(path: &Path) -> Result<Option<String>> {
     if path.as_os_str().is_empty() || !path.is_file() {
         return Ok(None);
@@ -423,19 +386,21 @@ pub(crate) fn render_prompt(
 pub(crate) fn synthesis_context_packet(
     args: &SynthesizeArgs,
     config: &EffectiveSynthesisConfig,
-    technical: &str,
+    grounding: &ReleaseGrounding,
     prompt: &str,
 ) -> SynthesisContextPacket {
-    let sources = synthesis_context_sources(args, config, technical, prompt);
-    let deterministic = deterministic_release_context(args, config);
-    let classification =
-        classify_release_context_with_deterministic(technical, &sources, &deterministic);
+    let sources = synthesis_context_sources(args, config, grounding, prompt);
+    let classification = classify_release_context_with_deterministic(
+        &grounding.technical_changelog,
+        &sources,
+        &grounding.deterministic,
+    );
     synthesis_context_packet_from_classification(
         args,
         config,
         prompt,
         sources,
-        deterministic,
+        grounding,
         classification,
     )
 }
@@ -443,19 +408,18 @@ pub(crate) fn synthesis_context_packet(
 pub(crate) fn synthesis_context_packet_with_model(
     args: &SynthesizeArgs,
     config: &EffectiveSynthesisConfig,
-    technical: &str,
+    grounding: &ReleaseGrounding,
     prompt: &str,
 ) -> SynthesisContextPacket {
     if args.dry_run_cost {
-        return synthesis_context_packet(args, config, technical, prompt);
+        return synthesis_context_packet(args, config, grounding, prompt);
     }
-    let sources = synthesis_context_sources(args, config, technical, prompt);
-    let deterministic = deterministic_release_context(args, config);
+    let sources = synthesis_context_sources(args, config, grounding, prompt);
     let models = release_classification_models(config);
     let classification = classify_release_context_with_model(
-        technical,
+        &grounding.technical_changelog,
         &sources,
-        &deterministic,
+        &grounding.deterministic,
         &args.api_url,
         &args.api_key,
         &models,
@@ -465,7 +429,7 @@ pub(crate) fn synthesis_context_packet_with_model(
         config,
         prompt,
         sources,
-        deterministic,
+        grounding,
         classification,
     )
 }
@@ -475,7 +439,7 @@ pub(crate) fn synthesis_context_packet_from_classification(
     config: &EffectiveSynthesisConfig,
     prompt: &str,
     sources: Vec<ContextSource>,
-    deterministic: DeterministicReleaseContext,
+    grounding: &ReleaseGrounding,
     classification: ReleaseClassification,
 ) -> SynthesisContextPacket {
     let cost = estimate_synthesis_cost(config, prompt, &classification, &sources);
@@ -491,7 +455,8 @@ pub(crate) fn synthesis_context_packet_from_classification(
             changelog_source: config.changelog_source.clone(),
             model_policy: config.model_policy.clone(),
         },
-        deterministic,
+        grounding: grounding.metadata.clone(),
+        deterministic: grounding.deterministic.clone(),
         sources,
         classification,
         cost,
@@ -733,12 +698,16 @@ pub(crate) fn empty_git_tree() -> &'static str {
 pub(crate) fn synthesis_context_sources(
     args: &SynthesizeArgs,
     config: &EffectiveSynthesisConfig,
-    technical: &str,
+    grounding: &ReleaseGrounding,
     prompt: &str,
 ) -> Vec<ContextSource> {
     let mut sources = vec![
         context_source("prompt_template", "prompt", prompt),
-        context_source("technical_changelog", &config.changelog_source, technical),
+        context_source(
+            "technical_changelog",
+            &grounding.metadata.selected_source,
+            &grounding.technical_changelog,
+        ),
     ];
     if !config.product_description.trim().is_empty() {
         sources.push(context_source(
@@ -755,21 +724,40 @@ pub(crate) fn synthesis_context_sources(
         ));
     }
     if let Ok(Some(body)) = read_optional_file(&args.release_body_file) {
-        sources.push(context_source("release_body", "release-body", &body));
+        sources.push(context_source_with_included(
+            "release_body",
+            "release-body",
+            &body,
+            grounding.metadata.selected_source == "release-body",
+        ));
     }
     if let Ok(Some(prs)) = read_optional_file(&args.pr_changelog_file) {
-        sources.push(context_source("pull_requests", "prs", &prs));
+        sources.push(context_source_with_included(
+            "pull_requests",
+            "prs",
+            &prs,
+            grounding.metadata.selected_source == "prs",
+        ));
     }
     sources
 }
 
 pub(crate) fn context_source(name: &str, kind: &str, text: &str) -> ContextSource {
+    context_source_with_included(name, kind, text, !text.trim().is_empty())
+}
+
+pub(crate) fn context_source_with_included(
+    name: &str,
+    kind: &str,
+    text: &str,
+    included: bool,
+) -> ContextSource {
     ContextSource {
         name: name.to_string(),
         kind: kind.to_string(),
         bytes: text.len(),
         estimated_tokens: estimate_tokens(text),
-        included: !text.trim().is_empty(),
+        included: included && !text.trim().is_empty(),
     }
 }
 

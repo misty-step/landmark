@@ -222,7 +222,16 @@ fn dry_run_context_packet_does_not_call_model_classifier() {
     args.api_url = format!("{}/chat/completions", server.url);
     args.dry_run_cost = true;
 
-    let context = synthesis_context_packet_with_model(&args, &config, &technical, "prompt");
+    let grounding = ReleaseGrounding {
+        technical_changelog: technical,
+        deterministic: deterministic_release_context(&args, &config),
+        metadata: ReleaseGroundingMetadata {
+            selected_source: "test".into(),
+            selected_source_status: "matched".into(),
+            ..Default::default()
+        },
+    };
+    let context = synthesis_context_packet_with_model(&args, &config, &grounding, "prompt");
 
     assert_eq!(context.classification.source, "structured");
     assert!(server.state.lock().unwrap().requests.is_empty());
