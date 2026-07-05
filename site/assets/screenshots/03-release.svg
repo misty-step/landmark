@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">docs/releases/v1.28.0.md: the grounded release note this run wrote</title>
+  <desc id="desc">The exact file Landmark wrote to docs/releases/v1.28.0.md — six bullets, every one tied to a real commit in this repo's v1.27.0..HEAD range.</desc>
+  <rect width="1280" height="800" fill="#1b1410" />
+  <rect x="0" y="0" width="1280" height="48" fill="#241a14" />
+  <circle cx="32" cy="24" r="8" fill="#c2410c" />
+  <circle cx="58" cy="24" r="8" fill="#8a5f32" />
+  <circle cx="84" cy="24" r="8" fill="#5a6172" />
+  <text x="120" y="31" font-family="Menlo, Consolas, monospace" font-size="16" fill="#c9beb5">docs/releases/v1.28.0.md</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="19" fill="#e8ded6">
+    <text x="40" y="92" fill="#ff8a5c">$ cat docs/releases/v1.28.0.md</text>
+    <text x="40" y="140" font-weight="bold" fill="#ffd8a8">## Improvements in v1.28.0</text>
+    <text x="40" y="188">- Post release kit feed events (#192)</text>
+    <text x="40" y="220">- Unify synthesis grounding (#196)</text>
+    <text x="40" y="252">- Ground semver decisions in API evidence (#197)</text>
+    <text x="40" y="284">- Export static public release entries</text>
+    <text x="40" y="316">- Add gated social draft kit artifact</text>
+    <text x="40" y="348">- Ground release-note sections in real commits, refuse</text>
+    <text x="58" y="376">fabrication (#200)</text>
+  </g>
+  <text x="40" y="720" font-family="Menlo, Consolas, monospace" font-size="16" fill="#8a7a6e">real file, written by a real (non-dry-run) landmark run — not hand-authored copy</text>
+</svg>

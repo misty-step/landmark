@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">landmark run --dry-run: real version decision</title>
+  <desc id="desc">Actual terminal output from cargo run --locked -- run --provider local --repo-root . --dry-run against this repo's own history.</desc>
+  <rect width="1280" height="800" fill="#1b1410" />
+  <rect x="0" y="0" width="1280" height="48" fill="#241a14" />
+  <circle cx="32" cy="24" r="8" fill="#c2410c" />
+  <circle cx="58" cy="24" r="8" fill="#8a5f32" />
+  <circle cx="84" cy="24" r="8" fill="#5a6172" />
+  <text x="120" y="31" font-family="Menlo, Consolas, monospace" font-size="16" fill="#c9beb5">landmark-site — zsh</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="19" fill="#e8ded6">
+    <text x="40" y="96" fill="#ff8a5c">$ cargo run --locked -- run --provider local --repo-root . --dry-run</text>
+    <text x="40" y="140">{</text>
+    <text x="64" y="168">"release_tag": "v1.28.0",</text>
+    <text x="64" y="196">"version": "1.28.0",</text>
+    <text x="64" y="224">"previous_tag": "v1.27.0",</text>
+    <text x="64" y="252">"version_decision": {</text>
+    <text x="88" y="280" fill="#ffb45c">"bump": "minor",</text>
+    <text x="88" y="308">"commit_count": 8,</text>
+    <text x="88" y="336">"conventional_commit_count": 8,</text>
+    <text x="88" y="364">"range": "v1.27.0..HEAD",</text>
+    <text x="88" y="392" fill="#9bc47a">"decisive_commit": "eb0eb1d feat(release): post release</text>
+    <text x="106" y="416" fill="#9bc47a">kit feed events (#192)",</text>
+    <text x="64" y="452">},</text>
+    <text x="64" y="488">"status": {</text>
+    <text x="88" y="516">"complete": false,</text>
+    <text x="88" y="544" fill="#c9beb5">"summary": "dry-run release kit printed in evidence;</text>
+    <text x="106" y="568" fill="#c9beb5">no artifacts were written"</text>
+    <text x="64" y="604">}</text>
+    <text x="40" y="632">}</text>
+  </g>
+  <text x="40" y="720" font-family="Menlo, Consolas, monospace" font-size="16" fill="#8a7a6e">real output, this repo, this run — v1.27.0..HEAD, 8 conventional commits</text>
+</svg>

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en" data-ae-theme="ember">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Landmark release notes</title>
+    <meta
+      name="description"
+      content="User-facing release notes for Landmark, sourced from the same docs/releases/releases.json export Landmark writes for itself."
+    />
+    <script>
+      try {
+        var m = localStorage.getItem('ae-mode');
+        if (m === 'dark' || m === 'light') {
+          document.documentElement.classList.add(m);
+          document.documentElement.style.colorScheme = m;
+        }
+      } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="aesthetic.css" />
+    <link rel="stylesheet" href="marketing.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" width="0" height="0" style="position: absolute">
+      <symbol id="i-signpost" viewBox="0 0 24 24">
+        <path d="M12 13v8" />
+        <path d="M12 3v3" />
+        <path
+          d="M2.354 10.354a1.207 1.207 0 0 1 0-1.708l2.06-2.06A2 2 0 0 1 5.828 6h12.344a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H5.828a2 2 0 0 1-1.414-.586z"
+        />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2" />
+        <path d="M12 20v2" />
+        <path d="m4.93 4.93 1.41 1.41" />
+        <path d="m17.66 17.66 1.41 1.41" />
+        <path d="M2 12h2" />
+        <path d="M20 12h2" />
+        <path d="m6.34 17.66-1.41 1.41" />
+        <path d="m19.07 4.93-1.41 1.41" />
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+      </symbol>
+      <symbol id="i-circle-check" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+    </svg>
+
+    <div class="ae-screen ae-wide">
+      <header class="ae-bar msk-bar">
+        <a class="ae-logo" href="./" aria-label="Landmark home">
+          <span class="ae-app-mark" aria-hidden="true">
+            <svg class="ae-icon" data-lucide="signpost">
+              <use href="#i-signpost" />
+            </svg>
+          </span>
+          <span class="ae-name">Landmark</span>
+        </a>
+        <span class="msk-actions">
+          <nav class="ae-chrome msk-nav" aria-label="Site">
+            <a href="./">home</a>
+            <a href="changelog.html" aria-current="page">release notes</a>
+          </nav>
+          <button class="ae-mode" aria-label="toggle color mode">
+            <svg class="ae-icon ae-sun"><use href="#i-sun" /></svg>
+            <svg class="ae-icon ae-moon"><use href="#i-moon" /></svg>
+          </button>
+        </span>
+      </header>
+
+      <main class="ae-stage ae-stage-scroll">
+        <article class="ae-doc msk-page" aria-labelledby="release-notes-title">
+          <h1 id="release-notes-title">Release notes</h1>
+          <p class="ae-lede">
+            Every entry below is sourced from a real
+            <code>landmark run --provider local --repo-root .</code>
+            execution against this repo's own git history — not
+            hand-written marketing copy. Landmark's grounding gate refuses
+            to write a section it can't tie to a real commit, so what you
+            read here is what it actually decided.
+          </p>
+
+          <section class="msk-release">
+            <p class="ae-chrome">2026-07-04 - v1.28.0 (minor)</p>
+            <h2>Improvements in v1.28.0</h2>
+            <ul>
+              <li>Post release kit feed events (#192)</li>
+              <li>Unify synthesis grounding (#196)</li>
+              <li>Ground semver decisions in API evidence (#197)</li>
+              <li>Export static public release entries</li>
+              <li>Add gated social draft kit artifact</li>
+              <li>
+                Ground release-note sections in real commits, refuse
+                fabrication (#200)
+              </li>
+            </ul>
+            <p class="ae-status">
+              <svg class="ae-icon ae-ok" data-lucide="circle-check">
+                <use href="#i-circle-check" />
+              </svg>
+              <span class="ae-status-label"
+                >Evidence: computed from
+                <code>v1.27.0..HEAD</code> (8 conventional commits, decisive
+                commit <code>eb0eb1d</code>), written to
+                <code>docs/releases/v1.28.0.md</code> by a real
+                <code>landmark run</code>.</span
+              >
+            </p>
+          </section>
+
+          <section class="msk-release">
+            <p class="ae-chrome">2026-07-04 - site launch</p>
+            <h2>Public site launched</h2>
+            <ul>
+              <li>
+                Added a Misty Step branded public site with a release
+                evidence gallery built from real terminal output, not
+                mockups.
+              </li>
+              <li>
+                Published this release-notes page directly from Landmark's
+                own <code>docs/releases/releases.json</code> export seam.
+              </li>
+            </ul>
+            <p class="ae-status">
+              <svg class="ae-icon ae-ok" data-lucide="circle-check">
+                <use href="#i-circle-check" />
+              </svg>
+              <span class="ae-status-label"
+                >Evidence: GitHub Pages Actions deploy of <code>site/</code>.</span
+              >
+            </p>
+          </section>
+        </article>
+      </main>
+
+      <footer class="ae-bar msk-footer">
+        <p class="ae-chrome">Landmark release notes are public by default.</p>
+        <nav class="ae-foot-links ae-chrome" aria-label="Footer">
+          <a data-footer-link="github" href="https://github.com/misty-step/landmark"
+            >GitHub</a
+          >
+          <a data-footer-link="misty-step" href="https://mistystep.io"
+            >Misty Step</a
+          >
+        </nav>
+      </footer>
+    </div>
+
+    <script src="mode.js"></script>
+    <script src="theme.js"></script>
+  </body>
+</html>

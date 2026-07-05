@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">landmark run: release-kit artifact plan and approval gates</title>
+  <desc id="desc">Actual terminal output from cargo run --locked -- run --provider local --repo-root . showing which artifacts Landmark owns outright versus which wait on operator review.</desc>
+  <rect width="1280" height="800" fill="#1b1410" />
+  <rect x="0" y="0" width="1280" height="48" fill="#241a14" />
+  <circle cx="32" cy="24" r="8" fill="#c2410c" />
+  <circle cx="58" cy="24" r="8" fill="#8a5f32" />
+  <circle cx="84" cy="24" r="8" fill="#5a6172" />
+  <text x="120" y="31" font-family="Menlo, Consolas, monospace" font-size="16" fill="#c9beb5">landmark-site — zsh</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="18" fill="#e8ded6">
+    <text x="40" y="92" fill="#ff8a5c">$ cargo run --locked -- run --provider local --repo-root .</text>
+    <text x="40" y="132" fill="#c9beb5">wrote docs/releases/v1.28.0.md, .html, .txt, releases.json, feed.xml</text>
+    <text x="40" y="176">approvals:</text>
+    <text x="64" y="212" fill="#9bc47a">technical-changelog   not-required   Landmark-owned artifact</text>
+    <text x="64" y="240" fill="#9bc47a">release-notes         not-required   Landmark-owned artifact</text>
+    <text x="64" y="268" fill="#9bc47a">release-feed           not-required   Landmark-owned artifact</text>
+    <text x="64" y="296" fill="#9bc47a">demo-script             not-required   Landmark-owned artifact</text>
+    <text x="64" y="336" fill="#ffb45c">social-post-drafts     pending        operator review queue; no autopost path</text>
+    <text x="64" y="364" fill="#ffb45c">migration-guide         pending        producer output must be reviewed</text>
+    <text x="64" y="392" fill="#ffb45c">docs-update             pending        producer output must be reviewed</text>
+    <text x="64" y="420" fill="#ffb45c">blog-draft               pending        producer output must be reviewed</text>
+    <text x="40" y="472" fill="#c9beb5">classification: importance=security</text>
+    <text x="64" y="500" fill="#c9beb5">audiences: developer, developer-operator, docs-owner, release-operator</text>
+  </g>
+  <text x="40" y="720" font-family="Menlo, Consolas, monospace" font-size="16" fill="#8a7a6e">real output, this repo, this run — no synthesized text was staged for this capture</text>
+</svg>
