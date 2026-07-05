@@ -150,6 +150,14 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_release_grounding_unified_path,
     );
     map.insert(
+        "synthesis_fabrication_gate".to_string(),
+        scenario_synthesis_fabrication_gate,
+    );
+    map.insert(
+        "canary-v1-14-0-fabrication".to_string(),
+        scenario_synthesis_fabrication_gate,
+    );
+    map.insert(
         "semver_evidence_agrees".to_string(),
         scenario_semver_evidence_agrees,
     );
@@ -262,6 +270,7 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "misty_step_landmark_social_draft",
         "release_kit_classification_uses_structured_commits",
         "release_grounding_unified_path",
+        "synthesis_fabrication_gate",
         "semver_evidence_agrees",
         "semver_evidence_upgrades",
         "semver_evidence_absent",

@@ -19,6 +19,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+mod claim_grounding;
+#[cfg(test)]
+mod claim_grounding_tests;
 #[cfg(test)]
 mod classification_tests;
 mod cli;
@@ -56,6 +59,7 @@ mod version_decision;
 mod version_decision_tests;
 mod version_reconciliation;
 
+pub(crate) use claim_grounding::*;
 pub(crate) use cli::*;
 pub(crate) use describe::*;
 pub(crate) use errors::*;

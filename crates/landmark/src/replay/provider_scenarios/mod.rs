@@ -1,5 +1,6 @@
 use crate::*;
 mod consumers;
+mod fabrication_gate;
 mod failures;
 mod grounding;
 mod pr_pagination;
@@ -11,6 +12,7 @@ mod semver_evidence;
 mod synthesis_cost;
 
 pub(crate) use consumers::*;
+pub(crate) use fabrication_gate::*;
 pub(crate) use failures::*;
 pub(crate) use grounding::*;
 pub(crate) use pr_pagination::*;

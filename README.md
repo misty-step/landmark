@@ -466,7 +466,7 @@ not skip the LLM call.
 | `released` | `true` if a new release/tag was created, otherwise `false`. |
 | `release-tag` | Tag created by `semantic-release` (empty if no release). |
 | `synthesis-succeeded` | `true` when synthesis/update succeeds or when policy intentionally skips LLM synthesis for the released tag. |
-| `synthesis-quality` | `valid`, `degraded`, `skipped`, or `failed`. |
+| `synthesis-quality` | `valid`, `degraded`, `ungrounded`, `skipped`, or `failed`. |
 | `synthesis-status` | Compact JSON status with quality, failure stage/message, model attempts, context sources, cost estimate, release classification, and publication destination outcomes. |
 | `release-notes` | Synthesized user-facing release notes markdown. Empty if synthesis was skipped or failed. |
 | `webhook-sent` | `true` when the generic webhook notification was sent successfully. |
@@ -484,6 +484,22 @@ distribution steps:
   failures are reported through `synthesis-succeeded: false` and protected
   outputs such as floating tags do not move unless synthesis and release-body
   update both succeed.
+- Every synthesized section is checked against the release's deterministic
+  commit range before it can ship: `## Breaking Changes` and `## Bug Fixes`
+  headings must be backed by at least one commit carrying that exact signal
+  (a `BREAKING CHANGE`/`!:` marker, or a `fix:` commit), and every other
+  section must be backed by at least one commit in the release at all. A
+  section with zero matching commits is `synthesis-quality: ungrounded` —
+  this is a **hard failure regardless of `synthesis-required`**, because
+  publishing invented release notes is never an acceptable degraded-quality
+  tradeoff. `synthesize` retries configured fallback models before giving up,
+  and writes a claim-to-source map (`--claim-map-file`, step output
+  `claim_map_file`) recording which sections matched which commits, so the
+  rejection is auditable rather than silent. See `replay-action --scenario
+  synthesis_fabrication_gate` for the canary v1.14.0 regression fixture this
+  gate exists to catch (one real `feat` PR; the model invented Breaking
+  Changes and Bug Fixes sections describing changes that never shipped, and
+  the old shape-only validator scored it `valid`).
 - Intentional synthesis skips from `model.policy: off`, low-significance
   balanced policy, or manifest budget limits are treated as successful policy
   outcomes. Release-body mutation and artifact writes are skipped, while
