@@ -537,6 +537,7 @@ fn test_synthesize_args(repo: &Path, version: &str) -> SynthesizeArgs {
         repo_root: repo.to_path_buf(),
         dry_run_cost: false,
         context_metadata_file: PathBuf::from("."),
+        claim_map_file: PathBuf::from("."),
     }
 }
 

@@ -486,9 +486,11 @@ runs:
         quality_file="${RUNNER_TEMP}/landmark-synthesis-quality.txt"
         attempts_file="${RUNNER_TEMP}/landmark-synthesis-attempts.json"
         context_metadata_file="${RUNNER_TEMP}/landmark-synthesis-context.json"
+        claim_map_file="${RUNNER_TEMP}/landmark-synthesis-claim-map.json"
         synth_log="${RUNNER_TEMP}/landmark-synthesize.log"
         set_output "attempts_file" "${attempts_file}"
         set_output "context_metadata_file" "${context_metadata_file}"
+        set_output "claim_map_file" "${claim_map_file}"
         synth_source_args=()
         if [ -n "${release_body_file}" ]; then
           synth_source_args+=(--release-body-file "${release_body_file}")
@@ -518,15 +520,25 @@ runs:
           --quality-file "${quality_file}" \
           --attempts-file "${attempts_file}" \
           --context-metadata-file "${context_metadata_file}" \
+          --claim-map-file "${claim_map_file}" \
           > "${notes_file}" \
           2> "${synth_log}"; then
           details="$(tail -n 5 "${synth_log}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g' | sed -E 's/^ +| +$//g')"
-          message="Landmark synthesis failed; publishing release without a What's New section."
+          quality=""
+          if [ -f "${quality_file}" ]; then
+            quality="$(cat "${quality_file}")"
+          fi
+          if [ "${quality}" = "ungrounded" ]; then
+            message="Landmark synthesis fabricated release-note sections with no grounded source evidence; refusing to publish rather than ship fiction."
+          else
+            message="Landmark synthesis failed; publishing release without a What's New section."
+          fi
           if [ -n "${details}" ]; then
             message="${message} Details: ${details}"
           fi
           message="$(sanitize_text "${message}")"
           echo "::warning::${message}"
+          set_output "quality" "${quality}"
           set_output "failure_stage" "synthesis"
           set_output "failure_message" "${message}"
           exit 0

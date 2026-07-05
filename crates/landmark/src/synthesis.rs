@@ -143,15 +143,18 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
     );
     let mut last_error = String::new();
     let mut attempts = Vec::new();
+    let mut last_ungrounded: Option<ClaimSourceMap> = None;
     for model in models {
         match request_synthesis(&args.api_url, &args.api_key, &model, &prompt) {
             Ok(notes) if !notes.trim().is_empty() => {
-                let quality = if validate_notes(&notes) {
-                    "valid"
-                } else {
+                let claim_map = build_claim_source_map(&notes, &grounding.deterministic);
+                let quality = if !validate_notes(&notes) {
                     "degraded"
+                } else if !claim_map.grounded {
+                    "ungrounded"
+                } else {
+                    "valid"
                 };
-                let notes = notes_with_classification_notice(&notes, &context.classification);
                 attempts.push(json!({
                     "model": model,
                     "succeeded": true,
@@ -160,8 +163,24 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
                     "cost": context.cost.clone(),
                     "classification": context.classification.clone(),
                     "decision": context.decision.clone(),
+                    "claim_map": claim_map,
                 }));
+                if quality == "ungrounded" {
+                    // Structurally valid Markdown that names a change with zero
+                    // supporting release commits is exactly the canary v1.14.0
+                    // failure mode (invented Breaking Changes / Bug Fixes for a
+                    // single real feat PR). Never accept it — try the next
+                    // fallback model instead of publishing fiction.
+                    last_error = format!(
+                        "model {model} fabricated release-note sections with no grounded source evidence: {}",
+                        claim_map.ungrounded_sections.join(", ")
+                    );
+                    last_ungrounded = Some(claim_map);
+                    continue;
+                }
+                let notes = notes_with_classification_notice(&notes, &context.classification);
                 write_json_if_requested(&args.attempts_file, &attempts)?;
+                write_json_if_requested(&args.claim_map_file, &claim_map)?;
                 ensure_parent(&args.quality_file)?;
                 fs::write(&args.quality_file, quality)?;
                 println!("{}", notes.trim());
@@ -194,6 +213,14 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
         }
     }
     write_json_if_requested(&args.attempts_file, &attempts)?;
+    if let Some(claim_map) = last_ungrounded {
+        // Every model that returned content fabricated at least one section.
+        // Record the grounding verdict for post-mortem evidence, but still
+        // refuse: an explicit failure, never a silently "valid" fabrication.
+        write_json_if_requested(&args.claim_map_file, &claim_map)?;
+        ensure_parent(&args.quality_file)?;
+        fs::write(&args.quality_file, "ungrounded")?;
+    }
     Err(last_error.into())
 }
 
@@ -971,7 +998,19 @@ pub(crate) fn publication_policy(args: PublicationArgs) -> Result<()> {
     } else {
         succeeded
     };
-    if policy_succeeded && quality == "degraded" && required {
+    if quality == "ungrounded" {
+        // Fabricated sections are never publishable, independent of the
+        // synthesis-required input. That flag governs whether an operator
+        // wants failed/degraded synthesis to block the pipeline; it was never
+        // meant to make shipping invented release notes optional.
+        can_update_release = false;
+        can_publish_artifacts = false;
+        failure_stage = "grounding".to_string();
+        failure_message =
+            "Synthesis fabricated release-note sections with no grounded source evidence."
+                .to_string();
+        exit_failure = true;
+    } else if policy_succeeded && quality == "degraded" && required {
         can_update_release = false;
         can_publish_artifacts = false;
         failure_stage = "validation".to_string();
@@ -1132,6 +1171,7 @@ pub(crate) fn normalize_quality(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "valid" => "valid".to_string(),
         "degraded" => "degraded".to_string(),
+        "ungrounded" => "ungrounded".to_string(),
         "skipped" => "skipped".to_string(),
         "failed" => "failed".to_string(),
         _ => "failed".to_string(),

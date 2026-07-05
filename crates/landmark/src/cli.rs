@@ -213,6 +213,9 @@ pub(crate) struct SynthesizeArgs {
     /// Path to write the synthesis context metadata as JSON
     #[arg(long = "context-metadata-file", default_value = ".")]
     pub(crate) context_metadata_file: PathBuf,
+    /// Path to write the claim-to-source grounding map as JSON
+    #[arg(long = "claim-map-file", default_value = ".")]
+    pub(crate) claim_map_file: PathBuf,
 }
 
 #[derive(Args)]

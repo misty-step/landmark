@@ -666,6 +666,7 @@ model:
         repo_root: repo.path().to_path_buf(),
         dry_run_cost: false,
         context_metadata_file: PathBuf::from("."),
+        claim_map_file: PathBuf::from("."),
     };
     let defaults = resolve_synthesis_config(&args).unwrap();
     assert_eq!(defaults.product_name, "Manifest Product");
