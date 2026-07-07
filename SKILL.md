@@ -27,6 +27,7 @@ agent-native contracts, or release-kit producer responsibilities.
 | Fleet adoption | `fleet scan`, `fleet plan`, `fleet open-prs` |
 | GitHub Action use | `misty-step/landmark@v1` |
 | Local development | `cargo run --locked -p landmark -- ...` |
+| Query core verbs over MCP | `cargo run --locked -p landmark-mcp` (stdio) |
 | Full repo gate | `bin/gate` |
 
 ## Operating Rules
@@ -42,10 +43,32 @@ agent-native contracts, or release-kit producer responsibilities.
 - Release-kit artifacts are the planning/evidence boundary for richer final
   output. Do not embed bespoke media production in the core runtime.
 
-## MCP
+## MCP (landmark-920)
 
-Landmark does not currently expose an MCP server. Use the CLI/action contract
-as the agent surface until a real MCP server earns itself.
+`crates/landmark-mcp` is a thin stdio JSON-RPC wrap (mirrors `bastion-mcp`'s
+pattern: shell out to the real binary, pass its `--json`/`--error-format
+json` output straight through) over three read-only, side-effect-free
+verbs:
+
+- `describe` — the agent-native self-description (`landmark describe --json`).
+- `run_dry_run` — the release decision + release-kit plan, always forced to
+  `--provider local --dry-run` (no GitHub calls, no files written).
+- `doctor` — manifest validation (`landmark doctor --format json`).
+
+`synthesize` (the LLM-calling changelog step) is a deliberate exclusion, not
+an oversight: it needs an API key and spends real money per call, which does
+not belong behind an MCP tool argument any agent can invoke. Anything that
+mutates a release (`run --provider github`, `update-release`,
+`notify-webhook`, `fleet open-prs`, self-release) stays CLI/action-only —
+this server has no path to reach them.
+
+**API face: waived.** Landmark's CLI + GitHub Action already cover every
+non-GitHub caller (`--json`, structured error envelopes, local git/manifest
+state); a REST API would be a second transport for verbs the CLI/MCP pair
+already exposes, with no new consumer it would unblock.
+
+Run it: `cargo run --locked -p landmark-mcp` (stdio). Tests:
+`cargo test -p landmark-mcp` (also covered by `cargo test --locked`).
 
 ## Verification
 
