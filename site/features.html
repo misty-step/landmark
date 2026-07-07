@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" data-ae-theme="ember">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Landmark - Features</title>
+    <meta
+      name="description"
+      content="Landmark features: release decisions, public notes, release-kit plans, and portable CLI evidence grounded in repo history."
+    />
+    <script>
+      try {
+        var m = localStorage.getItem('ae-mode');
+        if (m === 'dark' || m === 'light') {
+          document.documentElement.classList.add(m);
+          document.documentElement.style.colorScheme = m;
+        }
+      } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="aesthetic.css" />
+    <link rel="stylesheet" href="marketing.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" width="0" height="0" style="position: absolute">
+      <symbol id="i-signpost" viewBox="0 0 24 24">
+        <path d="M12 13v8" />
+        <path d="M12 3v3" />
+        <path
+          d="M2.354 10.354a1.207 1.207 0 0 1 0-1.708l2.06-2.06A2 2 0 0 1 5.828 6h12.344a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H5.828a2 2 0 0 1-1.414-.586z"
+        />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2" />
+        <path d="M12 20v2" />
+        <path d="m4.93 4.93 1.41 1.41" />
+        <path d="m17.66 17.66 1.41 1.41" />
+        <path d="M2 12h2" />
+        <path d="M20 12h2" />
+        <path d="m6.34 17.66-1.41 1.41" />
+        <path d="m19.07 4.93-1.41 1.41" />
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+      </symbol>
+      <symbol id="i-circle-check" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24">
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24">
+        <path
+          d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"
+        />
+        <path d="M9 18c-4.51 2-5-2-7-2" />
+      </symbol>
+    </svg>
+
+    <div class="ae-screen ae-wide">
+      <header class="ae-bar msk-bar">
+        <a class="ae-logo" href="./" aria-label="Landmark home">
+          <span class="ae-app-mark" aria-hidden="true">
+            <svg class="ae-icon" data-lucide="signpost">
+              <use href="#i-signpost" />
+            </svg>
+          </span>
+          <span class="ae-name">Landmark</span>
+        </a>
+        <nav class="ae-chrome msk-nav" aria-label="Site">
+          <a href="features.html" aria-current="page">features</a>
+          <span class="msk-sep" aria-hidden="true">&middot;</span>
+          <a href="get-started.html">get started</a>
+          <span class="msk-sep" aria-hidden="true">&middot;</span>
+          <a href="changelog.html">changelog</a>
+          <span class="msk-sep" aria-hidden="true">&middot;</span>
+          <a href="https://github.com/misty-step/landmark">github</a>
+        </nav>
+      </header>
+
+      <main class="ae-stage ae-stage-scroll" id="content">
+        <div class="msk-page">
+          <section class="msk-hero" aria-labelledby="hero-title">
+            <p class="ae-chrome">Release intelligence, run as a CLI</p>
+            <h1 class="ae-h" id="hero-title">
+              Landmark computes what should ship next — and refuses to write
+              a release note it can't prove.
+            </h1>
+            <p class="msk-pitch">
+              Landmark turns a repo's conventional commits into a version
+              decision, a technical changelog, and public release notes —
+              with a machine-readable evidence packet behind every claim.
+              Every section it writes has to trace back to a real commit; if
+              it can't, it refuses to write the section rather than guess.
+            </p>
+            <p class="ae-status">
+              <svg class="ae-icon ae-ok" data-lucide="circle-check">
+                <use href="#i-circle-check" />
+              </svg>
+              <span class="ae-status-label"
+                >Product boundary is the Rust CLI — no framework lock-in, no
+                required GitHub Action.</span
+              >
+            </p>
+          </section>
+
+          <section
+            class="msk-section"
+            id="features"
+            aria-labelledby="features-title"
+          >
+            <h2 class="ae-h" id="features-title">Why it matters</h2>
+            <div class="ae-list-rows">
+              <div class="ae-list-row">
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">job</span>
+                  <span class="ae-list-value"
+                    >Decide the next semantic version from real commit
+                    history and API-diff evidence, not guesswork.</span
+                  >
+                </span>
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">proof</span>
+                  <span class="ae-list-value"
+                    ><code>docs/releases/v1.28.0.md</code> — the actual
+                    notes this run wrote, sourced from 8 real commits in
+                    <code>v1.27.0..HEAD</code>.</span
+                  >
+                </span>
+              </div>
+              <div class="ae-list-row">
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">job</span>
+                  <span class="ae-list-value"
+                    >Refuse to fabricate a release-note section it can't
+                    ground in a real commit.</span
+                  >
+                </span>
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">proof</span>
+                  <span class="ae-list-value"
+                    >Shipped in
+                    <code>crates/landmark/src/claim_grounding.rs</code> —
+                    the honest-refusal gate is the point, not a caveat.</span
+                  >
+                </span>
+              </div>
+              <div class="ae-list-row">
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">job</span>
+                  <span class="ae-list-value"
+                    >Plan final-mile artifacts — docs updates, blog drafts,
+                    demo scripts — as typed, reviewable producer
+                    contracts.</span
+                  >
+                </span>
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">proof</span>
+                  <span class="ae-list-value"
+                    >Real run output: Landmark-owned artifacts ship
+                    <code>not-required</code>; producer artifacts sit
+                    <code>pending</code> for a human, always.</span
+                  >
+                </span>
+              </div>
+              <div class="ae-list-row">
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">job</span>
+                  <span class="ae-list-value"
+                    >Run the same runtime from a laptop, generic CI, or an
+                    agent — the CLI is the product, the Action is
+                    optional.</span
+                  >
+                </span>
+                <span class="ae-list-cell">
+                  <span class="ae-list-label">proof</span>
+                  <span class="ae-list-value"
+                    ><code
+                      >cargo run --locked -p landmark -- run --provider local
+                      --repo-root .</code
+                    ></span
+                  >
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section
+            class="msk-section"
+            id="screens"
+            aria-labelledby="screens-title"
+          >
+            <div class="msk-section-head">
+              <h2 class="ae-h" id="screens-title">Real terminal output</h2>
+              <p class="ae-dim">
+                Landmark has no UI to screenshot, so this gallery is real
+                terminal and file captures from a live run against this
+                repo's own history — not mockups. Click a frame to inspect
+                it.
+              </p>
+            </div>
+            <div class="msk-gallery" aria-label="Terminal output captures">
+              <button
+                class="msk-shot"
+                type="button"
+                data-full="assets/screenshots/01-overview.svg"
+                data-title="Version decision"
+              >
+                <img
+                  src="assets/screenshots/01-overview.svg"
+                  alt="landmark run --dry-run terminal output showing a real minor version bump decision from v1.27.0 to v1.28.0"
+                />
+                <span class="ae-chrome">Version decision (--dry-run)</span>
+              </button>
+              <button
+                class="msk-shot"
+                type="button"
+                data-full="assets/screenshots/02-workflow.svg"
+                data-title="Release-kit plan"
+              >
+                <img
+                  src="assets/screenshots/02-workflow.svg"
+                  alt="landmark run terminal output listing release-kit artifacts and their approval state, some Landmark-owned and some pending operator review"
+                />
+                <span class="ae-chrome">Release-kit approval gates</span>
+              </button>
+              <button
+                class="msk-shot"
+                type="button"
+                data-full="assets/screenshots/03-release.svg"
+                data-title="Generated release note"
+              >
+                <img
+                  src="assets/screenshots/03-release.svg"
+                  alt="contents of docs/releases/v1.28.0.md as actually written by a real landmark run"
+                />
+                <span class="ae-chrome">Generated release note</span>
+              </button>
+            </div>
+          </section>
+
+          <section
+            class="msk-section msk-release-slot"
+            aria-labelledby="release-title"
+          >
+            <h2 class="ae-h" id="release-title">Release notes</h2>
+            <p>
+              <a href="changelog.html">Release notes</a> are public and
+              user-facing, sourced from Landmark's own
+              <code>docs/releases/releases.json</code> export seam — the same
+              artifact a marketing site can render without loading Landmark
+              or re-reading git history.
+            </p>
+          </section>
+        </div>
+      </main>
+
+      <footer class="ae-bar msk-footer">
+        <button class="ae-mode" aria-label="toggle color mode">
+          <svg class="ae-icon ae-sun"><use href="#i-sun" /></svg>
+          <svg class="ae-icon ae-moon"><use href="#i-moon" /></svg>
+        </button>
+        <p class="ae-chrome msk-foot-credit">
+          a <a href="https://mistystep.io">Misty Step</a> project
+          <a
+            class="msk-gh-link"
+            href="https://github.com/misty-step/landmark"
+            aria-label="Landmark on GitHub"
+          >
+            <svg class="ae-icon" aria-hidden="true"><use href="#i-github" /></svg>
+          </a>
+        </p>
+      </footer>
+    </div>
+
+    <dialog class="ae-dialog msk-zoom" aria-labelledby="zoom-title">
+      <div class="msk-zoom-head">
+        <h2 class="ae-dialog-title" id="zoom-title">Screenshot</h2>
+        <button
+          class="ae-button"
+          type="button"
+          data-zoom-close
+          aria-label="Close screenshot"
+        >
+          <svg class="ae-icon" aria-hidden="true"><use href="#i-x" /></svg>
+        </button>
+      </div>
+      <img class="msk-zoom-img" alt="" />
+    </dialog>
+
+    <script src="mode.js"></script>
+    <script src="theme.js"></script>
+    <script src="marketing.js"></script>
+  </body>
+</html>

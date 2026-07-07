@@ -10,12 +10,24 @@ inventing a second design system.
   own README: no marketing fog, no mascot language.
 - Lead with the mechanism (what the CLI actually computes and writes), then
   the proof (real commit ranges, real hashes, real evidence files).
-- State refusals plainly. Landmark's fabrication-refusal behavior is a trust
-  feature, not a caveat — say so directly instead of softening it.
+- Keep grounding claims factual and supporting. The locked homepage tagline is
+  not a place for "refuses to X" phrasing.
 
-## Pitch One-Liner
+## Operator Lock
 
-`Landmark turns a repo's conventional commits into a version decision, a changelog, and public release notes it can prove — and refuses to write a section it can't ground in a real commit.`
+- Lock date: operator lock-in 2026-07-07, `misty-step-936`.
+- Homepage H1: `Automated release intelligence.`
+- Layout: Split.
+- Hero image: `site/assets/hero.jpg`, copied from the staged production image
+  `landmark-hero.jpg`.
+- Image provenance: gpt-image-1, Misty Step fresco language.
+- Image opacity: `0.35`.
+- Homepage structure: hero only, one viewport, no feature rows below it.
+- Footer contract: mode toggle on the left; right side reads `a Misty Step
+  project`, with "Misty Step" linked to `https://mistystep.io` and the GitHub
+  glyph linked to `https://github.com/misty-step/landmark`.
+- `data-ae-theme="ember"` stays. The site uses the Aesthetic ember preset and
+  does not define site-local accent hex values.
 
 ## Lucide Mark
 
@@ -33,15 +45,8 @@ ultramarine blue, since both sites can be viewed side by side in the fleet.
 Ember's warm orange reads as "release signal fired," which fits a tool whose
 entire job is deciding when to ship.
 
-```css
-:root {
-  --ae-accent: #c2410c;
-  --ae-accent-dark: #ff8a5c;
-}
-```
-
-No additional categorical project tokens were needed; the theme preset covers
-the site's needs.
+No additional categorical project tokens are needed; the theme preset covers
+the site's needs, and the locked site layer must not add new colors.
 
 ## Screenshot Inventory
 
@@ -62,10 +67,9 @@ site build; see the campaign receipt for the raw transcripts.
 
 ## Footer Links
 
-- Misty Step: `https://mistystep.io`
-- GitHub: `https://github.com/misty-step/landmark` (repo is public)
-- Weave: omitted — Landmark is a standalone Misty Step fleet product, not a
-  Weave-family surface; no evidence in the repo ties it to Weave.
+- Misty Step project link: `https://mistystep.io`
+- GitHub glyph link: `https://github.com/misty-step/landmark` (repo is public)
+- No bare URL text, email, copyright line, or Weave footer link.
 
 ## Release Notes Rule
 
