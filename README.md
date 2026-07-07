@@ -29,7 +29,7 @@ Use this first in a checkout. It requires no secrets and does not call GitHub or
 an LLM:
 
 ```bash
-cargo run --locked -- run --provider local --repo-root .
+cargo run --locked -p landmark -- run --provider local --repo-root .
 ```
 
 The command reads git tags and conventional commits, chooses the next semantic
@@ -47,7 +47,7 @@ The JSON artifact is the zero-runtime marketing-site export. Each
 `sections`, so a static site can render the latest public notes without loading
 Landmark or re-reading git history.
 
-Build from source with `cargo run --locked -- ...` or a locally built
+Build from source with `cargo run --locked -p landmark -- ...` or a locally built
 `target/debug/landmark`, or download a published per-target release binary
 (`landmark-x86_64-unknown-linux-musl`, `landmark-aarch64-unknown-linux-musl`,
 `landmark-aarch64-apple-darwin`, `landmark-x86_64-apple-darwin`) plus
@@ -58,7 +58,7 @@ it no longer ships a checked-in binary.
 The executable quickstart oracle is:
 
 ```bash
-cargo run --locked -- replay-action --scenario first_run_local_preview
+cargo run --locked -p landmark -- replay-action --scenario first_run_local_preview
 ```
 
 ### Generic CI
@@ -67,7 +67,7 @@ A shell script, GitLab CI job, Forgejo workflow, Buildkite step, or agent can ru
 the same Rust runtime directly:
 
 ```bash
-cargo run --locked -- run \
+cargo run --locked -p landmark -- run \
   --provider local \
   --repo-root . \
   --output-dir .landmark/run \
@@ -754,7 +754,7 @@ The `release-notes` output is still available for custom notifications:
 Landmark releases itself without pushing generated release commits directly to
 protected `master`. The repository workflow has two phases:
 
-- `prepare-release-pr` runs `cargo run --locked -- prepare-self-release`,
+- `prepare-release-pr` runs `cargo run --locked -p landmark -- prepare-self-release`,
   updates `CHANGELOG.md`, `package.json`, `crates/landmark/Cargo.toml`, and
   `Cargo.lock` on `landmark/self-release`. It then opens or updates a release
   PR, which must pass the normal `merge-gate` before it can land.
@@ -775,7 +775,7 @@ protected `master`. The repository workflow has two phases:
 The local replay oracle for this path is:
 
 ```bash
-cargo run --locked -- replay-action \
+cargo run --locked -p landmark -- replay-action \
   --evidence-dir .landmark/replay \
   --scenario self_release_pr_path
 ```
@@ -786,17 +786,17 @@ This repository keeps `package.json` and the Rust crate version aligned to relea
 
 - `prepare-self-release` updates `package.json`,
   `crates/landmark/Cargo.toml`, and `Cargo.lock` before opening the release PR.
-- `.releaserc.json` still runs `cargo run --locked -- update-version-metadata`
+- `.releaserc.json` still runs `cargo run --locked -p landmark -- update-version-metadata`
   for consumers using full semantic-release mode.
 - The release commit includes `CHANGELOG.md`, `package.json`,
   `crates/landmark/Cargo.toml`, and `Cargo.lock`.
-- CI runs `cargo run --locked -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
+- CI runs `cargo run --locked -p landmark -- check-version-sync` to fail fast when metadata drifts from the latest semver tag.
 
 ### Action Contract Validation (Landmark Repo)
 
 The public action contract is checked from `action.yml`:
 
-- `cargo run --locked -- check-action-contract` fails when the README inputs table diverges from action metadata.
+- `cargo run --locked -p landmark -- check-action-contract` fails when the README inputs table diverges from action metadata.
 - The same command scans examples, project docs, and release workflows for unknown or deprecated Landmark inputs.
 - CI runs the contract check before tests so stale consumer instructions fail fast.
 

@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked -- prepare-self-release \
+          cargo run --locked -p landmark -- prepare-self-release \
             --repo-root . \
             --repository "${GITHUB_REPOSITORY}" \
             --release-branch landmark/self-release \
@@ -88,7 +88,7 @@ jobs:
           GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          cargo run --locked -- publish-self-release \
+          cargo run --locked -p landmark -- publish-self-release \
             --repo-root . \
             --github-token "${GH_RELEASE_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
