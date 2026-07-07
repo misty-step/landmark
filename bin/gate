@@ -30,10 +30,10 @@ if git remote get-url origin >/dev/null 2>&1; then
     tag_ref="origin/master"
   fi
 fi
-cargo run --locked -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
-cargo run --locked -- check-action-contract
-cargo run --locked -- setup --repo-root . --output-dir .landmark/setup
-cargo run --locked -- replay-action --evidence-dir .landmark/replay
+cargo run --locked -p landmark -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
+cargo run --locked -p landmark -- check-action-contract
+cargo run --locked -p landmark -- setup --repo-root . --output-dir .landmark/setup
+cargo run --locked -p landmark -- replay-action --evidence-dir .landmark/replay
 if command -v rustup >/dev/null 2>&1; then
   rustup target add x86_64-unknown-linux-musl
 fi

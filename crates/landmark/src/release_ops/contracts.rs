@@ -305,7 +305,7 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
         "### Generic CI",
         "### GitHub Action Full Mode",
         "### GitHub Action Synthesis-Only Mode",
-        "cargo run --locked -- run --provider local --repo-root .",
+        "cargo run --locked -p landmark -- run --provider local --repo-root .",
         "downloads and checksum-verifies the matching binary itself",
         "GitHub Release",
         "replay-action --scenario first_run_local_preview",
@@ -480,7 +480,7 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
     if !ci.contains("run: bin/gate") {
         errors.push("CI workflow must delegate the aggregate gate to bin/gate".into());
     }
-    if ci.contains("cargo run --locked -- check-version-sync") {
+    if ci.contains("cargo run --locked -p landmark -- check-version-sync") {
         errors.push("CI workflow must not duplicate version sync outside bin/gate".into());
     }
     for required in [
@@ -499,7 +499,7 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
 
     for required in [
         "git fetch --tags --force origin",
-        "cargo run --locked -- check-version-sync --reference \"${tag_ref}\" \"${candidate_args[@]}\"",
+        "cargo run --locked -p landmark -- check-version-sync --reference \"${tag_ref}\" \"${candidate_args[@]}\"",
         "candidate_args+=(--allow-release-candidate)",
         "LANDMARK_PR_BASE_SHA",
         "landmark/self-release",
@@ -512,7 +512,7 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
     }
     if let (Some(fetch), Some(sync)) = (
         gate.find("git fetch --tags --force origin"),
-        gate.find("cargo run --locked -- check-version-sync"),
+        gate.find("cargo run --locked -p landmark -- check-version-sync"),
     ) && fetch > sync
     {
         errors.push("bin/gate must fetch tags before version sync".into());

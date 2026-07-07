@@ -4,4 +4,4 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-cargo run --locked -- replay-action "$@"
+cargo run --locked -p landmark -- replay-action "$@"

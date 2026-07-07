@@ -1,0 +1,16 @@
+[package]
+name = "landmark-mcp"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "MCP server for Landmark's core read-only verbs: agent-native self-description, a local dry-run release decision (version bump + release-kit plan), and manifest doctor -- the same CLI/--json contract, just MCP-callable."
+
+[[bin]]
+name = "landmark-mcp"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0.150"
+
+[dev-dependencies]
+tempfile = "3"

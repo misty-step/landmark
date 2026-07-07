@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/landmark"]
+members = ["crates/landmark", "crates/landmark-mcp"]
 resolver = "3"
 
 [profile.release]
