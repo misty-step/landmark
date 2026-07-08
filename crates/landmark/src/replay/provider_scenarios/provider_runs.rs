@@ -884,6 +884,19 @@ pub(crate) fn scenario_release_kit_classification_uses_structured_commits(
     }))
 }
 
+// This fixture anchors the post-reset (landmark-017) tag epoch: v0.28.0 is the
+// first tag of the 0.x line, an identical tree to the retired v1.28.0 (the
+// fleet moved the whole repo from the 1.x line to 0.x pre-stable versioning).
+// v0.28.0 has no ancestor tag on the 0.x line, so this exercises the
+// bootstrap/first-release range path, not an incremental bump.
+//
+// previous_tag/latest_tag/range are NOT locked to "tags <= the release tag" --
+// empirically (verified by locally minting a throwaway v0.28.1 tag on HEAD and
+// re-running, remote untouched) they track whatever other tag the repo
+// happens to have nearby, even one numerically above the anchor. Only assert
+// the shape that held across every simulated tag state: bump/commit_bump/
+// raw_bump stay "none", commit_count stays 0, stability stays "pre-stable",
+// and the range's upper bound is pinned to this release tag.
 pub(crate) fn scenario_misty_step_landmark_social_draft(_: &Path) -> Result<Value> {
     let repo = env::current_dir()?;
     let result = Command::new(current_exe())
@@ -896,7 +909,7 @@ pub(crate) fn scenario_misty_step_landmark_social_draft(_: &Path) -> Result<Valu
             "--repository",
             "misty-step/landmark",
             "--release-tag",
-            "v1.27.0",
+            "v0.28.0",
             "--dry-run",
         ])
         .output()?;
@@ -904,8 +917,22 @@ pub(crate) fn scenario_misty_step_landmark_social_draft(_: &Path) -> Result<Valu
         return Err(String::from_utf8_lossy(&result.stderr).to_string().into());
     }
     let evidence: Value = serde_json::from_slice(&result.stdout)?;
-    if evidence["release_tag"] != "v1.27.0" || evidence["version_decision"]["bump"] != "minor" {
-        return Err("real Landmark release proof did not exercise v1.27.0 minor release".into());
+    let decision = &evidence["version_decision"];
+    let range_pinned_to_anchor = decision["range"]
+        .as_str()
+        .is_some_and(|range| range.ends_with("..v0.28.0"));
+    if evidence["release_tag"] != "v0.28.0"
+        || decision["bump"] != "none"
+        || decision["raw_bump"] != "none"
+        || decision["commit_bump"] != "none"
+        || decision["commit_count"] != 0
+        || decision["stability"] != "pre-stable"
+        || !range_pinned_to_anchor
+    {
+        return Err(format!(
+            "real Landmark release proof did not exercise the v0.28.0 bootstrap anchor: {decision}"
+        )
+        .into());
     }
     release_kit_contract::assert_contract(&evidence["release_kit"], "real Landmark release kit")?;
     let social = release_kit_artifact(&evidence["release_kit"], "social-post-drafts")
@@ -919,7 +946,7 @@ pub(crate) fn scenario_misty_step_landmark_social_draft(_: &Path) -> Result<Valu
         || draft["voice_card"]
             .as_str()
             .is_none_or(|voice_card| voice_card.trim().is_empty())
-        || draft["evidence_link"] != "https://github.com/misty-step/landmark/releases/tag/v1.27.0"
+        || draft["evidence_link"] != "https://github.com/misty-step/landmark/releases/tag/v0.28.0"
     {
         return Err(
             format!("real Landmark release social draft missing draft shape: {social}").into(),
