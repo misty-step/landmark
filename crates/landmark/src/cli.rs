@@ -748,6 +748,11 @@ pub(crate) struct SelfReleasePlan {
     pub(crate) reason: String,
     pub(crate) latest_version: String,
     pub(crate) next_version: String,
+    /// The bump before pre-stable demotion (`major`/`minor`/`patch`/`none`), and
+    /// whether pre-stable Cargo-style 0.x rules were applied. Keeps the demotion
+    /// visible in the plan. See card landmark-016.
+    pub(crate) raw_bump: String,
+    pub(crate) stability: String,
     pub(crate) release_tag: String,
     pub(crate) release_branch: String,
     pub(crate) pull_request_title: String,

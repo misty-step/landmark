@@ -23,6 +23,8 @@
       "properties": {
         "latest_tag": { "type": "string" },
         "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+        "raw_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+        "stability": { "type": "string", "enum": ["pre-stable", "stable"] },
         "commit_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
         "api_evidence_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
         "reconciliation": { "type": "string", "enum": ["agreed", "compatible", "upgraded", "conflict", "unavailable", "unverified"] },

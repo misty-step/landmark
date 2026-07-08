@@ -24,6 +24,8 @@ fn baseline_decision() -> RunVersionDecision {
     RunVersionDecision {
         latest_tag: "v1.0.0".into(),
         bump: "minor".into(),
+        raw_bump: "minor".into(),
+        stability: "stable".into(),
         commit_bump: "minor".into(),
         api_evidence_bump: "none".into(),
         reconciliation: "unavailable".into(),

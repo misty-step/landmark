@@ -177,3 +177,32 @@ pub(crate) fn decide_version(commits: &[ClassifiedCommit]) -> VersionDecision {
         unknown_commits,
     }
 }
+
+/// Cargo-style pre-stable versioning. While the current version is below 1.0.0
+/// the 0.x line treats a *minor* bump as its breaking boundary, so a repo never
+/// auto-crosses into 1.0.0: Major demotes to Minor (0.x -> 0.(x+1)), Minor
+/// demotes to Patch, Patch is unchanged. At or above 1.0.0 the bump is returned
+/// unchanged. Promotion to stable is a manual `v1.0.0` tag; once the current
+/// version is >= 1.0.0 auto-detection stops demoting. Callers pass "0.0.0" for a
+/// repo with no releases yet so a breaking first change still stays below 1.0.0.
+/// See card landmark-016.
+pub(crate) fn apply_stability(bump: VersionBump, current_version: &str) -> VersionBump {
+    if is_pre_stable(current_version) {
+        match bump {
+            VersionBump::Major => VersionBump::Minor,
+            VersionBump::Minor => VersionBump::Patch,
+            VersionBump::Patch => VersionBump::Patch,
+        }
+    } else {
+        bump
+    }
+}
+
+/// A repo is pre-stable when its current version parses as semver below 1.0.0.
+/// Unparseable/exotic versions resolve to stable (identity), matching the
+/// action-level `auto` fallback for tag formats we don't recognize.
+pub(crate) fn is_pre_stable(current_version: &str) -> bool {
+    semver_from_tag(current_version)
+        .map(|((major, _, _), _)| major == 0)
+        .unwrap_or(false)
+}

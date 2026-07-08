@@ -10,8 +10,15 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             reason: format!(
                 "metadata version {package_version} is ahead of latest tag {latest_version}; waiting for publish"
             ),
-            latest_version,
+            latest_version: latest_version.clone(),
             next_version: package_version,
+            raw_bump: "none".into(),
+            stability: if is_pre_stable(&latest_version) {
+                "pre-stable"
+            } else {
+                "stable"
+            }
+            .into(),
             release_tag: String::new(),
             release_branch: args.release_branch,
             pull_request_title: String::new(),
@@ -27,6 +34,17 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
 
     let classified = self_release_commits(&args.repo_root, &format!("v{latest_version}"))?;
     let decision = decide_version(&classified);
+    let stability = if is_pre_stable(&latest_version) {
+        "pre-stable"
+    } else {
+        "stable"
+    }
+    .to_string();
+    let raw_bump = decision
+        .bump
+        .map(VersionBump::as_str)
+        .unwrap_or("none")
+        .to_string();
     let changelog_commits = release_worthy_commits(&classified);
     let unknown_commits: Vec<String> = decision
         .unknown_commits
@@ -48,6 +66,8 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
             reason,
             latest_version,
             next_version: package_version,
+            raw_bump,
+            stability,
             release_tag: String::new(),
             release_branch: args.release_branch,
             pull_request_title: String::new(),
@@ -65,7 +85,7 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         .as_ref()
         .map(ClassifiedCommit::evidence_line);
 
-    let next_version = bump_version(&latest_version, bump)?;
+    let next_version = bump_version(&latest_version, apply_stability(bump, &latest_version))?;
     let release_tag = format!("v{next_version}");
     let changelog = render_self_release_changelog(
         &args.repository,
@@ -90,6 +110,8 @@ pub(crate) fn prepare_self_release(args: PrepareSelfReleaseArgs) -> Result<()> {
         reason: "prepared release pull request changes".into(),
         latest_version,
         next_version: next_version.clone(),
+        raw_bump,
+        stability,
         release_tag,
         release_branch: args.release_branch,
         pull_request_title: format!("chore(release): {next_version}"),
