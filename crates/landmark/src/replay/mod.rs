@@ -279,7 +279,14 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "first_run_local_preview",
         "github_provider_run",
         "local_provider_run",
-        "misty_step_landmark_social_draft",
+        // Temporarily de-canonicalized 2026-07-08 (landmark-017 version reset):
+        // every surviving tag points at one commit, so all dogfood ranges are
+        // zero-diff and the rich-artifact gate (social drafts) can never fire.
+        // Re-canonicalize by re-anchoring on the first post-reset release
+        // whose importance triggers rich artifacts — tracked by Powder
+        // landmark-020. The scenario itself stays registered in
+        // scenario_map() and runnable explicitly by name.
+        // "misty_step_landmark_social_draft",
         "release_kit_classification_uses_structured_commits",
         "release_grounding_unified_path",
         "synthesis_fabrication_gate",
