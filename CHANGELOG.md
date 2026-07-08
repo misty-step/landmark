@@ -1,3 +1,12 @@
+## Version reset: 1.28.0 → 0.28.0 (2026-07-08)
+
+The fleet moved to pre-stable 0.x semantics (landmark-016). The 1.x line was
+renumbered to 0.x with the same content: v1.28.0 == v0.28.0 (commit
+80ce543). Pre-1.0 bumps follow Cargo-style semver — breaking changes bump
+the minor version, features and fixes bump the patch version. `1.0.0` will
+only ever be tagged deliberately, once the API is ready to commit to
+stability.
+
 # [1.28.0](https://github.com/misty-step/landmark/compare/v1.27.0...v1.28.0) (2026-07-08)
 
 ### Features
