@@ -157,14 +157,25 @@ config and the Rust engine):
   auto-crosses into `1.0.0` — crossing to stable is an explicit, human act.
 
 `stability: auto` (the default) detects the mode from the highest semver-formatted
-tag: below `1.0.0`, or no tags at all, resolves to pre-stable; `1.0.0` and above
-resolves to stable. Exotic or unrecognized tag formats resolve to stable. Set
-`stability: pre-stable` or `stability: stable` to force a mode. A repo that ships
-its own semantic-release config keeps full control and this policy does not apply.
+tag **on the remote** (read via `git ls-remote`, so a stale or failed local fetch
+can never mis-detect the line): below `1.0.0`, or no tags at all, resolves to
+pre-stable; `1.0.0` and above resolves to stable. Exotic or unrecognized tag
+formats — and a remote whose tags cannot be read — resolve to stable. Set
+`stability: pre-stable` or `stability: stable` to force a mode; forcing
+`pre-stable` on a line already at `>= 1.0.0` fails fast before publishing. A repo
+that ships its own semantic-release config keeps full control and this policy does
+not apply.
 
 For a brand-new pre-stable repo with no tags, the action seeds a `v0.0.0` tag on
 the first commit so the first release computes below `1.0.0` (e.g. a first
-feature releases `v0.1.0`) instead of jumping to `1.0.0`.
+feature releases `v0.1.0`) instead of jumping to `1.0.0`. Seeding requires a full
+clone — check out with `fetch-depth: 0` (`actions/checkout` defaults to a shallow
+clone, whose first-commit lookup returns the graft boundary and would seed the
+wrong commit); on a shallow checkout seeding is skipped with a warning.
+
+Floating major tags follow the same 0.x semantics: a `v0` tag aggregates every
+`0.x` release, and because `0.x` minor bumps are breaking, **pinning `@v0` accepts
+breaking updates**. Pin an exact tag (e.g. `@v0.4.0`) when you need stability.
 
 #### Promotion to stable
 

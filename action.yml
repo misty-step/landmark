@@ -274,14 +274,30 @@ runs:
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-        # Highest semver-formatted v* tag, or empty when the repo has none.
-        # Exotic/prerelease tag formats are ignored here so `auto` falls back to
-        # stable when it cannot recognize the line.
+        # Authoritative remote tag list. Stability auto-detection and no-tags
+        # seeding must trust the REMOTE, not local tag visibility: a stale or
+        # failed local fetch must never let a real >= 1.0.0 repo be mis-detected
+        # as pre-stable and demoted below its own version. `git ls-remote`
+        # succeeds with empty output when the remote genuinely has no tags and
+        # fails only on a network/auth error.
         semver_re='^v?[0-9]+\.[0-9]+\.[0-9]+$'
+        remote_verified=1
+        remote_tags=""
+        if ! remote_tags="$(git ls-remote --tags origin 'refs/tags/*' 2>/dev/null)"; then
+          remote_verified=0
+          echo "::warning::Could not read remote tags (git ls-remote failed); versioning cannot verify the release line. See card landmark-016."
+        fi
+
+        # Highest semver-formatted tag on the remote (v-prefixed or bare), or
+        # empty. Exotic/prerelease formats are ignored so `auto` falls back to
+        # stable when it cannot recognize the line; `^{}` dereference lines from
+        # annotated tags are normalized away.
         highest_tag=""
         highest_key=""
-        while IFS= read -r tag; do
-          [ -z "${tag}" ] && continue
+        while IFS= read -r ref; do
+          [ -z "${ref}" ] && continue
+          tag="${ref##*refs/tags/}"
+          tag="${tag%^\{\}}"
           case "${tag}" in
             *[!v0-9.]*) continue ;;
           esac
@@ -293,17 +309,26 @@ runs:
               highest_tag="${core}"
             fi
           fi
-        done < <(git tag)
+        done <<< "${remote_tags}"
+
+        # Does the remote carry any v-prefixed version tag (incl. floating v0/v1)?
+        remote_has_v_tag=0
+        if printf '%s\n' "${remote_tags}" | grep -Eq 'refs/tags/v[0-9]'; then
+          remote_has_v_tag=1
+        fi
 
         # Resolve the stability policy: explicit input wins; `auto` detects from
-        # the highest semver tag (< 1.0.0 or none => pre-stable, else stable).
+        # the highest semver tag on the remote (< 1.0.0 or none => pre-stable,
+        # else stable). An unverifiable remote resolves `auto` to stable.
         resolved_stability="stable"
         case "${STABILITY_INPUT}" in
           pre-stable|stable)
             resolved_stability="${STABILITY_INPUT}"
             ;;
           auto|"")
-            if [ -z "${highest_tag}" ]; then
+            if [ "${remote_verified}" -eq 0 ]; then
+              resolved_stability="stable"
+            elif [ -z "${highest_tag}" ]; then
               resolved_stability="pre-stable"
             else
               major="${highest_tag%%.*}"
@@ -319,6 +344,26 @@ runs:
             resolved_stability="stable"
             ;;
         esac
+
+        # Fail fast on an explicit pre-stable override when the line is already
+        # >= 1.0.0, BEFORE semantic-release runs, so a misconfiguration cannot
+        # produce a post-publish red run. A stable line cannot move backward.
+        if [ "${STABILITY_INPUT}" = "pre-stable" ] && [ "${remote_verified}" -eq 1 ] \
+           && [ -n "${highest_tag}" ]; then
+          major="${highest_tag%%.*}"
+          if [ "${major}" -ge 1 ]; then
+            echo "::error::stability: pre-stable was requested but the latest tag is v${highest_tag} (>= 1.0.0). A stable line cannot move back to pre-stable; remove the override. See card landmark-016."
+            exit 1
+          fi
+        fi
+
+        # If stability resolved to pre-stable but the remote could not be
+        # verified, fall back to stable loudly rather than risk seeding or
+        # demoting an unknown release line.
+        if [ "${resolved_stability}" = "pre-stable" ] && [ "${remote_verified}" -eq 0 ]; then
+          echo "::warning::Resolved pre-stable but remote tags are unverifiable; falling back to stable to avoid demoting an unknown release line. See card landmark-016."
+          resolved_stability="stable"
+        fi
         echo "::notice::Landmark versioning stability resolved to: ${resolved_stability}"
 
         # Detect consumer-provided semantic-release config. A repo's own config
@@ -339,17 +384,24 @@ runs:
           fi
         done
 
-        # No-tags seeding: pre-stable repos with no v* tags start from v0.0.0 on
-        # the first commit so the first release computes below 1.0.0 instead of
-        # semantic-release's hardcoded 1.0.0. Skipped when a consumer config owns
-        # versioning.
+        # No-tags seeding: a pre-stable repo with no v* tag on the REMOTE starts
+        # from v0.0.0 on the first commit so the first release computes below
+        # 1.0.0 instead of semantic-release's hardcoded 1.0.0. Requires a
+        # verified remote (never seed on an unverifiable tag state) and a full
+        # clone: a shallow checkout's rev-list root is the graft boundary (HEAD),
+        # which would tag the wrong commit and empty the release range. Skipped
+        # when a consumer config owns versioning.
         if [ "${resolved_stability}" = "pre-stable" ] && [ -z "${consumer_config}" ] \
-           && [ -z "$(git tag --list 'v*')" ]; then
-          root_commit="$(git rev-list --max-parents=0 HEAD | tail -1)"
-          if [ -n "${root_commit}" ]; then
-            echo "::notice::Pre-stable repo has no tags; seeding v0.0.0 on first commit ${root_commit}"
-            git tag v0.0.0 "${root_commit}"
-            git push origin v0.0.0
+           && [ "${remote_verified}" -eq 1 ] && [ "${remote_has_v_tag}" -eq 0 ]; then
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "::warning::Pre-stable repo has no tags but the checkout is shallow; skipping v0.0.0 seeding. Use actions/checkout with fetch-depth: 0. See card landmark-016."
+          else
+            root_commit="$(git rev-list --max-parents=0 HEAD | tail -1)"
+            if [ -n "${root_commit}" ]; then
+              echo "::notice::Pre-stable repo has no tags; seeding v0.0.0 on first commit ${root_commit}"
+              git tag v0.0.0 "${root_commit}"
+              git push origin v0.0.0
+            fi
           fi
         fi
 
@@ -364,9 +416,12 @@ runs:
         git tag | sort > "${after_tags}"
         new_tag="$(comm -13 "${before_tags}" "${after_tags}" | tail -n1 || true)"
 
-        # Post-release guard: the releaseRules above make this unreachable, but a
-        # pre-stable run must never emit a >= 1.0.0 tag. Fail loudly if it does.
-        # Backstop for card landmark-016.
+        # Post-release guard (backstop for card landmark-016). The releaseRules
+        # make a pre-stable >= 1.0.0 emit unreachable, but fail loudly if it ever
+        # happens, and also catch a regressed release: a newly created tag that
+        # sorts LOWER than the highest tag that existed on the remote before the
+        # run means the version moved backward. `highest_key` is the pre-run
+        # snapshot, so a genuine first release (no prior tag) is not flagged.
         if [ "${resolved_stability}" = "pre-stable" ] && [ -z "${consumer_config}" ] \
            && [ -n "${new_tag}" ]; then
           new_core="${new_tag#v}"
@@ -374,6 +429,11 @@ runs:
             new_major="${new_core%%.*}"
             if [ "${new_major}" -ge 1 ]; then
               echo "::error::Pre-stable release produced ${new_tag} (>= 1.0.0); a 0.x line must stay below 1.0.0 until promoted. See card landmark-016."
+              exit 1
+            fi
+            new_key="$(printf '%s\n' "${new_core}" | awk -F. '{ printf "%010d%010d%010d", $1, $2, $3 }')"
+            if [ -n "${highest_key}" ] && [ "${new_key}" \< "${highest_key}" ]; then
+              echo "::error::Pre-stable release produced ${new_tag}, which sorts below the prior highest tag v${highest_tag}; the version regressed. See card landmark-016."
               exit 1
             fi
           fi

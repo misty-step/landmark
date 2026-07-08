@@ -22,7 +22,7 @@
         "version_decision": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["latest_tag", "bump", "raw_bump", "stability", "commit_bump", "api_evidence_bump", "reconciliation", "commit_count", "conventional_commit_count", "range", "decisive_commit", "decisive_signals", "unknown_commits", "api_evidence", "waiver"],
+          "required": ["latest_tag", "bump", "commit_bump", "api_evidence_bump", "reconciliation", "commit_count", "conventional_commit_count", "range", "decisive_commit", "decisive_signals", "unknown_commits", "api_evidence", "waiver"],
           "properties": {
             "latest_tag": { "type": "string" },
             "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
