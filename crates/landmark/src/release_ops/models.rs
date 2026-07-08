@@ -246,6 +246,13 @@ pub(crate) struct RunEvidence {
 pub(crate) struct RunVersionDecision {
     pub(crate) latest_tag: String,
     pub(crate) bump: String,
+    /// The bump before pre-stable demotion. Equal to `bump` on a stable (>=1.0.0)
+    /// line; on a 0.x line it preserves the pre-stability decision so the
+    /// demotion is visible, not silent. See card landmark-016.
+    pub(crate) raw_bump: String,
+    /// `pre-stable` when the current version is below 1.0.0 (Cargo-style 0.x
+    /// rules applied), otherwise `stable`.
+    pub(crate) stability: String,
     pub(crate) commit_bump: String,
     pub(crate) api_evidence_bump: String,
     pub(crate) reconciliation: String,

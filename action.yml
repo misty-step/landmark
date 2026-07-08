@@ -32,6 +32,10 @@ inputs:
     description: Node.js version for semantic-release.
     default: "24"
     required: false
+  stability:
+    description: "Versioning stability policy: 'auto' (detect from latest tag; below 1.0.0 or untagged is pre-stable), 'pre-stable' (Cargo-style 0.x: breaking bumps minor, feat/fix bump patch, never auto-crosses 1.0.0), or 'stable' (standard SemVer). Ignored when the repo ships its own semantic-release config."
+    default: "auto"
+    required: false
   synthesis:
     description: Whether to synthesize user-facing release notes.
     default: "true"
@@ -262,6 +266,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
+        STABILITY_INPUT: ${{ inputs.stability }}
       run: |
         set -euo pipefail
 
@@ -269,16 +274,84 @@ runs:
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-        # Detect consumer-provided semantic-release config
-        sr_extends_arg="--extends ${GITHUB_ACTION_PATH}/configs/.releaserc.json"
+        # Highest semver-formatted v* tag, or empty when the repo has none.
+        # Exotic/prerelease tag formats are ignored here so `auto` falls back to
+        # stable when it cannot recognize the line.
+        semver_re='^v?[0-9]+\.[0-9]+\.[0-9]+$'
+        highest_tag=""
+        highest_key=""
+        while IFS= read -r tag; do
+          [ -z "${tag}" ] && continue
+          case "${tag}" in
+            *[!v0-9.]*) continue ;;
+          esac
+          if printf '%s\n' "${tag}" | grep -Eq "${semver_re}"; then
+            core="${tag#v}"
+            key="$(printf '%s\n' "${core}" | awk -F. '{ printf "%010d%010d%010d", $1, $2, $3 }')"
+            if [ -z "${highest_key}" ] || [ "${key}" \> "${highest_key}" ]; then
+              highest_key="${key}"
+              highest_tag="${core}"
+            fi
+          fi
+        done < <(git tag)
+
+        # Resolve the stability policy: explicit input wins; `auto` detects from
+        # the highest semver tag (< 1.0.0 or none => pre-stable, else stable).
+        resolved_stability="stable"
+        case "${STABILITY_INPUT}" in
+          pre-stable|stable)
+            resolved_stability="${STABILITY_INPUT}"
+            ;;
+          auto|"")
+            if [ -z "${highest_tag}" ]; then
+              resolved_stability="pre-stable"
+            else
+              major="${highest_tag%%.*}"
+              if [ "${major}" -eq 0 ]; then
+                resolved_stability="pre-stable"
+              else
+                resolved_stability="stable"
+              fi
+            fi
+            ;;
+          *)
+            echo "::warning::Unknown stability input '${STABILITY_INPUT}'; resolving to stable"
+            resolved_stability="stable"
+            ;;
+        esac
+        echo "::notice::Landmark versioning stability resolved to: ${resolved_stability}"
+
+        # Detect consumer-provided semantic-release config. A repo's own config
+        # always wins and the stability policy does not apply to it.
+        bundled_config=".releaserc.json"
+        if [ "${resolved_stability}" = "pre-stable" ]; then
+          bundled_config=".releaserc.prestable.json"
+        fi
+        sr_extends_arg="--extends ${GITHUB_ACTION_PATH}/configs/${bundled_config}"
+        consumer_config=""
         for config_file in .releaserc .releaserc.json .releaserc.yml .releaserc.yaml \
                            release.config.js release.config.cjs release.config.mjs; do
           if [ -f "${GITHUB_WORKSPACE}/${config_file}" ]; then
             echo "::notice::Using repo semantic-release config: ${config_file}"
             sr_extends_arg=""
+            consumer_config="${config_file}"
             break
           fi
         done
+
+        # No-tags seeding: pre-stable repos with no v* tags start from v0.0.0 on
+        # the first commit so the first release computes below 1.0.0 instead of
+        # semantic-release's hardcoded 1.0.0. Skipped when a consumer config owns
+        # versioning.
+        if [ "${resolved_stability}" = "pre-stable" ] && [ -z "${consumer_config}" ] \
+           && [ -z "$(git tag --list 'v*')" ]; then
+          root_commit="$(git rev-list --max-parents=0 HEAD | tail -1)"
+          if [ -n "${root_commit}" ]; then
+            echo "::notice::Pre-stable repo has no tags; seeding v0.0.0 on first commit ${root_commit}"
+            git tag v0.0.0 "${root_commit}"
+            git push origin v0.0.0
+          fi
+        fi
 
         before_tags="$(mktemp)"
         after_tags="$(mktemp)"
@@ -290,6 +363,21 @@ runs:
 
         git tag | sort > "${after_tags}"
         new_tag="$(comm -13 "${before_tags}" "${after_tags}" | tail -n1 || true)"
+
+        # Post-release guard: the releaseRules above make this unreachable, but a
+        # pre-stable run must never emit a >= 1.0.0 tag. Fail loudly if it does.
+        # Backstop for card landmark-016.
+        if [ "${resolved_stability}" = "pre-stable" ] && [ -z "${consumer_config}" ] \
+           && [ -n "${new_tag}" ]; then
+          new_core="${new_tag#v}"
+          if printf '%s\n' "${new_core}" | grep -Eq "${semver_re}"; then
+            new_major="${new_core%%.*}"
+            if [ "${new_major}" -ge 1 ]; then
+              echo "::error::Pre-stable release produced ${new_tag} (>= 1.0.0); a 0.x line must stay below 1.0.0 until promoted. See card landmark-016."
+              exit 1
+            fi
+          fi
+        fi
 
         if [ -n "${new_tag}" ]; then
           echo "released=true" >> "${GITHUB_OUTPUT}"

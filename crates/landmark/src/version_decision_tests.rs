@@ -275,3 +275,95 @@ fn absent_or_failed_api_evidence_keeps_the_floor_loudly() {
             .any(|signal| signal.contains("api-evidence:cargo-semver-checks failed"))
     );
 }
+
+// Pre-stable (Cargo-style 0.x) versioning: while the current version is below
+// 1.0.0 a repo never auto-crosses into 1.0.0. The breaking boundary is a minor
+// bump (0.x -> 0.(x+1)), matching Cargo's SemVer treatment of the 0.x line.
+// See card landmark-016.
+
+#[test]
+fn pre_stable_demotes_breaking_to_minor_not_major() {
+    // A `feat!` on a 0.x line would major to 1.0.0 under stable rules; pre-stable
+    // demotes it to minor so 0.16.0 -> 0.17.0.
+    assert_eq!(
+        apply_stability(VersionBump::Major, "0.16.0"),
+        VersionBump::Minor
+    );
+}
+
+#[test]
+fn pre_stable_demotes_feature_to_patch() {
+    assert_eq!(
+        apply_stability(VersionBump::Minor, "0.15.1"),
+        VersionBump::Patch
+    );
+}
+
+#[test]
+fn pre_stable_keeps_fix_as_patch() {
+    assert_eq!(
+        apply_stability(VersionBump::Patch, "0.15.0"),
+        VersionBump::Patch
+    );
+}
+
+#[test]
+fn stable_line_is_never_demoted() {
+    // At or above 1.0.0 the bump is identity: a `feat!` still majors.
+    assert_eq!(
+        apply_stability(VersionBump::Major, "2.1.0"),
+        VersionBump::Major
+    );
+    assert_eq!(
+        apply_stability(VersionBump::Minor, "1.4.0"),
+        VersionBump::Minor
+    );
+    assert_eq!(
+        apply_stability(VersionBump::Patch, "1.0.0"),
+        VersionBump::Patch
+    );
+}
+
+#[test]
+fn no_tags_baseline_is_pre_stable() {
+    // Callers pass "0.0.0" when a repo has no releases yet; it is pre-stable, so
+    // a breaking first change still stays below 1.0.0.
+    assert!(is_pre_stable("0.0.0"));
+    assert_eq!(
+        apply_stability(VersionBump::Major, "0.0.0"),
+        VersionBump::Minor
+    );
+}
+
+#[test]
+fn exotic_version_resolves_to_stable_identity() {
+    // Unparseable/exotic versions default to stable (identity), matching the
+    // action-level `auto` fallback for tag formats we don't recognize.
+    assert!(!is_pre_stable("nightly-2026-07-08"));
+    assert_eq!(
+        apply_stability(VersionBump::Major, "nightly-2026-07-08"),
+        VersionBump::Major
+    );
+}
+
+#[test]
+fn api_evidence_upgraded_major_on_pre_stable_line_demotes_but_records_both_bumps() {
+    // Evidence upgrades a feat (minor) to a major; on a 0.x line stability then
+    // demotes the applied bump back to minor. Both the raw reconciled bump and
+    // the stability-adjusted bump must remain visible, not silently collapsed.
+    let commits = [commit("a", "feat(api): add helper", "")];
+    let reconciled = decide_version_with_api_evidence(&commits, api_evidence("findings", "major"));
+    assert_eq!(reconciled.bump, Some(VersionBump::Major));
+    assert_eq!(reconciled.commit_bump, "minor");
+    assert_eq!(reconciled.api_evidence_bump, "major");
+    assert_eq!(reconciled.reconciliation, "upgraded");
+
+    let raw_bump = reconciled.bump.expect("reconciled bump");
+    let adjusted = apply_stability(raw_bump, "0.5.0");
+    assert_eq!(raw_bump, VersionBump::Major, "raw bump stays major");
+    assert_eq!(
+        adjusted,
+        VersionBump::Minor,
+        "adjusted bump demotes to minor"
+    );
+}

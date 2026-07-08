@@ -178,6 +178,18 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_first_run_local_preview,
     );
     map.insert(
+        "prestable_breaking_stays_below_one".to_string(),
+        scenario_prestable_breaking_stays_below_one,
+    );
+    map.insert(
+        "prestable_untagged_first_release_below_one".to_string(),
+        scenario_prestable_untagged_first_release_below_one,
+    );
+    map.insert(
+        "stable_line_still_majors".to_string(),
+        scenario_stable_line_still_majors,
+    );
+    map.insert(
         "github_provider_run".to_string(),
         scenario_github_provider_run,
     );
@@ -275,6 +287,9 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "semver_evidence_upgrades",
         "semver_evidence_absent",
         "semver_evidence_tool_failure",
+        "prestable_breaking_stays_below_one",
+        "prestable_untagged_first_release_below_one",
+        "stable_line_still_majors",
         "provider_run_parity",
         "manifest_defaults_and_overrides",
         "consumer_release_update_failure",

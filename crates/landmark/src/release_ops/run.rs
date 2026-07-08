@@ -119,7 +119,22 @@ pub(crate) fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext>
         target_ref: &target_ref,
     });
     let decision = decide_version_with_api_evidence(&classified, api_evidence);
-    let bump = decision.bump.map(VersionBump::as_str).unwrap_or("none");
+    // A repo with no releases yet is treated as pre-stable from a "0.0.0" floor,
+    // so a breaking first change still stays below 1.0.0.
+    let current_version = latest_tag
+        .as_ref()
+        .map(|tag| tag.version.clone())
+        .unwrap_or_else(|| "0.0.0".to_string());
+    let stability = if is_pre_stable(&current_version) {
+        "pre-stable"
+    } else {
+        "stable"
+    };
+    let raw_bump = decision.bump.map(VersionBump::as_str).unwrap_or("none");
+    let adjusted = decision
+        .bump
+        .map(|bump| apply_stability(bump, &current_version));
+    let bump = adjusted.map(VersionBump::as_str).unwrap_or("none");
     let release_tag =
         explicit_release_tag.unwrap_or_else(|| next_release_tag(latest_tag.as_ref(), bump));
     let version = release_tag.trim_start_matches('v').to_string();
@@ -136,6 +151,8 @@ pub(crate) fn resolve_local_release(args: &RunArgs) -> Result<RunReleaseContext>
         decision: RunVersionDecision {
             latest_tag: latest_tag.map(|tag| tag.tag).unwrap_or_default(),
             bump: bump.to_string(),
+            raw_bump: raw_bump.to_string(),
+            stability: stability.to_string(),
             commit_bump: decision.commit_bump,
             api_evidence_bump: decision.api_evidence_bump,
             reconciliation: decision.reconciliation,

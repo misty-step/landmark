@@ -1117,3 +1117,11 @@ fn floating_tag_skips_prerelease() {
     assert_eq!(parse_major_tag("v1.2.3").as_deref(), Some("v1"));
     assert_eq!(parse_major_tag("v1.2.3-beta.1"), None);
 }
+
+#[test]
+fn floating_tag_yields_v0_for_pre_stable_line() {
+    // A 0.x release floats a `v0` major tag; pre-stable repos still get a
+    // moving major alias. See card landmark-016.
+    assert_eq!(parse_major_tag("v0.3.0").as_deref(), Some("v0"));
+    assert_eq!(parse_major_tag("0.17.2").as_deref(), Some("v0"));
+}

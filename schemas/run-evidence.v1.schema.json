@@ -19,10 +19,12 @@
     "notes_sha256": { "type": "string" },
     "version_decision": {
       "type": "object",
-      "required": ["latest_tag", "bump", "commit_bump", "api_evidence_bump", "reconciliation", "commit_count", "conventional_commit_count", "range", "decisive_commit", "decisive_signals", "unknown_commits", "api_evidence", "waiver"],
+      "required": ["latest_tag", "bump", "raw_bump", "stability", "commit_bump", "api_evidence_bump", "reconciliation", "commit_count", "conventional_commit_count", "range", "decisive_commit", "decisive_signals", "unknown_commits", "api_evidence", "waiver"],
       "properties": {
         "latest_tag": { "type": "string" },
         "bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+        "raw_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
+        "stability": { "type": "string", "enum": ["pre-stable", "stable"] },
         "commit_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
         "api_evidence_bump": { "type": "string", "enum": ["major", "minor", "patch", "none"] },
         "reconciliation": { "type": "string", "enum": ["agreed", "compatible", "upgraded", "conflict", "unavailable", "unverified"] },

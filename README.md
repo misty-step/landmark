@@ -142,6 +142,43 @@ Landmark's own Rust version-decision engine (`landmark run`,
 stays wired into full mode until a Rust-owned full-mode v2 can analyze, version,
 changelog, tag, and publish without it.
 
+### Versioning Philosophy
+
+Landmark supports two versioning modes, selected by the `stability` input (and
+applied identically by both version engines — the bundled semantic-release
+config and the Rust engine):
+
+- **Stable (`>= 1.0.0`)** — standard SemVer. Breaking changes bump major,
+  features bump minor, fixes/perf bump patch.
+- **Pre-stable (`0.x`)** — Cargo-compatible 0.x rules. On a `0.x` line the
+  **minor** position is the breaking boundary, so bumps are demoted one step:
+  a breaking change bumps **minor** (`0.16.0` → `0.17.0`), a feature or fix
+  bumps **patch** (`0.15.1` → `0.15.2`). A pre-stable repo never
+  auto-crosses into `1.0.0` — crossing to stable is an explicit, human act.
+
+`stability: auto` (the default) detects the mode from the highest semver-formatted
+tag: below `1.0.0`, or no tags at all, resolves to pre-stable; `1.0.0` and above
+resolves to stable. Exotic or unrecognized tag formats resolve to stable. Set
+`stability: pre-stable` or `stability: stable` to force a mode. A repo that ships
+its own semantic-release config keeps full control and this policy does not apply.
+
+For a brand-new pre-stable repo with no tags, the action seeds a `v0.0.0` tag on
+the first commit so the first release computes below `1.0.0` (e.g. a first
+feature releases `v0.1.0`) instead of jumping to `1.0.0`.
+
+#### Promotion to stable
+
+Promotion is a deliberate manual step. When the project is ready for its `1.0.0`
+commitment, push the tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+With `stability: auto`, the next run detects the `>= 1.0.0` tag and switches to
+stable SemVer automatically. No config change is required.
+
 ### GitHub Action Synthesis-Only Mode
 
 Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a
@@ -435,6 +472,7 @@ release-mutating workflow.
 | `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,anthropic/claude-haiku-4.5` | Comma-separated fallback model IDs tried in order if primary fails. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
+| `stability` | No | `auto` | Versioning stability policy: `auto` (detect from the latest tag — below 1.0.0 or untagged is pre-stable), `pre-stable` (Cargo-style 0.x rules), or `stable` (standard SemVer). Ignored when the repo ships its own semantic-release config. See [Versioning Philosophy](#versioning-philosophy). |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
 | `synthesis-required` | No | `false` | If `true`, fail the action when synthesis/update fails (after failure reporting). |
 | `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |
