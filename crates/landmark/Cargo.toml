@@ -1,6 +1,6 @@
 [package]
 name = "landmark"
-version = "1.27.0"
+version = "1.28.0"
 edition = "2024"
 description = "Portable release-intelligence runtime for repositories using conventional commits"
 license = "MIT"
