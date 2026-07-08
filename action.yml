@@ -317,26 +317,41 @@ runs:
           remote_has_v_tag=1
         fi
 
+        # Fail closed on an unverifiable remote unless the operator explicitly
+        # declared the line stable. Versioning blind lets a transient ls-remote
+        # failure route a real 0.x repo to the stable config, where a breaking
+        # commit auto-promotes to 1.0.0 uncaught (the post-release guard only
+        # runs for a pre-stable resolution). A red, retryable run beats a
+        # wrong-direction version. Explicit `stable` may proceed — the operator
+        # declared the line.
+        if [ "${remote_verified}" -eq 0 ] && [ "${STABILITY_INPUT}" != "stable" ]; then
+          echo "::error::Cannot verify the release line (git ls-remote failed); refusing to version blind — retry the run. See card landmark-016."
+          exit 1
+        fi
+
         # Resolve the stability policy: explicit input wins; `auto` detects from
         # the highest semver tag on the remote (< 1.0.0 or none => pre-stable,
-        # else stable). An unverifiable remote resolves `auto` to stable.
+        # else stable). A remote whose only version tags are prerelease/exotic
+        # (no parseable semver) is an unrecognizable line => stable.
         resolved_stability="stable"
         case "${STABILITY_INPUT}" in
           pre-stable|stable)
             resolved_stability="${STABILITY_INPUT}"
             ;;
           auto|"")
-            if [ "${remote_verified}" -eq 0 ]; then
-              resolved_stability="stable"
-            elif [ -z "${highest_tag}" ]; then
-              resolved_stability="pre-stable"
-            else
+            if [ -n "${highest_tag}" ]; then
               major="${highest_tag%%.*}"
               if [ "${major}" -eq 0 ]; then
                 resolved_stability="pre-stable"
               else
                 resolved_stability="stable"
               fi
+            elif [ "${remote_has_v_tag}" -eq 1 ]; then
+              exotic_tags="$(printf '%s\n' "${remote_tags}" | grep -oE 'refs/tags/v[0-9][^[:space:]]*' | sed -e 's#refs/tags/##' -e 's/\^{}$//' | sort -u | paste -sd, -)"
+              echo "::warning::Remote has only unparseable version tags (${exotic_tags}); resolving to stable. See card landmark-016."
+              resolved_stability="stable"
+            else
+              resolved_stability="pre-stable"
             fi
             ;;
           *)
@@ -355,14 +370,6 @@ runs:
             echo "::error::stability: pre-stable was requested but the latest tag is v${highest_tag} (>= 1.0.0). A stable line cannot move back to pre-stable; remove the override. See card landmark-016."
             exit 1
           fi
-        fi
-
-        # If stability resolved to pre-stable but the remote could not be
-        # verified, fall back to stable loudly rather than risk seeding or
-        # demoting an unknown release line.
-        if [ "${resolved_stability}" = "pre-stable" ] && [ "${remote_verified}" -eq 0 ]; then
-          echo "::warning::Resolved pre-stable but remote tags are unverifiable; falling back to stable to avoid demoting an unknown release line. See card landmark-016."
-          resolved_stability="stable"
         fi
         echo "::notice::Landmark versioning stability resolved to: ${resolved_stability}"
 

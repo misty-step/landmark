@@ -160,11 +160,14 @@ config and the Rust engine):
 tag **on the remote** (read via `git ls-remote`, so a stale or failed local fetch
 can never mis-detect the line): below `1.0.0`, or no tags at all, resolves to
 pre-stable; `1.0.0` and above resolves to stable. Exotic or unrecognized tag
-formats — and a remote whose tags cannot be read — resolve to stable. Set
-`stability: pre-stable` or `stability: stable` to force a mode; forcing
-`pre-stable` on a line already at `>= 1.0.0` fails fast before publishing. A repo
-that ships its own semantic-release config keeps full control and this policy does
-not apply.
+formats (e.g. a remote whose only version tags are prereleases) resolve to stable.
+If the remote tags cannot be read at all, the run **fails loudly and is
+retryable** rather than versioning blind — a transient failure must not route a
+`0.x` line to stable rules. Set `stability: pre-stable` or `stability: stable` to
+force a mode; forcing `pre-stable` on a line already at `>= 1.0.0` fails fast
+before publishing, while `stability: stable` may proceed without remote
+verification (you have declared the line). A repo that ships its own
+semantic-release config keeps full control and this policy does not apply.
 
 For a brand-new pre-stable repo with no tags, the action seeds a `v0.0.0` tag on
 the first commit so the first release computes below `1.0.0` (e.g. a first
