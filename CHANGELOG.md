@@ -1,3 +1,21 @@
+# [1.28.0](https://github.com/misty-step/landmark/compare/v1.27.0...v1.28.0) (2026-07-08)
+
+### Features
+
+* **release:** post release kit feed events (#192) ([eb0eb1d](https://github.com/misty-step/landmark/commit/eb0eb1d0cc163df3f5c14001f48fb2aead150a09))
+* **release:** ground semver decisions in API evidence (#197) ([96bae1f](https://github.com/misty-step/landmark/commit/96bae1fa96eae6247d898ef6a5744159de5c269e))
+* **release:** export static public release entries ([54bbf0e](https://github.com/misty-step/landmark/commit/54bbf0ef60f0490e626bc45647a227ba2fae4cbe))
+* **release:** add gated social draft kit artifact ([ed677cf](https://github.com/misty-step/landmark/commit/ed677cf8cc66f714c108b0d3c8f6152b4270c029))
+* **site:** add public marketing site from the Aesthetic site-kit (#201) ([0e0980f](https://github.com/misty-step/landmark/commit/0e0980f666f54a1deaae3b0f720a929c654b6fd1))
+* **mcp:** landmark-mcp -- MCP face for the CLI's core read-only verbs (#202) ([ccfaf57](https://github.com/misty-step/landmark/commit/ccfaf57b48d0855830cff57f39bdeaf34b6b6a6e))
+* **site:** lock landmark fleet marketing site (#203) ([d32110e](https://github.com/misty-step/landmark/commit/d32110ee3d68c87fb8ecd74902f43cbe3a64262c))
+* **versioning:** pre-stable mode — 0.x stays 0.x until promoted (#204) ([3a69910](https://github.com/misty-step/landmark/commit/3a69910c350840bb702c2d8dc7e98bbe5ca501fd))
+
+### Bug Fixes
+
+* **release:** unify synthesis grounding (#196) ([b37a82f](https://github.com/misty-step/landmark/commit/b37a82fe66ff036dbc568ecc4855fcc89579dad2))
+* **synthesis:** ground release-note sections in real commits, refuse fabrication (#200) ([245c4a5](https://github.com/misty-step/landmark/commit/245c4a545c3eb3be7dd73a0443a88b0f7a54cbf5))
+* **ci:** release with an org GitHub App token instead of the expired PAT (#205) ([bb54ab8](https://github.com/misty-step/landmark/commit/bb54ab8f2b96fd7a8c196b0d57d0e09a0997f9dc))
 # [1.27.0](https://github.com/misty-step/landmark/compare/v1.26.0...v1.27.0) (2026-07-02)
 
 ### Features
