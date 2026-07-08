@@ -17,11 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           release-tag: v0.0.0
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           healthcheck: "true"
           synthesis: "false"

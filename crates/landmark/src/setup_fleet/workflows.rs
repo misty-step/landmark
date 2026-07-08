@@ -101,17 +101,21 @@ pub(crate) fn release_please_synthesis_job(
         r#"synthesize:
   needs: {release_job}
   if: needs.{release_job}.outputs.release_created == 'true'
+  permissions:
+    contents: write
+    issues: write
+    pull-requests: write
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: misty-step/landmark@v1
+    - uses: misty-step/landmark@v0
       with:
         mode: synthesis-only
         healthcheck: 'true'
         release-tag: ${{{{ needs.{release_job}.outputs.tag_name }}}}
-        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        github-token: ${{{{ github.token }}}}
         llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -129,6 +133,10 @@ pub(crate) fn changesets_synthesis_job(
             r#"synthesize:
   needs: {release_job}
   if: needs.{release_job}.outputs.published == 'true'
+  permissions:
+    contents: write
+    issues: write
+    pull-requests: write
   strategy:
     matrix:
       package: ${{{{ fromJson(needs.{release_job}.outputs.published_packages) }}}}
@@ -137,12 +145,12 @@ pub(crate) fn changesets_synthesis_job(
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: misty-step/landmark@v1
+    - uses: misty-step/landmark@v0
       with:
         mode: synthesis-only
         healthcheck: 'true'
         release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
-        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        github-token: ${{{{ github.token }}}}
         llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -152,17 +160,21 @@ pub(crate) fn changesets_synthesis_job(
             r#"synthesize:
   needs: {release_job}
   if: needs.{release_job}.outputs.published == 'true'
+  permissions:
+    contents: write
+    issues: write
+    pull-requests: write
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: misty-step/landmark@v1
+    - uses: misty-step/landmark@v0
       with:
         mode: synthesis-only
         healthcheck: 'true'
         release-tag: v${{{{ fromJson(needs.{release_job}.outputs.published_packages)[0].version }}}}
-        github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+        github-token: ${{{{ github.token }}}}
         llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#

@@ -282,11 +282,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: full
           healthcheck: 'true'
-          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          github-token: ${{{{ github.token }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -333,12 +333,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: 'true'
           release-tag: ${{{{ needs.{release_job}.outputs.tag_name }}}}
-          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          github-token: ${{{{ github.token }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -390,7 +390,7 @@ jobs:
         with:
           publish: npm run release
         env:
-          GITHUB_TOKEN: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          GITHUB_TOKEN: ${{{{ github.token }}}}
           NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
 
   synthesize:
@@ -404,12 +404,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: 'true'
           release-tag: ${{{{ matrix.package.name }}}}@${{{{ matrix.package.version }}}}
-          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          github-token: ${{{{ github.token }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -444,7 +444,7 @@ jobs:
         with:
           publish: npm run release
         env:
-          GITHUB_TOKEN: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          GITHUB_TOKEN: ${{{{ github.token }}}}
           NPM_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
 
   synthesize:
@@ -455,12 +455,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: 'true'
           release-tag: v${{{{ fromJson(needs.{release_job}.outputs.published_packages)[0].version }}}}
-          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          github-token: ${{{{ github.token }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#
@@ -489,12 +489,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: 'true'
           release-tag: ${{{{ github.event.release.tag_name }}}}
-          github-token: ${{{{ secrets.GH_RELEASE_TOKEN }}}}
+          github-token: ${{{{ github.token }}}}
           llm-api-key: ${{{{ secrets.OPENROUTER_API_KEY }}}}
 {manifest_inputs}
 "#

@@ -8,7 +8,7 @@
 #   4. Landmark synthesizes user-facing notes for the new release
 #
 # Requirements:
-#   - Repository secrets: GH_RELEASE_TOKEN, OPENROUTER_API_KEY
+#   - Repository secrets: OPENROUTER_API_KEY (github-token uses the default GITHUB_TOKEN)
 #   - Changesets initialized in repo (`npx changeset init`)
 #   - publish script that creates GitHub Releases (e.g., `changeset tag`)
 #
@@ -67,11 +67,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           release-tag: v${{ fromJson(needs.release.outputs.published_packages)[0].version }}
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize synthesis behavior.
           # audience: developer

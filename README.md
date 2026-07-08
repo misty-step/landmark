@@ -122,9 +122,9 @@ jobs:
       # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landmark
       - name: Run Landmark
-        uses: misty-step/landmark@v1
+        uses: misty-step/landmark@v0
         with:
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks
           # llm-model: anthropic/claude-sonnet-5
@@ -199,11 +199,11 @@ Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a
 custom pipeline already creates the version and release:
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
     mode: synthesis-only
     release-tag: ${{ steps.release.outputs.tag_name }}
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
@@ -292,9 +292,9 @@ permissions, package topology, recent conventional-commit usage, and any
 checked-in `.landmark.yml`. It prints a JSON report with a recommended Landmark
 mode and writes workflow candidates for semantic-release, release-please,
 changesets, changesets monorepos, and manual-tag repositories. Every generated
-workflow includes `healthcheck: 'true'`, `GH_RELEASE_TOKEN`,
-`OPENROUTER_API_KEY`, and the `contents`, `issues`, and `pull-requests`
-permissions Landmark needs.
+workflow includes `healthcheck: 'true'`, the default `GITHUB_TOKEN` (via
+`github-token: ${{ github.token }}`), `OPENROUTER_API_KEY`, and the
+`contents`, `issues`, and `pull-requests` permissions Landmark needs.
 
 ## Fleet Adoption
 
@@ -571,18 +571,18 @@ distribution steps:
 ### OpenRouter (default)
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
 ### OpenAI
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENAI_API_KEY }}
     llm-model: gpt-4o
     llm-api-url: https://api.openai.com/v1/chat/completions
@@ -591,9 +591,9 @@ distribution steps:
 ### Custom OpenAI-Compatible Provider
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.PROVIDER_API_KEY }}
     llm-model: provider/model-id
     llm-api-url: https://provider.example.com/v1/chat/completions
@@ -641,9 +641,9 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
 ```yaml
 - name: Run Landmark
   id: landmark
-  uses: misty-step/landmark@v1
+  uses: misty-step/landmark@v0
   with:
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     notes-output-file: docs/releases/{version}.md
     notes-output-text-file: docs/releases/{version}.txt
@@ -780,9 +780,9 @@ The `synthesis-status` output is a compact JSON object for automation:
 To publish a simple RSS 2.0 release feed (for feed readers, docs sites, etc.), set `rss-feed-file`:
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     rss-feed-file: docs/releases.xml
     rss-max-entries: "50"

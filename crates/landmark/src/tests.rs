@@ -197,7 +197,7 @@ fn setup_detects_semantic_release_and_reports_backfill_available() {
     let workflow = &setup_workflows(&diagnosis, None)["semantic-release"].content;
     assert!(workflow.contains("mode: full"));
     assert!(workflow.contains("healthcheck: 'true'"));
-    assert!(workflow.contains("GH_RELEASE_TOKEN"));
+    assert!(workflow.contains("github-token: ${{ github.token }}"));
 }
 
 #[test]
@@ -237,6 +237,11 @@ fn fleet_plan_patches_existing_release_please_workflow() {
     assert!(patch.content.contains("needs: release-please"));
     assert!(patch.content.contains("mode: synthesis-only"));
     assert!(patch.content.contains("healthcheck: 'true'"));
+    assert!(patch.content.contains("misty-step/landmark@v0"));
+    assert!(patch.content.contains("github-token: ${{ github.token }}"));
+    assert!(!patch.content.contains("GH_RELEASE_TOKEN"));
+    assert!(patch.content.contains("permissions:"));
+    assert!(patch.content.contains("pull-requests: write"));
 }
 
 #[test]
@@ -270,6 +275,12 @@ fn fleet_plan_patches_existing_changesets_workflow() {
     assert!(patch.content.contains("needs: release"));
     assert!(patch.content.contains("mode: synthesis-only"));
     assert!(patch.content.contains("healthcheck: 'true'"));
+    assert!(patch.content.contains("misty-step/landmark@v0"));
+    // The injected synthesize job uses the default token; the untouched
+    // pre-existing `release` job's own GH_RELEASE_TOKEN reference is left as-is.
+    assert!(patch.content.contains("github-token: ${{ github.token }}"));
+    assert!(patch.content.contains("permissions:"));
+    assert!(patch.content.contains("pull-requests: write"));
 }
 
 #[test]
@@ -467,7 +478,7 @@ fn org_secret_visibility_all_counts_for_fleet_secret_metadata() {
 
 #[test]
 fn fleet_detects_landmark_and_legacy_landmark_release_workflow_content() {
-    for action_ref in ["misty-step/landmark@v1", "misty-step/landmark@v1"] {
+    for action_ref in ["misty-step/landmark@v0", "misty-step/landmark@v0"] {
         let workflow_texts = vec![(
             "release.yml".to_string(),
             format!("steps:\n  - uses: {action_ref}\n"),
@@ -956,7 +967,7 @@ fn setup_generated_workflows_are_yaml() {
     assert!(manual.contains("release:\n    types: [published]"));
     assert!(!manual.contains("push:\n    tags:"));
     assert!(manual.contains("${{ github.event.release.tag_name }}"));
-    assert!(manual.contains("${{ secrets.GH_RELEASE_TOKEN }}"));
+    assert!(manual.contains("${{ github.token }}"));
 }
 
 #[test]

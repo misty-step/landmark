@@ -135,9 +135,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional:
           # llm-model: anthropic/claude-sonnet-4
@@ -147,7 +147,10 @@ jobs:
 ## Requirements
 - Node.js 22+
 - Rust stable
-- `GH_RELEASE_TOKEN` secret (PAT with repo write + admin bypass)
+- The workflow-level `permissions: { contents: write, issues: write, pull-requests: write }`
+  block above — the default `${{ github.token }}` covers landmark's own action
+  invocation; a PAT is only needed if downstream automation must trigger further
+  workflow runs.
 - `OPENROUTER_API_KEY` secret (or another compatible provider API key)
 
 ## Backlog And Docs

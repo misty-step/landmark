@@ -42,10 +42,10 @@ jobs:
       # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landmark
       - name: Run Landmark
-        uses: misty-step/landmark@v1
+        uses: misty-step/landmark@v0
         with:
-          # Personal access token with repository write access.
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          # Default GITHUB_TOKEN; the job's `permissions` block above grants it write access.
+          github-token: ${{ github.token }}
           # OpenRouter API key for synthesized "What's New" notes.
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks.
