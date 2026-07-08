@@ -39,11 +39,22 @@ jobs:
             --release-branch landmark/self-release \
             --github-output "${GITHUB_OUTPUT}"
 
+      # An org-owned GitHub App token instead of a user PAT: PRs it creates
+      # still trigger pull_request workflows (required merge-gate), and it
+      # carries no personal-account expiry. See Powder landmark-016/017.
+      - name: Mint release-bot token
+        if: steps.prepare.outputs.released == 'true'
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Open or update release pull request
         if: steps.prepare.outputs.released == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          token: ${{ steps.bot-token.outputs.token }}
           branch: ${{ steps.prepare.outputs.release_branch }}
           delete-branch: true
           title: ${{ steps.prepare.outputs.pull_request_title }}
@@ -70,11 +81,18 @@ jobs:
       published: ${{ steps.publish.outputs.published }}
       release_tag: ${{ steps.publish.outputs.release_tag }}
     steps:
+      - name: Mint release-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Checkout landed release
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          token: ${{ steps.bot-token.outputs.token }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -85,12 +103,12 @@ jobs:
         id: publish
         shell: bash
         env:
-          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          RELEASE_BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
           set -euo pipefail
           cargo run --locked -p landmark -- publish-self-release \
             --repo-root . \
-            --github-token "${GH_RELEASE_TOKEN}" \
+            --github-token "${RELEASE_BOT_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --target-sha "${GITHUB_SHA}" \
             --github-output "${GITHUB_OUTPUT}"
@@ -178,11 +196,18 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      - name: Mint release-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Checkout landed release
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          token: ${{ steps.bot-token.outputs.token }}
 
       - name: Download release assets
         uses: actions/download-artifact@v4
@@ -199,7 +224,7 @@ jobs:
       - name: Upload release assets
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
           set -euo pipefail
           gh release upload "${{ needs.publish-landed-release.outputs.release_tag }}" \
@@ -214,7 +239,7 @@ jobs:
         with:
           mode: synthesis-only
           release-tag: ${{ needs.publish-landed-release.outputs.release_tag }}
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ steps.bot-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           synthesis-required: "false"
           floating-tags: "true"
