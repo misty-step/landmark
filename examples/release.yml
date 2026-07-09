@@ -39,13 +39,22 @@ jobs:
           # Landmark sets an authenticated remote URL during release.
           persist-credentials: false
 
+      # Short-lived installation token from a GitHub App installed on this
+      # repo, instead of a personal access token. See README's "Why a
+      # GitHub App, not a PAT".
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
+
       # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landmark
       - name: Run Landmark
         uses: misty-step/landmark@v0
         with:
-          # Default GITHUB_TOKEN; the job's `permissions` block above grants it write access.
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           # OpenRouter API key for synthesized "What's New" notes.
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks.

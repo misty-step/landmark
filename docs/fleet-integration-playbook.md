@@ -67,18 +67,19 @@ mode. Keep the existing workflow path when patching an existing release
 workflow.
 
 ```yaml
+- uses: actions/create-github-app-token@v2
+  id: release-token
+  with:
+    app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+    private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
 - uses: misty-step/landmark@v0
   with:
     mode: synthesis-only
     healthcheck: "true"
     release-tag: ${{ steps.release.outputs.tag_name }}
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
-
-Add a job-level `permissions: { contents: write, issues: write, pull-requests:
-write }` block if the existing job doesn't already declare one — the default
-`github.token` only carries the permissions the job grants it.
 
 For manual GitHub Releases, add `.github/workflows/landmark-release.yml`:
 
@@ -102,13 +103,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/create-github-app-token@v2
+        id: release-token
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
       - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: "true"
           node-version: "24"
           release-tag: ${{ github.event.release.tag_name }}
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           changelog-source: auto
 ```
@@ -152,12 +158,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
       - name: Run Landmark
         uses: misty-step/landmark@v0
         with:
           mode: full
           healthcheck: "true"
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           node-version: "24"
           synthesis: "true"
@@ -168,10 +180,14 @@ jobs:
 
 GitHub workflows need:
 
-- `github-token: ${{ github.token }}`: the default `GITHUB_TOKEN` covers
-  landmark's own action invocation as long as the job (or workflow) declares
-  the `permissions` block below. Only fall back to a PAT-backed secret when
-  downstream automation must trigger further workflow runs.
+- A GitHub App installed on the repo with Contents: read/write (Metadata:
+  read-only), and its App ID + private key stored as
+  `LANDMARK_RELEASER_APP_ID` / `LANDMARK_RELEASER_PRIVATE_KEY`. Mint a
+  short-lived installation token per run via `actions/create-github-app-token`
+  rather than a personal access token or the ambient `github.token` — App
+  tokens still trigger downstream workflows on the tags/releases they create,
+  which `github.token` cannot do (see README's "Why a GitHub App, not a
+  PAT").
 - `OPENROUTER_API_KEY`: LLM synthesis. Missing or stale keys should not block
   release unless the repo deliberately sets `synthesis-required: "true"`.
 

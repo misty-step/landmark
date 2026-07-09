@@ -52,7 +52,7 @@ landmark run \
   --repo-root . \
   --repository owner/repo \
   --release-tag v1.2.3 \
-  --github-token "$GH_RELEASE_TOKEN" \
+  --github-token "$GITHUB_TOKEN" \
   --publish-release-body
 ```
 

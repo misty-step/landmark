@@ -119,12 +119,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Short-lived installation token from a GitHub App installed on this
+      # repo, in place of a personal access token. See "Why a GitHub App,
+      # not a PAT" below.
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
+
       # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landmark
       - name: Run Landmark
         uses: misty-step/landmark@v0
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks
           # llm-model: anthropic/claude-sonnet-5
@@ -134,6 +144,33 @@ jobs:
 Landmark is language-agnostic. Your repo does not need `package.json` or Node.js
 unless full mode is running `semantic-release`; the action handles its own Node
 24 runtime setup.
+
+#### Why a GitHub App, not a PAT
+
+`github-token` accepts any token with repo write access, but a personal access
+token ties the release pipeline to one person's account, expires or gets
+revoked out of band, and carries whatever scope that account has everywhere
+else. Prefer a GitHub App:
+
+- **Short-lived**: `actions/create-github-app-token` mints a token that lives
+  for one run, not months.
+- **Scoped to exactly what Landmark needs**: install the App only on the
+  repos it releases, with Contents (read/write) and nothing else unless a
+  plugin requires it.
+- **Tags still trigger downstream workflows.** This is the part
+  `secrets.GITHUB_TOKEN` (the ambient per-run token GitHub Actions already
+  gives every job, no setup required) cannot do: tags and releases it
+  creates do not fire `push: tags` or `release: published` on other
+  workflows in the same repo. An installation token from an App does. If
+  your pipeline has nothing downstream of the release tag, `GITHUB_TOKEN`
+  is simpler and requires no secrets at all — reach for the App only when
+  you need that trigger.
+
+Create the App once per organization (Settings → Developer settings →
+GitHub Apps; Contents: Read & write, Metadata: Read-only), install it on
+your release repos, and store its App ID and private key as
+`LANDMARK_RELEASER_APP_ID` / `LANDMARK_RELEASER_PRIVATE_KEY` (or repo-local
+equivalents) — every example in this README uses those names.
 
 Full mode's version/changelog/tag/release decisions are `semantic-release`'s,
 kept only as a named **compatibility path** for repos that already run it.
@@ -196,14 +233,16 @@ stable SemVer automatically. No config change is required.
 ### GitHub Action Synthesis-Only Mode
 
 Use synthesis-only when release-please, Changesets, manual GitHub Releases, or a
-custom pipeline already creates the version and release:
+custom pipeline already creates the version and release. Mint a token first
+(see [Why a GitHub App, not a PAT](#why-a-github-app-not-a-pat)), then run
+Landmark after your release-creating step:
 
 ```yaml
 - uses: misty-step/landmark@v0
   with:
     mode: synthesis-only
     release-tag: ${{ steps.release.outputs.tag_name }}
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
@@ -293,7 +332,7 @@ checked-in `.landmark.yml`. It prints a JSON report with a recommended Landmark
 mode and writes workflow candidates for semantic-release, release-please,
 changesets, changesets monorepos, and manual-tag repositories. Every generated
 workflow includes `healthcheck: 'true'`, the default `GITHUB_TOKEN` (via
-`github-token: ${{ github.token }}`), `OPENROUTER_API_KEY`, and the
+`github-token: ${{ steps.release-token.outputs.token }}`), `OPENROUTER_API_KEY`, and the
 `contents`, `issues`, and `pull-requests` permissions Landmark needs.
 
 ## Fleet Adoption
@@ -480,7 +519,7 @@ release-mutating workflow.
 | --- | --- | --- | --- |
 | `mode` | No | `full` | Pipeline mode: `full` (semantic-release + synthesis) or `synthesis-only` (synthesize for existing tag). |
 | `release-tag` | No* | `""` | Release tag to synthesize notes for (required when `mode: synthesis-only`). |
-| `github-token` | Yes | - | Personal access token with repo write access. Used by `semantic-release` and GitHub API update calls. |
+| `github-token` | Yes | - | GitHub App installation token or PAT with repo write access. Used by `semantic-release` and GitHub API update calls. See [Why a GitHub App, not a PAT](#why-a-github-app-not-a-pat). |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
 | `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,anthropic/claude-haiku-4.5` | Comma-separated fallback model IDs tried in order if primary fails. |
@@ -573,7 +612,7 @@ distribution steps:
 ```yaml
 - uses: misty-step/landmark@v0
   with:
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
 
@@ -582,7 +621,7 @@ distribution steps:
 ```yaml
 - uses: misty-step/landmark@v0
   with:
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENAI_API_KEY }}
     llm-model: gpt-4o
     llm-api-url: https://api.openai.com/v1/chat/completions
@@ -593,7 +632,7 @@ distribution steps:
 ```yaml
 - uses: misty-step/landmark@v0
   with:
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.PROVIDER_API_KEY }}
     llm-model: provider/model-id
     llm-api-url: https://provider.example.com/v1/chat/completions
@@ -617,7 +656,7 @@ landmark backfill \
   --since v1.0.0 \
   --mode artifacts-only \
   --repository owner/repo \
-  --github-token "$GH_RELEASE_TOKEN"
+  --github-token "$GITHUB_TOKEN"
 ```
 
 Preview GitHub Release body updates before considering mutation:
@@ -629,7 +668,7 @@ landmark backfill \
   --mode release-body \
   --dry-run \
   --repository owner/repo \
-  --github-token "$GH_RELEASE_TOKEN"
+  --github-token "$GITHUB_TOKEN"
 ```
 
 `release-body` writes are refused unless the run is a dry-run or the operator passes `--confirm-release-body`. The output manifest lists processed tags, skipped tags, remaining tags, artifact paths, preview hashes, and the estimated cost. Artifact backfill does not call the LLM; use the manifest to batch later synthesis if you want enhanced historical notes.
@@ -643,7 +682,7 @@ For private repos where GitHub Releases aren't publicly visible, use artifact ou
   id: landmark
   uses: misty-step/landmark@v0
   with:
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     notes-output-file: docs/releases/{version}.md
     notes-output-text-file: docs/releases/{version}.txt
@@ -782,7 +821,7 @@ To publish a simple RSS 2.0 release feed (for feed readers, docs sites, etc.), s
 ```yaml
 - uses: misty-step/landmark@v0
   with:
-    github-token: ${{ github.token }}
+    github-token: ${{ steps.release-token.outputs.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     rss-feed-file: docs/releases.xml
     rss-max-entries: "50"

@@ -17,11 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
+
       - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           release-tag: v0.0.0
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           healthcheck: "true"
           synthesis: "false"
