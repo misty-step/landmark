@@ -1,3 +1,8 @@
+# [0.28.1](https://github.com/misty-step/landmark/compare/v0.28.0...v0.28.1) (2026-07-09)
+
+### Bug Fixes
+
+* **fleet:** generate and document landmark@v0 + workflow-token releases (#207) ([f5162bb](https://github.com/misty-step/landmark/commit/f5162bb254041b8c32b669aed4eb117f9bdf7fbe))
 ## Version reset: 1.28.0 → 0.28.0 (2026-07-08)
 
 The fleet moved to pre-stable 0.x semantics (landmark-016). The 1.x line was
