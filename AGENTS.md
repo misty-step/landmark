@@ -135,9 +135,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/create-github-app-token@v2
+        id: release-token
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
       - uses: misty-step/landmark@v0
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional:
           # llm-model: anthropic/claude-sonnet-4
@@ -147,10 +152,13 @@ jobs:
 ## Requirements
 - Node.js 22+
 - Rust stable
-- The workflow-level `permissions: { contents: write, issues: write, pull-requests: write }`
-  block above — the default `${{ github.token }}` covers landmark's own action
-  invocation; a PAT is only needed if downstream automation must trigger further
-  workflow runs.
+- A GitHub App installed on the repo with Contents: read/write, and its App
+  ID + private key as `LANDMARK_RELEASER_APP_ID` / `LANDMARK_RELEASER_PRIVATE_KEY`
+  secrets (see README's "Why a GitHub App, not a PAT"). The default
+  `${{ github.token }}` covers landmark's own action invocation but its tags
+  and releases do not trigger further workflow runs the way an App
+  installation token does — use the App when downstream automation depends
+  on that trigger.
 - `OPENROUTER_API_KEY` secret (or another compatible provider API key)
 
 ## Backlog And Docs

@@ -26,12 +26,19 @@ jobs:
 
       - run: npm ci
 
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
+
       - uses: changesets/action@v1
         id: changesets
         with:
           publish: npm run release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   synthesize:
@@ -44,11 +51,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
+          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
+
       - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: "true"
           release-tag: ${{ matrix.package.name }}@${{ matrix.package.version }}
-          github-token: ${{ github.token }}
+          github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           changelog-source: release-body
