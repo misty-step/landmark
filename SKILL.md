@@ -25,7 +25,7 @@ agent-native contracts, or release-kit producer responsibilities.
 | Dry-run release analysis | `landmark run --provider local --dry-run` |
 | Install in a repo | `landmark setup` |
 | Fleet adoption | `fleet scan`, `fleet plan`, `fleet open-prs` |
-| GitHub Action use | `misty-step/landmark@v1` |
+| GitHub Action use | `misty-step/landmark@v0` |
 | Local development | `cargo run --locked -p landmark -- ...` |
 | Query core verbs over MCP | `cargo run --locked -p landmark-mcp` (stdio) |
 | Full repo gate | `bin/gate` |

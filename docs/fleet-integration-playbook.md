@@ -67,14 +67,18 @@ mode. Keep the existing workflow path when patching an existing release
 workflow.
 
 ```yaml
-- uses: misty-step/landmark@v1
+- uses: misty-step/landmark@v0
   with:
     mode: synthesis-only
     healthcheck: "true"
     release-tag: ${{ steps.release.outputs.tag_name }}
-    github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+    github-token: ${{ github.token }}
     llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
 ```
+
+Add a job-level `permissions: { contents: write, issues: write, pull-requests:
+write }` block if the existing job doesn't already declare one — the default
+`github.token` only carries the permissions the job grants it.
 
 For manual GitHub Releases, add `.github/workflows/landmark-release.yml`:
 
@@ -98,13 +102,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: misty-step/landmark@v1
+      - uses: misty-step/landmark@v0
         with:
           mode: synthesis-only
           healthcheck: "true"
           node-version: "24"
           release-tag: ${{ github.event.release.tag_name }}
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           changelog-source: auto
 ```
@@ -149,11 +153,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Run Landmark
-        uses: misty-step/landmark@v1
+        uses: misty-step/landmark@v0
         with:
           mode: full
           healthcheck: "true"
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ github.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           node-version: "24"
           synthesis: "true"
@@ -164,8 +168,10 @@ jobs:
 
 GitHub workflows need:
 
-- `GH_RELEASE_TOKEN`: repository write access for releases and release-body
-  updates.
+- `github-token: ${{ github.token }}`: the default `GITHUB_TOKEN` covers
+  landmark's own action invocation as long as the job (or workflow) declares
+  the `permissions` block below. Only fall back to a PAT-backed secret when
+  downstream automation must trigger further workflow runs.
 - `OPENROUTER_API_KEY`: LLM synthesis. Missing or stale keys should not block
   release unless the repo deliberately sets `synthesis-required: "true"`.
 
