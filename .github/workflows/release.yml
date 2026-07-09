@@ -56,7 +56,9 @@ jobs:
         with:
           token: ${{ steps.bot-token.outputs.token }}
           branch: ${{ steps.prepare.outputs.release_branch }}
-          delete-branch: true
+          # Keep the branch alive between cycles: the App token can update an
+          # existing branch but 403s creating one via git push (landmark-017).
+          delete-branch: false
           title: ${{ steps.prepare.outputs.pull_request_title }}
           commit-message: ${{ steps.prepare.outputs.commit_message }}
           body: |
