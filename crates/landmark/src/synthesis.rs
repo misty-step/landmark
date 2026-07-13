@@ -318,7 +318,7 @@ pub(crate) fn policy_default_model(policy: Option<&str>) -> Option<String> {
 /// that independent hardcoding is exactly how `openai/gpt-4o-mini` and
 /// `anthropic/claude-sonnet-4` went stale without anyone noticing. When a
 /// pin needs to move, update it once, here, and bump the review date.
-/// See backlog.d/013-refresh-model-defaults-and-fix-config-override-bug.md.
+/// See Powder card landmark-013.
 pub(crate) fn default_model_for_tier(tier: &str) -> &'static str {
     match tier {
         "off" => "off",

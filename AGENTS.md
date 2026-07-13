@@ -161,9 +161,9 @@ jobs:
   on that trigger.
 - `OPENROUTER_API_KEY` secret (or another compatible provider API key)
 
-## Backlog And Docs
-- Active work lives in `backlog.d/<nnn>-<slug>.md`; completed items are archived
-  under `backlog.d/_done/`.
+## Work Ledger And Docs
+- Active and completed work lives in deployed Powder under `repo=landmark`;
+  repository-local ticket directories are forbidden.
 - Strategic groom reports live under `.groom/`.
 - Keep README, `action.yml`, examples, and this file aligned. Stale agent-facing
   prose is a release risk because agents use it as an operating contract.
