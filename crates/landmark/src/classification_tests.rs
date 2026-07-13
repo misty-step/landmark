@@ -167,7 +167,7 @@ fn release_classification_models_honors_configured_primary_over_hardcoded_defaul
     // Regression for the bug where a non-"cheap" policy silently discarded
     // `config.model` (manifest.model.primary) and pushed a hardcoded
     // literal first instead. See
-    // backlog.d/013-refresh-model-defaults-and-fix-config-override-bug.md.
+    // Powder card landmark-013.
     let config = test_synthesis_config("balanced");
     assert_eq!(config.model, "primary/model");
 

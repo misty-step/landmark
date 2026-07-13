@@ -23,7 +23,7 @@ fn commit_with_date(repo: &Path, message: &str, date: &str) -> Result<()> {
     Ok(())
 }
 
-/// Regression for backlog.d/012's pagination gap: `closed_pull_requests`
+/// Regression for Powder card landmark-012's pagination gap: `closed_pull_requests`
 /// fetched a single page (`per_page=100`) of closed PRs, sorted by GitHub's
 /// default of creation date descending. A repo with more than 100 closed PRs
 /// created since a real in-range PR — even PRs that never merged into this

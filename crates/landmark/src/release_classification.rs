@@ -277,7 +277,7 @@ pub(crate) fn request_release_classification(
         // above. Every model in the classification roster (DeepSeek V4,
         // Claude, GPT-5.x families) supports response_format: json_schema
         // strict mode on OpenRouter as of mid-2026 — see
-        // backlog.d/014-adopt-structured-output-mode-for-classification.md.
+        // Powder card landmark-014.
         "response_format": {
             "type": "json_schema",
             "json_schema": {
@@ -332,7 +332,7 @@ pub(crate) fn parse_model_release_classification(
 /// provider that ignores `response_format` and wraps the object in prose or
 /// markdown fencing — cheap insurance, not the primary compliance mechanism
 /// anymore. See
-/// backlog.d/014-adopt-structured-output-mode-for-classification.md.
+/// Powder card landmark-014.
 pub(crate) fn extract_json_object(content: &str) -> Result<&str> {
     let trimmed = content.trim();
     if trimmed.starts_with('{') && trimmed.ends_with('}') {
