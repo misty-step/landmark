@@ -9,18 +9,23 @@ Landmark is public open-source release intelligence for repositories with git
 history and, when available, conventional commits. It can run as a GitHub
 Action, but the product boundary is the Rust CLI: local scripts, generic CI,
 and agents should all be able to ask the same runtime what changed, what
-version follows, what evidence exists, and which release artifacts should be
-produced.
+version follows, what evidence exists, which release artifacts should be
+produced, and whether the resulting public release transaction is complete.
 
-The job is not merely "make a changelog." Landmark owns release truth:
+The job is not merely "make a changelog." Landmark's adopted product boundary
+owns release truth:
 classification, importance, version decisions, synthesis status, release-kit
-plans, provenance, approval state, and machine-readable evidence. Judgment
-belongs at model-native seams: release classification and audience importance
-should be evaluated from structured commits, diff statistics, and release
-context by a BYOK model policy. Deterministic code still owns parsing,
-version math, provider policy, persistence, approvals, and schema contracts.
-GitHub, Slack, feeds, docs patches, blog drafts, screenshots, videos, and
-other final-mile surfaces are adapters and producers around that truth.
+plans, provenance, approval state, public release mutation, and
+machine-readable evidence. Release judgment and release mutation are one
+responsibility: Landmark should decide what becomes a release, reconcile the
+public systems that make it a release, and record the completed result.
+Judgment belongs at model-native seams: release classification and audience
+importance should be evaluated from structured commits, diff statistics, and
+release context by a BYOK model policy. Deterministic code still owns parsing,
+version math, provider policy, persistence, approvals, mutation safety, and
+schema contracts. GitHub, Slack, feeds, docs patches, blog drafts, screenshots,
+videos, and other final-mile surfaces are adapters and producers around that
+truth.
 
 Landmark is also a Misty Step ecosystem primitive. Every active Misty Step
 project should be able to adopt it so good release hygiene becomes automatic:
@@ -39,6 +44,42 @@ remote, and disagreements between deterministic floor signals, model
 classification, and publication policy should become visible alarms rather
 than quiet skips.
 
+## Release Transaction Boundary
+
+Landmark owns the complete release transaction, not only the decision that
+precedes it. Its small public contract should eventually be equivalent to:
+
+```text
+publish(candidate release) -> completed release receipt
+```
+
+The depth behind that contract includes version and audience judgment,
+artifact-policy validation, changelog and release-note production, repository
+metadata updates, tags, public release records, stable-channel declarations,
+and a durable receipt tying the result to its source revision and immutable
+artifact identities. Because those mutations cross systems, publication is a
+reconcilable transaction rather than a claim of distributed atomicity: retries
+inspect existing state, finish missing compatible mutations, return the same
+completed result when already applied, and fail closed on contradictions.
+
+Artifact construction and deployment remain outside this boundary. A product's
+build pipeline constructs, signs, and publishes its executable artifacts before
+Landmark declares the release stable. Landmark validates the supplied artifact
+manifest and records its immutable identities; it does not rebuild a product's
+container, package, or binary. Deployment systems consume only completed
+release receipts, treat forge or webhook events as wake-up signals, and own
+environment-specific desired state, promotion, health verification, rollback,
+and convergence. Landmark does not deploy releases or assert that an
+environment is current.
+
+**Implementation status (2026-07-13):** this is the accepted target boundary,
+not a claim about the current output contract. Today's GitHub Action and CLI
+perform several release mutations and emit separate evidence/status outputs,
+but they do not yet expose one reconciled cross-system transaction or completed
+release receipt. That implementation belongs with the Rust-owned full-release
+work tracked in Powder; until it lands, consumers must not infer receipt
+authority from an existing tag, event, or synthesis-status output.
+
 ## What Must Stay True
 
 - The Rust CLI is the source of truth. `action.yml`, shell, and Node exist only
@@ -52,6 +93,13 @@ than quiet skips.
 - Version decisions must be deterministic, explainable, and singular. All
   entry points should use one Rust engine, and unknown release intent should
   refuse, warn, or require an explicit waiver rather than silently patching.
+- Public release mutation is part of release intelligence. Mutating paths must
+  be idempotent, inspect-before-write, resumable after partial failure, and
+  fail closed when existing public state contradicts the release decision.
+- Under the target contract, a candidate is not a stable release until every
+  required public mutation is reconciled and Landmark emits its completed
+  release receipt. Downstream consumers follow that receipt; event delivery
+  alone is not release truth.
 - Local preview is not optional. Every mutating path needs a dry-run,
   evidence, replay, or schema oracle that can be exercised before publication.
 - Open-source adoption and internal dogfooding reinforce each other. Landmark
@@ -78,6 +126,8 @@ than quiet skips.
   effects.
 - Silent "successful" skips when structured feature, fix, breaking, or model
   signals disagree with the skip decision.
+- Declaring a release complete from an event, tag, or partially mutated public
+  state without a reconciled completion receipt.
 - Making every consumer repo or agent reinvent changelog, release-note,
   semantic-version, and release-evidence logic.
 - Monetization-first product shaping. Landmark may build credibility and
@@ -86,6 +136,8 @@ than quiet skips.
 - Embedding brand design, demo media production, CMS publication, or long-lived
   creative pipelines inside the release-intelligence runtime. Rich media output
   belongs behind typed producer contracts.
+- Building product executables or owning environment-specific deployment,
+  promotion, health, rollback, or convergence policy.
 - Weakening `bin/check-architecture` or schema checks to ship a feature.
 
 ## Current Bets

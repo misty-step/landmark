@@ -13,13 +13,28 @@ artifact planning, artifact writing, feed generation, notifications, evidence,
 and provider policy in the Rust CLI. Keep GitHub-specific behavior behind
 explicit adapter seams.
 
-Landmark owns release truth, audience/importance classification, release-kit
-plans, provenance, approval state, and producer contracts for final-mile output.
-It does not own bespoke media production, brand design, CMS publishing, or
-long-running creative pipelines. Demo videos, GIFs, images, blog posts, essays,
-and docs updates should be represented as typed planned/produced artifacts and
-delegated to explicit local, browser, service, harness, or human producer
-adapters.
+Landmark's target boundary owns release truth, audience/importance
+classification, release-kit plans, provenance, approval state, public release
+mutation, reconciliation, and the completed release receipt. Release judgment
+and mutation are one deep module: inspect before writing, make retries
+idempotent, finish compatible partial state, and fail closed on contradictions.
+The current Action and CLI do not yet emit that unified receipt; do not infer
+the target behavior from existing tags, events, or synthesis-status outputs.
+
+Product build pipelines own construction, signing, and publication of their
+executable artifacts. Landmark validates supplied artifact manifests and binds
+immutable artifact identities into release truth; it does not rebuild product
+containers, packages, or binaries. Deployment systems consume completed
+release receipts and own environment-specific promotion, verification,
+rollback, and convergence. Forge events are wake-up signals, not release
+authority, and Landmark does not deploy.
+
+Landmark also does not own bespoke media production, brand design, CMS
+publishing, or long-running creative pipelines. Demo videos, GIFs, images, blog
+posts, essays, and docs updates should be represented as typed
+planned/produced artifacts and delegated to explicit local, browser, service,
+harness, or human producer adapters. See
+`docs/adr/0004-release-transaction-authority.md` for the boundary decision.
 
 Read `VISION.md` before changing release boundaries, adoption modes,
 agent-native contracts, or release-kit producer responsibilities.
@@ -59,7 +74,8 @@ Composite GitHub Action with these steps:
   artifacts, notifications, and replay.
 
 ## Key Design Decisions
-- **Unix philosophy**: This does ONE thing — releases. Not code review, not monitoring.
+- **Unix philosophy**: This does ONE thing — releases. Not code review,
+  monitoring, artifact construction, or deployment.
 - **Wraps semantic-release**: Don't reinvent the wheel. Extend it.
 - **LLM synthesis is the value-add**: Technical changelogs exist. User-facing notes don't.
 - **OpenRouter by default**: Supports provider choice and model fallback chains.
@@ -75,6 +91,8 @@ Composite GitHub Action with these steps:
   producer in the core runtime.
 - GitHub operations such as release-body mutation, PR extraction, issue
   lifecycle, fleet scan, and Action outputs must be treated as adapter-specific.
+- Cross-system release mutations must share one transaction model and receipt;
+  adapters do not get to define independent meanings of "published."
 - Prefer adding a provider interface or local artifact sink over broadening
   GitHub assumptions.
 
