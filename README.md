@@ -61,6 +61,48 @@ The executable quickstart oracle is:
 cargo run --locked -p landmark -- replay-action --scenario first_run_local_preview
 ```
 
+### Prepare an Immutable Release Transaction
+
+`release-transaction prepare` computes the version, tag, notes digest, source
+revision, and deterministic transaction identity without creating a public tag
+or release. A product build can then supply an OCI digest, portable release
+manifest, and Sigstore bundle to `release-transaction bind`. Binding is local,
+locked, compare-and-swap idempotent, and rejects substitution. This slice uses
+one concrete portable transport: three regular files under a caller-selected
+local artifact root. Landmark walks that root with directory descriptors so an
+ancestor swap cannot escape confinement, rejects absolute paths, parent
+traversal, and symlinks, and recomputes each file digest. The signed publication
+manifest must reproduce the exact prepared candidate and bind the exact OCI
+descriptor digest and media type. The signature bundle must be a Sigstore v0.3
+bundle that passes `cosign verify-blob` before the canonical transaction changes
+from `prepared` to `ready`. A ready retry must request the exact stored key hash
+or keyless identity and issuer; Landmark rejects trust-policy substitution. This
+slice does not yet prove a remote registry or publish/reconcile GitHub state.
+
+```bash
+landmark release-transaction prepare \
+  --repo-root . --repository owner/product \
+  --transaction .landmark/release-transaction.json
+
+landmark release-transaction bind \
+  --transaction .landmark/release-transaction.json \
+  --artifact-manifest .landmark/release-artifacts.json \
+  --artifact-root .landmark/release-artifacts \
+  --verification-key /trusted/landmark-release-signing.pub
+```
+
+The packet schemas are `schemas/release-transaction.v1.schema.json`,
+`schemas/release-artifact-manifest.v1.schema.json`, and
+`schemas/release-publication-manifest.v1.schema.json`. The artifact manifest names
+normalized paths relative to `--artifact-root` plus expected SHA-256 digests.
+The OCI descriptor is bound only by its recomputed local digest; a published
+registry reference is deliberately absent until the future public commit
+phase proves it exists remotely. For keyless Sigstore verification, replace
+`--verification-key` with both
+`--certificate-identity` and `--certificate-oidc-issuer`. Trusted-key mode
+verifies the bundle signature offline against that key; keyless mode keeps
+Sigstore transparency-log verification enabled.
+
 ### Generic CI
 
 A shell script, GitLab CI job, Forgejo workflow, Buildkite step, or agent can run
@@ -287,6 +329,9 @@ The checked schema registry lives in `schemas/`:
 - `schemas/release-entry.v1.schema.json` for release-note JSON entries
 - `schemas/run-evidence.v1.schema.json` for `landmark run` evidence packets
 - `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
+- `schemas/release-transaction.v1.schema.json` for prepared and artifact-bound transactions
+- `schemas/release-artifact-manifest.v1.schema.json` for product-supplied immutable artifact sets
+- `schemas/release-publication-manifest.v1.schema.json` for the signed candidate-to-OCI binding
 
 For the full cold-agent contract, see `docs/agent-integration.md`.
 

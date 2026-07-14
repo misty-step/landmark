@@ -4,6 +4,7 @@ mod fake_server;
 mod fleet_scenarios;
 mod provider_scenarios;
 mod release_feed_scenarios;
+mod release_transaction_scenarios;
 mod support;
 
 pub(crate) use contract_scenarios::*;
@@ -11,6 +12,7 @@ pub(crate) use fake_server::*;
 pub(crate) use fleet_scenarios::*;
 pub(crate) use provider_scenarios::*;
 pub(crate) use release_feed_scenarios::*;
+pub(crate) use release_transaction_scenarios::*;
 pub(crate) use support::*;
 
 pub(crate) fn replay_action(args: ReplayArgs) -> Result<()> {
@@ -242,6 +244,10 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_release_feed_adapter,
     );
     map.insert(
+        "release_transaction_prepare_and_bind".to_string(),
+        scenario_release_transaction_prepare_and_bind,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -316,5 +322,6 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "http_resilience_policy",
         "action_side_effect_coverage",
         "release_feed_adapter",
+        "release_transaction_prepare_and_bind",
     ]
 }
