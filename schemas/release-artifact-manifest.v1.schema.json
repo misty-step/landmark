@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landmark.dev/schemas/release-artifact-manifest.v1.schema.json",
+  "title": "Landmark release artifact manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landmark-artifact": "product-supplied immutable release artifact manifest",
+  "required": ["schema_version", "transaction_id", "artifacts"],
+  "properties": {
+    "schema_version": { "const": "landmark.release-artifact-manifest.v1" },
+    "transaction_id": { "$ref": "#/$defs/digest" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "name", "media_type", "digest", "path"],
+      "properties": {
+        "role": { "enum": ["oci_image", "release_manifest", "signature_bundle"] },
+        "name": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "path": { "type": "string", "minLength": 1, "pattern": "^[^/][^\\\\]*$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "oci_image" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "enum": ["application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json"] } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "release_manifest" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "const": "application/vnd.landmark.release-publication-manifest.v1+json" } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "signature_bundle" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "const": "application/vnd.dev.sigstore.bundle.v0.3+json" } } }
+        }
+      ]
+    }
+  }
+}

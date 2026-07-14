@@ -77,9 +77,30 @@ The checked schema registry is:
 - `schemas/release-entry.v1.schema.json` for release-note JSON entries
 - `schemas/run-evidence.v1.schema.json` for `landmark run` evidence packets
 - `schemas/failure-envelope.v1.schema.json` for `--error-format json` stderr
+- `schemas/release-transaction.v1.schema.json` for prepared and artifact-bound transactions
+- `schemas/release-artifact-manifest.v1.schema.json` for product-supplied immutable artifact sets
+- `schemas/release-publication-manifest.v1.schema.json` for the signed candidate-to-OCI binding
 
 Every schema carries an `$id` and `x-landmark-artifact` value that is checked by
 `landmark check-action-contract`.
+
+## Release Transaction Preview
+
+Use `landmark release-transaction prepare` to compute a candidate and immutable
+transaction identity before any public mutation. Use
+`landmark release-transaction bind` only after the product build has produced
+an exact OCI digest, exact-schema release publication manifest, and Sigstore
+v0.3 bundle. The signed manifest must reproduce the canonical transaction
+candidate and bind the exact OCI digest and media type. The bind command uses
+descriptor-relative file opens under one local artifact root, rejects traversal,
+symlinks, and concurrent ancestor substitution, recomputes every file digest,
+validates the OCI descriptor, and invokes `cosign verify-blob` against either a
+separately trusted public key or an exact keyless identity/issuer policy. A
+same-set retry returns the canonical packet only when the requested key hash or
+keyless identity and issuer exactly match the stored verification policy;
+a different candidate or artifact set fails closed under a file lock and
+compare-and-swap write. This slice does not prove remote registry existence or
+publish/reconcile public tags, releases, or assets.
 
 ## Release Kit Boundary
 

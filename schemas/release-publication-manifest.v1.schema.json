@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landmark.dev/schemas/release-publication-manifest.v1.schema.json",
+  "title": "Landmark signed release publication manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landmark-artifact": "signed release candidate and OCI digest binding",
+  "required": ["schema_version", "transaction_id", "candidate", "oci"],
+  "properties": {
+    "schema_version": { "const": "landmark.release-publication-manifest.v1" },
+    "transaction_id": { "$ref": "#/$defs/digest" },
+    "candidate": { "$ref": "#/$defs/candidate" },
+    "oci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "media_type"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/digest" },
+        "media_type": {
+          "enum": [
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.oci.image.index.v1+json"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "source_revision", "previous_tag", "version", "release_tag", "notes_sha256"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+        "previous_tag": { "type": "string" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "release_tag": { "type": "string", "minLength": 1 },
+        "notes_sha256": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

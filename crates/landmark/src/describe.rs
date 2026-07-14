@@ -160,6 +160,27 @@ pub(crate) fn schema_descriptors() -> Vec<SchemaDescriptor> {
             version: "v1",
             artifact: "--error-format json stderr",
         },
+        SchemaDescriptor {
+            name: "release_transaction",
+            path: "schemas/release-transaction.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-transaction.v1.schema.json",
+            version: "v1",
+            artifact: "prepared or artifact-bound release transaction",
+        },
+        SchemaDescriptor {
+            name: "release_artifact_manifest",
+            path: "schemas/release-artifact-manifest.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-artifact-manifest.v1.schema.json",
+            version: "v1",
+            artifact: "product-supplied immutable release artifact manifest",
+        },
+        SchemaDescriptor {
+            name: "release_publication_manifest",
+            path: "schemas/release-publication-manifest.v1.schema.json",
+            id: "https://landmark.dev/schemas/release-publication-manifest.v1.schema.json",
+            version: "v1",
+            artifact: "signed release candidate and OCI digest binding",
+        },
     ]
 }
 
@@ -324,6 +345,15 @@ pub(crate) fn command_contracts() -> Vec<CommandContract> {
             mutates: true,
             preview: "--dry-run computes evidence without writing artifacts or mutating releases",
             stdout: "RunEvidence JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "release-transaction prepare|bind",
+            mode: "portable-release-transaction",
+            mutates: true,
+            preview: "prepare and bind mutate one canonical local transaction file but never a remote provider",
+            stdout: "ReleaseTransaction JSON",
             stderr: "logs and errors only",
             json_output: true,
         },

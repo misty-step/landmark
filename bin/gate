@@ -30,7 +30,11 @@ if git remote get-url origin >/dev/null 2>&1; then
     tag_ref="origin/master"
   fi
 fi
-cargo run --locked -p landmark -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
+if [ "${#candidate_args[@]}" -gt 0 ]; then
+  cargo run --locked -p landmark -- check-version-sync --reference "${tag_ref}" "${candidate_args[@]}"
+else
+  cargo run --locked -p landmark -- check-version-sync --reference "${tag_ref}"
+fi
 cargo run --locked -p landmark -- check-action-contract
 cargo run --locked -p landmark -- setup --repo-root . --output-dir .landmark/setup
 cargo run --locked -p landmark -- replay-action --evidence-dir .landmark/replay

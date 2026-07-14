@@ -47,6 +47,8 @@ pub(crate) enum Commands {
     NotifySlack(NotifySlackArgs),
     /// Compute a release decision and write technical/public release artifacts
     Run(RunArgs),
+    /// Prepare and bind an immutable release publication transaction without remote mutation
+    ReleaseTransaction(ReleaseTransactionArgs),
     /// Print the floating major-version tag for a release tag (e.g. v1)
     FloatingTag(FloatingTagArgs),
     /// Close synthesis-failure issues once synthesis has recovered
@@ -475,6 +477,67 @@ pub(crate) struct RunArgs {
 }
 
 #[derive(Args)]
+pub(crate) struct ReleaseTransactionArgs {
+    #[command(subcommand)]
+    pub(crate) command: ReleaseTransactionCommand,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ReleaseTransactionCommand {
+    /// Compute release identity and notes without creating a tag or release
+    Prepare(PrepareReleaseTransactionArgs),
+    /// Bind verified immutable artifacts to a prepared transaction
+    Bind(BindReleaseTransactionArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct PrepareReleaseTransactionArgs {
+    /// Path to the repository whose release is being prepared
+    #[arg(long = "repo-root", default_value = ".")]
+    pub(crate) repo_root: PathBuf,
+    /// owner/repo for the release; inferred from repo-root when omitted
+    #[arg(long, default_value = "")]
+    pub(crate) repository: String,
+    /// Explicit release tag instead of computing one from commits
+    #[arg(long = "release-tag", default_value = "")]
+    pub(crate) release_tag: String,
+    /// Previous release tag; inferred from git history when omitted
+    #[arg(long = "previous-tag", default_value = "")]
+    pub(crate) previous_tag: String,
+    /// Pre-written release notes; generated deterministically when omitted
+    #[arg(long = "notes-file", default_value = "")]
+    pub(crate) notes_file: String,
+    /// Canonical transaction state file; prepare is compare-and-swap idempotent
+    #[arg(long)]
+    pub(crate) transaction: PathBuf,
+}
+
+#[derive(Args)]
+pub(crate) struct BindReleaseTransactionArgs {
+    /// Prepared or already-bound release transaction JSON
+    #[arg(long)]
+    pub(crate) transaction: PathBuf,
+    /// Product-supplied immutable artifact manifest JSON
+    #[arg(long = "artifact-manifest")]
+    pub(crate) artifact_manifest: PathBuf,
+    /// Local root containing every relative artifact path named by the manifest
+    #[arg(long = "artifact-root")]
+    pub(crate) artifact_root: PathBuf,
+    /// Cosign-compatible verifier executable
+    #[arg(long = "cosign", default_value = "cosign")]
+    pub(crate) cosign: PathBuf,
+    /// Trusted public key for cosign verify-blob; mutually exclusive with keyless identity
+    #[arg(long = "verification-key")]
+    pub(crate) verification_key: Option<PathBuf>,
+    /// Expected keyless certificate identity
+    #[arg(long = "certificate-identity", default_value = "")]
+    pub(crate) certificate_identity: String,
+    /// Expected keyless certificate OIDC issuer
+    #[arg(long = "certificate-oidc-issuer", default_value = "")]
+    pub(crate) certificate_oidc_issuer: String,
+}
+
+#[derive(Args)]
 pub(crate) struct FloatingTagArgs {
     #[arg(long = "release-tag")]
     pub(crate) release_tag: String,
@@ -804,6 +867,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Commands::NotifyReleaseFeed(args) => notify_release_feed(args),
         Commands::NotifySlack(args) => notify_slack(args),
         Commands::Run(args) => run_pipeline(args),
+        Commands::ReleaseTransaction(args) => release_transaction(args),
         Commands::FloatingTag(args) => {
             if let Some(tag) = parse_major_tag(&args.release_tag) {
                 println!("{tag}");

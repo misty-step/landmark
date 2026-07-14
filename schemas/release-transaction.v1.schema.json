@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landmark.dev/schemas/release-transaction.v1.schema.json",
+  "title": "Landmark release transaction v1",
+  "type": "object",
+  "additionalProperties": false,
+  "x-landmark-artifact": "prepared or artifact-bound release transaction",
+  "required": ["schema_version", "transaction_id", "state", "prepared_at", "candidate", "required_artifact_roles", "artifacts", "artifact_set_sha256", "verification", "bound_at"],
+  "properties": {
+    "schema_version": { "const": "landmark.release-transaction.v1" },
+    "transaction_id": { "$ref": "#/$defs/digest" },
+    "state": { "enum": ["prepared", "ready"] },
+    "prepared_at": { "type": "string", "format": "date-time" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "source_revision", "previous_tag", "version", "release_tag", "notes_sha256"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+        "previous_tag": { "type": "string" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "release_tag": { "type": "string", "minLength": 1 },
+        "notes_sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "required_artifact_roles": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "oci_image" },
+        { "const": "release_manifest" },
+        { "const": "signature_bundle" }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" }, "maxItems": 3 },
+    "artifact_set_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+    "verification": { "anyOf": [{ "$ref": "#/$defs/verification" }, { "type": "null" }] },
+    "bound_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "prepared" } }, "required": ["state"] },
+      "then": {
+        "properties": {
+          "artifacts": { "maxItems": 0 },
+          "artifact_set_sha256": { "type": "null" },
+          "verification": { "type": "null" },
+          "bound_at": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "state": { "const": "ready" } }, "required": ["state"] },
+      "then": {
+        "properties": {
+          "artifacts": { "minItems": 3, "maxItems": 3 },
+          "artifact_set_sha256": { "$ref": "#/$defs/digest" },
+          "verification": { "$ref": "#/$defs/verification" },
+          "bound_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "name", "media_type", "digest", "path"],
+      "properties": {
+        "role": { "enum": ["oci_image", "release_manifest", "signature_bundle"] },
+        "name": { "type": "string", "minLength": 1 },
+        "media_type": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "path": { "type": "string", "minLength": 1, "pattern": "^[^/][^\\\\]*$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "oci_image" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "enum": ["application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json"] } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "release_manifest" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "const": "application/vnd.landmark.release-publication-manifest.v1+json" } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "signature_bundle" } }, "required": ["role"] },
+          "then": { "properties": { "media_type": { "const": "application/vnd.dev.sigstore.bundle.v0.3+json" } } }
+        }
+      ]
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "manifest_digest", "signature_bundle_digest", "verification_key_sha256", "certificate_identity", "certificate_oidc_issuer", "verified_at"],
+      "properties": {
+        "method": { "enum": ["sigstore-key", "sigstore-keyless"] },
+        "manifest_digest": { "$ref": "#/$defs/digest" },
+        "signature_bundle_digest": { "$ref": "#/$defs/digest" },
+        "verification_key_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "certificate_identity": { "type": ["string", "null"] },
+        "certificate_oidc_issuer": { "type": ["string", "null"] },
+        "verified_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "sigstore-key" } }, "required": ["method"] },
+          "then": {
+            "properties": {
+              "verification_key_sha256": { "$ref": "#/$defs/digest" },
+              "certificate_identity": { "type": "null" },
+              "certificate_oidc_issuer": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "method": { "const": "sigstore-keyless" } }, "required": ["method"] },
+          "then": {
+            "properties": {
+              "verification_key_sha256": { "type": "null" },
+              "certificate_identity": { "type": "string", "minLength": 1 },
+              "certificate_oidc_issuer": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -416,6 +416,7 @@ pub(crate) fn validate_readme_command_names(readme: &str) -> Vec<String> {
     let nested: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::from([
         ("fleet", BTreeSet::from(["scan", "plan", "open-prs"])),
         ("release-policy", BTreeSet::from(["publication", "summary"])),
+        ("release-transaction", BTreeSet::from(["prepare", "bind"])),
     ]);
     let command_re =
         Regex::new(r"(?m)(?:^\s*|`)landmark\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?").unwrap();
