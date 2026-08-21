@@ -5,6 +5,8 @@
 //! Independent hardcoding is exactly how `openai/gpt-4o-mini` and
 //! `anthropic/claude-sonnet-4` went stale without anyone noticing. When a pin
 //! needs to move, update it once, here, and bump the review date.
+//! `bin/check-model-pin-freshness` (run by `bin/gate`) fails any pin whose
+//! review date is older than one quarter, so stale pins cannot ship silently.
 //! See Powder card landmark-013.
 
 use crate::*;

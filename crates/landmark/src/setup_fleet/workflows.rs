@@ -75,17 +75,17 @@ pub(crate) fn patch_changesets_workflow(
 }
 
 pub(crate) fn workflow_with_synthesis_job(content: &str, synthesis_job: &str) -> Option<String> {
-    let mut workflow: serde_yaml::Value = serde_yaml::from_str(content).ok()?;
-    let jobs_key = serde_yaml::Value::String("jobs".into());
-    let synthesize_key = serde_yaml::Value::String("synthesize".into());
+    let mut workflow: serde_norway::Value = serde_norway::from_str(content).ok()?;
+    let jobs_key = serde_norway::Value::String("jobs".into());
+    let synthesize_key = serde_norway::Value::String("synthesize".into());
     let jobs = workflow
         .as_mapping_mut()?
         .get_mut(&jobs_key)?
         .as_mapping_mut()?;
-    let synthesis: serde_yaml::Value = serde_yaml::from_str(synthesis_job).ok()?;
+    let synthesis: serde_norway::Value = serde_norway::from_str(synthesis_job).ok()?;
     let synthesis = synthesis.as_mapping()?.get(&synthesize_key)?.clone();
     jobs.insert(synthesize_key, synthesis);
-    let mut rendered = serde_yaml::to_string(&workflow).ok()?;
+    let mut rendered = serde_norway::to_string(&workflow).ok()?;
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }

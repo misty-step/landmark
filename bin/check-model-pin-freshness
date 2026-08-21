@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+# Model pins are the release runtime's single source of truth for provider
+# model ids. They drift silently without humans noticing (see the
+# openai/gpt-4o-mini and anthropic/claude-sonnet-4 staleness that preceded
+# model_policy.rs centralizing them). This gate makes any pin whose review date
+# is older than one quarter impossible to miss.
+spec_file="crates/landmark/src/model_policy.rs"
+failures=()
+
+if [ ! -f "${spec_file}" ]; then
+  echo "model pin freshness check failed: ${spec_file} is missing" >&2
+  exit 1
+fi
+
+current_year="$(date -u +%Y)"
+current_month="$(date -u +%m)"
+current_month="${current_month#0}"
+now_months=$((current_year * 12 + current_month - 1))
+
+markers="$(grep -hE 'model pin reviewed:' "${spec_file}" || true)"
+if [ -z "${markers}" ]; then
+  echo "model pin freshness check failed: no 'model pin reviewed: YYYY-MM' comments in ${spec_file}" >&2
+  exit 1
+fi
+
+while IFS= read -r line; do
+  if [[ "${line}" =~ model[[:space:]]+pin[[:space:]]+reviewed:[[:space:]]*([0-9]{4}-[0-9]{2}) ]]; then
+    review_date="${BASH_REMATCH[1]}"
+    pin_year="${review_date:0:4}"
+    pin_month="${review_date:5:2}"
+    pin_month="${pin_month#0}"
+    pin_months=$((pin_year * 12 + pin_month - 1))
+    age_months=$((now_months - pin_months))
+    if [ "${age_months}" -gt 3 ]; then
+      failures+=("model pin in ${spec_file} reviewed ${review_date} is ${age_months} months old; review pins at least every quarter")
+    fi
+  else
+    failures+=("malformed model pin review comment in ${spec_file}: ${line}")
+  fi
+done <<< "${markers}"
+
+if [ "${#failures[@]}" -gt 0 ]; then
+  echo "model pin freshness check failed:" >&2
+  printf ' - %s\n' "${failures[@]}" >&2
+  exit 1
+fi
+
+echo "model pin freshness ok"

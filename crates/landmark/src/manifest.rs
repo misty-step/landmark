@@ -395,7 +395,7 @@ pub(crate) fn infer_manifest(root: &Path) -> LandmarkManifest {
 }
 
 pub(crate) fn render_manifest_yaml(manifest: &LandmarkManifest) -> Result<String> {
-    Ok(serde_yaml::to_string(manifest)?)
+    Ok(serde_norway::to_string(manifest)?)
 }
 
 pub(crate) fn load_manifest(root: &Path) -> Result<Option<LandmarkManifest>> {
@@ -404,12 +404,12 @@ pub(crate) fn load_manifest(root: &Path) -> Result<Option<LandmarkManifest>> {
         return Ok(None);
     }
     let text = fs::read_to_string(path)?;
-    let raw: serde_yaml::Value = serde_yaml::from_str(&text)?;
+    let raw: serde_norway::Value = serde_norway::from_str(&text)?;
     let shape_errors = validate_manifest_yaml_shape(&raw);
     if !shape_errors.is_empty() {
         return Err(shape_errors.join("\n").into());
     }
-    let manifest: LandmarkManifest = serde_yaml::from_str(&text)?;
+    let manifest: LandmarkManifest = serde_norway::from_str(&text)?;
     let errors = validate_manifest(&manifest);
     if errors.is_empty() {
         Ok(Some(manifest))
@@ -418,7 +418,7 @@ pub(crate) fn load_manifest(root: &Path) -> Result<Option<LandmarkManifest>> {
     }
 }
 
-pub(crate) fn validate_manifest_yaml_shape(raw: &serde_yaml::Value) -> Vec<String> {
+pub(crate) fn validate_manifest_yaml_shape(raw: &serde_norway::Value) -> Vec<String> {
     let mut errors = Vec::new();
     for (label, _, allowed) in manifest_schema_key_contracts() {
         validate_yaml_mapping_keys(yaml_value_at_label(raw, label), label, allowed, &mut errors);
@@ -513,9 +513,9 @@ pub(crate) fn release_context_schema_key_contracts()
 }
 
 pub(crate) fn yaml_value_at_label<'a>(
-    raw: &'a serde_yaml::Value,
+    raw: &'a serde_norway::Value,
     label: &str,
-) -> &'a serde_yaml::Value {
+) -> &'a serde_norway::Value {
     match label {
         "manifest.product" => &raw["product"],
         "manifest.changelog" => &raw["changelog"],
@@ -528,7 +528,7 @@ pub(crate) fn yaml_value_at_label<'a>(
 }
 
 pub(crate) fn validate_yaml_mapping_keys(
-    raw: &serde_yaml::Value,
+    raw: &serde_norway::Value,
     label: &str,
     allowed: &[&str],
     errors: &mut Vec<String>,

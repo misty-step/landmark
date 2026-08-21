@@ -575,7 +575,7 @@ pub(crate) fn render_manifest_action_inputs(
 }
 
 pub(crate) fn yaml_scalar(value: &str) -> String {
-    serde_yaml::to_string(value)
+    serde_norway::to_string(value)
         .ok()
         .and_then(|rendered| {
             rendered

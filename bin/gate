@@ -7,6 +7,7 @@ cd "${ROOT}"
 
 npm ci --no-fund --no-audit
 bin/check-architecture
+bin/check-model-pin-freshness
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked

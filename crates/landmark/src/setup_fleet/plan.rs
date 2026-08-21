@@ -44,12 +44,12 @@ pub(crate) fn fleet_workflow_file(path: &str, text: &str) -> Option<FleetWorkflo
 }
 
 pub(crate) fn workflow_job_invoking(text: &str, marker: &str) -> Option<String> {
-    let raw: serde_yaml::Value = serde_yaml::from_str(text).ok()?;
+    let raw: serde_norway::Value = serde_norway::from_str(text).ok()?;
     let jobs = raw.get("jobs")?.as_mapping()?;
     let marker = marker.to_ascii_lowercase();
     for (key, job) in jobs {
         let job_id = key.as_str()?;
-        let job_text = serde_yaml::to_string(job).ok()?.to_ascii_lowercase();
+        let job_text = serde_norway::to_string(job).ok()?.to_ascii_lowercase();
         if job_text.contains(&marker) {
             return Some(job_id.to_string());
         }
@@ -215,11 +215,11 @@ pub(crate) fn workflow_content_blocker(
 }
 
 pub(crate) fn workflow_has_jobs_mapping(text: &str) -> bool {
-    let Ok(raw) = serde_yaml::from_str::<serde_yaml::Value>(text) else {
+    let Ok(raw) = serde_norway::from_str::<serde_norway::Value>(text) else {
         return false;
     };
     raw.get("jobs")
-        .and_then(serde_yaml::Value::as_mapping)
+        .and_then(serde_norway::Value::as_mapping)
         .is_some()
 }
 

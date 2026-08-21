@@ -225,7 +225,7 @@ fn fleet_plan_patches_existing_release_please_workflow() {
     assert_eq!(plan.workflow_patches.len(), 1);
     let patch = &plan.workflow_patches[0];
     assert_eq!(patch.path, ".github/workflows/release-please.yml");
-    serde_yaml::from_str::<serde_yaml::Value>(&patch.content).unwrap();
+    serde_norway::from_str::<serde_norway::Value>(&patch.content).unwrap();
     assert!(patch.content.contains("Existing Release"));
     assert_eq!(
         patch
@@ -269,7 +269,7 @@ fn fleet_plan_patches_existing_changesets_workflow() {
     assert_eq!(plan.workflow_patches.len(), 1);
     let patch = &plan.workflow_patches[0];
     assert_eq!(patch.path, ".github/workflows/changesets.yml");
-    serde_yaml::from_str::<serde_yaml::Value>(&patch.content).unwrap();
+    serde_norway::from_str::<serde_norway::Value>(&patch.content).unwrap();
     assert!(patch.content.contains("Existing Release"));
     assert_eq!(patch.content.matches("changesets/action").count(), 1);
     assert!(patch.content.contains("needs: release"));
@@ -561,7 +561,7 @@ fn init_manifest_infers_product_context_from_repo_metadata() {
     assert_eq!(manifest.changelog.source.as_deref(), Some("auto"));
 
     let rendered = render_manifest_yaml(&manifest).unwrap();
-    let parsed: serde_yaml::Value = serde_yaml::from_str(&rendered).unwrap();
+    let parsed: serde_norway::Value = serde_norway::from_str(&rendered).unwrap();
     assert_eq!(parsed["product"]["name"], "Atlas");
     assert_eq!(parsed["model"]["policy"], "balanced");
 }
@@ -702,7 +702,7 @@ model:
     args.audience = None;
     args.changelog_source = None;
     let mut manifest: LandmarkManifest =
-        serde_yaml::from_str(&fs::read_to_string(repo.path().join(".landmark.yml")).unwrap())
+        serde_norway::from_str(&fs::read_to_string(repo.path().join(".landmark.yml")).unwrap())
             .unwrap();
     manifest.model.primary = None;
     manifest.model.policy = Some("rich".into());
@@ -822,7 +822,7 @@ fn manifest_validation_rejects_unsupported_policy_and_profile() {
 
 #[test]
 fn manifest_shape_rejects_unknown_keys() {
-    let raw: serde_yaml::Value = serde_yaml::from_str(
+    let raw: serde_norway::Value = serde_norway::from_str(
         "product:\n  name: Demo\n  description: Demo app\n  tagline: nope\nrelease:\n  profile: synthesis-only\nsurprise: true\n",
     )
     .unwrap();
@@ -961,7 +961,7 @@ fn setup_generated_workflows_are_yaml() {
         signals: Vec::new(),
     };
     for candidate in setup_workflows(&diagnosis, None).values() {
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&candidate.content).unwrap();
+        let parsed: serde_norway::Value = serde_norway::from_str(&candidate.content).unwrap();
         assert!(parsed["jobs"].is_mapping(), "{}", candidate.path);
     }
     let manual = &setup_workflows(&diagnosis, None)["manual-tag"].content;

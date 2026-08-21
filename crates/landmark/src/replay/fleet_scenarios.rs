@@ -457,7 +457,7 @@ pub(crate) fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> 
         return Err("release-please dry-run wrote a duplicate Landmark workflow".into());
     }
     let release_please_workflow = fs::read_to_string(release_please_path)?;
-    serde_yaml::from_str::<serde_yaml::Value>(&release_please_workflow)?;
+    serde_norway::from_str::<serde_norway::Value>(&release_please_workflow)?;
     if release_please_workflow
         .matches("googleapis/release-please-action")
         .count()
@@ -481,7 +481,7 @@ pub(crate) fn scenario_fleet_adoption_planner(tmp_root: &Path) -> Result<Value> 
         return Err("changesets dry-run wrote a duplicate Landmark workflow".into());
     }
     let changesets_workflow = fs::read_to_string(changesets_path)?;
-    serde_yaml::from_str::<serde_yaml::Value>(&changesets_workflow)?;
+    serde_norway::from_str::<serde_norway::Value>(&changesets_workflow)?;
     if changesets_workflow.matches("changesets/action").count() != 1
         || !changesets_workflow.contains("needs: release")
         || !changesets_workflow.contains("mode: synthesis-only")

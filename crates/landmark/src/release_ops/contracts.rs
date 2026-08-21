@@ -143,7 +143,7 @@ pub(crate) fn normalize_version(version: &str) -> Result<String> {
 pub(crate) fn check_action_contract(args: CheckActionContractArgs) -> Result<()> {
     let action_path = args.repo_root.join("action.yml");
     let readme_path = args.repo_root.join("README.md");
-    let action: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&action_path)?)?;
+    let action: serde_norway::Value = serde_norway::from_str(&fs::read_to_string(&action_path)?)?;
     let inputs = action["inputs"]
         .as_mapping()
         .ok_or("action.yml missing inputs")?;
@@ -373,7 +373,7 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     if readme.contains("misty-step/landmark@v2") {
         errors.push("README references nonexistent misty-step/landmark@v2 example".into());
     }
-    if let Err(error) = serde_yaml::from_str::<serde_yaml::Value>(&manual_example) {
+    if let Err(error) = serde_norway::from_str::<serde_norway::Value>(&manual_example) {
         errors.push(format!("examples/manual-tag.yml is invalid YAML: {error}"));
     }
     if manual_example.contains("push:\n    tags:") {
