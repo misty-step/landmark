@@ -150,6 +150,33 @@ fn cost_estimates_use_current_commodity_pins() {
 }
 
 #[test]
+fn manifest_schema_policy_pattern_matches_runtime_case_contract() {
+    let schema_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/landmark-manifest.v1.schema.json"
+    );
+    let schema: Value = serde_json::from_str(&fs::read_to_string(schema_path).unwrap()).unwrap();
+    let pattern = schema["properties"]["model"]["properties"]["policy"]["pattern"]
+        .as_str()
+        .expect("manifest schema policy must declare a case-insensitive pattern");
+    let policy_pattern = Regex::new(pattern).unwrap();
+    for accepted in [
+        "cheap", "balanced", "rich", "off", "OFF", "Rich", "BALANCED",
+    ] {
+        assert!(
+            policy_pattern.is_match(accepted),
+            "schema must accept {accepted}: runtime accepts any case"
+        );
+    }
+    for rejected in ["", "bogus", "off ", "cheapp"] {
+        assert!(
+            !policy_pattern.is_match(rejected),
+            "schema must reject {rejected}"
+        );
+    }
+}
+
+#[test]
 fn manifest_policy_case_is_accepted_and_normalized_end_to_end() {
     for (manifest_policy, expected_model) in
         [("OFF", "off"), ("Rich", "deepseek/deepseek-v4-pro-0813")]
