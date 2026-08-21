@@ -30,6 +30,7 @@ mod errors;
 #[cfg(test)]
 mod extract_prs_tests;
 mod manifest;
+mod model_policy;
 mod pr_range;
 mod providers;
 #[cfg(test)]
@@ -64,6 +65,7 @@ pub(crate) use cli::*;
 pub(crate) use describe::*;
 pub(crate) use errors::*;
 pub(crate) use manifest::*;
+pub(crate) use model_policy::*;
 pub(crate) use pr_range::*;
 pub(crate) use providers::*;
 pub(crate) use release_body::*;

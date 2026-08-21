@@ -712,7 +712,49 @@ model:
     )
     .unwrap();
     let policy_default = resolve_synthesis_config(&args).unwrap();
-    assert_eq!(policy_default.model, "anthropic/claude-sonnet-5");
+    assert_eq!(policy_default.model, "deepseek/deepseek-v4-pro-0813");
+}
+
+#[test]
+fn default_fallback_chain_follows_primary_and_tier_order() {
+    assert_eq!(
+        default_fallback_models("deepseek/deepseek-v4-flash-0731"),
+        "google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813"
+    );
+    assert_eq!(
+        default_fallback_models("deepseek/deepseek-v4-pro-0813"),
+        "deepseek/deepseek-v4-flash-0731,google/gemini-3.7-flash"
+    );
+    assert_eq!(default_fallback_models("off"), "");
+}
+
+#[test]
+fn balanced_high_significance_escalates_to_rich_tier_unless_primary_explicit() {
+    let mut config = test_synthesis_config("balanced", None, None);
+    config.model = "deepseek/deepseek-v4-flash-0731".into();
+    config.model_explicit = false;
+    let classification = test_release_classification("high");
+    let (tier, model, skip, _) = selected_model_plan(&config, &classification);
+    assert!(!skip);
+    assert_eq!(tier, "rich");
+    assert_eq!(model, "deepseek/deepseek-v4-pro-0813");
+
+    config.model = "custom/model".into();
+    config.model_explicit = true;
+    let (_, escalated, _, _) = selected_model_plan(&config, &classification);
+    assert_eq!(escalated, "custom/model");
+}
+
+#[test]
+fn cost_estimates_use_current_commodity_pins() {
+    let flash = estimate_model_cost_usd("cheap", 12_000, 1_200);
+    assert!(
+        (flash - (12_000.0 / 1_000_000.0 * 0.08 + 1_200.0 / 1_000_000.0 * 0.18)).abs() < 1e-12,
+        "{flash}"
+    );
+    assert_eq!(estimate_model_cost_usd("balanced", 12_000, 1_200), flash);
+    let rich = estimate_model_cost_usd("rich", 12_000, 1_200);
+    assert!(rich > flash * 10.0, "rich {rich} must exceed cheap {flash}");
 }
 
 #[test]
@@ -925,6 +967,7 @@ fn test_synthesis_config(
         changelog_source: "auto".into(),
         model_policy: model_policy.into(),
         model: "primary/model".into(),
+        model_explicit: true,
         fallback_models: String::new(),
         max_input_tokens,
         max_output_tokens: None,

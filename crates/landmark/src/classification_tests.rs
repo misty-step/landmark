@@ -198,6 +198,39 @@ fn release_classification_models_falls_back_to_tier_default_when_unset() {
 }
 
 #[test]
+fn release_classification_models_uses_tier_when_primary_is_policy_default() {
+    let mut config = test_synthesis_config("rich");
+    config.model = "deepseek/deepseek-v4-pro-0813".into();
+    config.model_explicit = false;
+    let models = release_classification_models(&config);
+    assert_eq!(
+        models[0], "deepseek/deepseek-v4-flash-0731",
+        "policy-derived primary must not override the classification tier"
+    );
+    assert_eq!(
+        models,
+        vec![
+            "deepseek/deepseek-v4-flash-0731".to_string(),
+            "google/gemini-3.7-flash".to_string()
+        ],
+        "classification chain stays on the classification tiers; the synthesis rich pin must not leak in"
+    );
+}
+
+#[test]
+fn release_classification_models_require_the_explicit_flag_for_custom_primary() {
+    let mut config = test_synthesis_config("balanced");
+    config.model = "custom/model".into();
+    config.model_explicit = false;
+    assert_eq!(
+        release_classification_models(&config)[0],
+        "deepseek/deepseek-v4-flash-0731"
+    );
+    config.model_explicit = true;
+    assert_eq!(release_classification_models(&config)[0], "custom/model");
+}
+
+#[test]
 fn dry_run_context_packet_does_not_call_model_classifier() {
     let repo = fixture_repo_with_landmark_125_commits();
     let mut args = test_synthesize_args(repo.path(), "v1.25.0");
@@ -507,6 +540,7 @@ fn test_synthesis_config(model_policy: &str) -> EffectiveSynthesisConfig {
         changelog_source: "auto".into(),
         model_policy: model_policy.into(),
         model: "primary/model".into(),
+        model_explicit: true,
         fallback_models: String::new(),
         max_input_tokens: None,
         max_output_tokens: None,

@@ -181,7 +181,7 @@ pub(crate) fn release_classification_models(config: &EffectiveSynthesisConfig) -
     }
     let mut models = Vec::new();
     let primary = config.model.trim();
-    if !primary.is_empty() && primary != "off" {
+    if config.model_explicit && !primary.is_empty() && primary != "off" {
         push_unique_model(&mut models, primary);
     } else {
         push_unique_model(&mut models, default_model_for_tier("classification"));

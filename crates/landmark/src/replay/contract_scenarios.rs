@@ -931,18 +931,16 @@ model:
     let defaults = parse_outputs(&output)?;
     let effective_audience = action_value("", defaults.get("audience"), "general");
     let explicit_audience = action_value("developer", defaults.get("audience"), "general");
-    let effective_model = action_value("", defaults.get("llm_model"), "anthropic/claude-sonnet-5");
-    let explicit_model = action_value(
-        "explicit/model",
-        defaults.get("llm_model"),
-        "anthropic/claude-sonnet-5",
-    );
+    let effective_model = action_value("", defaults.get("llm_model"), "");
+    let explicit_model = action_value("explicit/model", defaults.get("llm_model"), "");
     let effective_markdown = action_value("", defaults.get("notes_output_file"), "");
     let explicit_markdown = action_value("docs/explicit.md", defaults.get("notes_output_file"), "");
 
     if effective_audience != "enterprise"
         || explicit_audience != "developer"
-        || effective_model != "anthropic/claude-haiku-4.5"
+        || !effective_model.is_empty()
+        || defaults.get("default_model").map(String::as_str)
+            != Some("deepseek/deepseek-v4-flash-0731")
         || explicit_model != "explicit/model"
         || effective_markdown != "docs/releases/{version}.md"
         || explicit_markdown != "docs/explicit.md"
@@ -955,7 +953,7 @@ model:
             "manifest-defaults github output",
             "empty action input uses manifest default",
             "explicit action input overrides manifest default",
-            "model.policy cheap selects anthropic/claude-haiku-4.5"
+            "policy-derived model stays out of llm_model; default_model mirrors the tier",
         ],
         "defaults": defaults,
         "effective": {

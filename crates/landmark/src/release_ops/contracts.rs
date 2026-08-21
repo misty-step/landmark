@@ -360,9 +360,9 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     errors.extend(validate_docs_link_targets(repo_root, &readme));
     errors.extend(validate_readme_command_names(&readme));
     for required_model in [
-        "anthropic/claude-sonnet-5",
-        "anthropic/claude-haiku-4.5",
-        "google/gemini-2.5-flash",
+        "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-pro-0813",
+        "google/gemini-3.7-flash",
     ] {
         if !readme.contains(required_model) {
             errors.push(format!(
@@ -567,7 +567,7 @@ pub(crate) fn validate_manifest_schema_contract(readme: &str) -> Vec<String> {
                 "cheap, balanced, rich, off",
                 "full # full or synthesis-only",
                 "Non-empty action inputs still win over manifest values.",
-                "cheap` uses `anthropic/claude-haiku-4.5`",
+                "cheap` uses `deepseek/deepseek-v4-flash-0731`",
                 "synthesize --dry-run-cost",
             ]
             .iter()
@@ -584,6 +584,7 @@ pub(crate) fn validate_manifest_action_precedence_contract(action: &str) -> Vec<
         "inputs.llm-model || steps.manifest_defaults.outputs.llm_model",
         "steps.manifest_defaults.outputs.model_policy",
         "MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}",
+        "steps.manifest_defaults.outputs.default_model",
         "Landmark LLM healthcheck skipped because model.policy=off disables synthesis.",
         "inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models",
         "inputs.audience || steps.manifest_defaults.outputs.audience",
