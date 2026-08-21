@@ -133,14 +133,7 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
     validate_nonblank(&args.api_key, "api-key")?;
     validate_nonblank(&context.cost.model, "model")?;
     let mut models = vec![context.cost.model.clone()];
-    models.extend(
-        config
-            .fallback_models
-            .split(',')
-            .map(str::trim)
-            .filter(|model| !model.is_empty())
-            .map(str::to_string),
-    );
+    models.extend(effective_fallback_models(&config, &context.cost.model));
     let mut last_error = String::new();
     let mut attempts = Vec::new();
     let mut last_ungrounded: Option<ClaimSourceMap> = None;
@@ -260,6 +253,13 @@ pub(crate) fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<Effectiv
     } else {
         manifest.model.fallbacks.join(",")
     };
+    let model_explicit = !args.model.trim().is_empty()
+        || manifest
+            .model
+            .primary
+            .as_deref()
+            .and_then(trimmed_option)
+            .is_some();
     Ok(EffectiveSynthesisConfig {
         product_name,
         product_description,
@@ -268,6 +268,7 @@ pub(crate) fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<Effectiv
         changelog_source,
         model_policy,
         model,
+        model_explicit,
         fallback_models,
         max_input_tokens: manifest.budget.max_input_tokens,
         max_output_tokens: manifest.budget.max_output_tokens,
@@ -300,39 +301,6 @@ pub(crate) fn optional_or_default(
         .and_then(trimmed_option)
         .or_else(|| manifest.and_then(trimmed_option))
         .unwrap_or_else(|| default.to_string())
-}
-
-pub(crate) fn policy_default_model(policy: Option<&str>) -> Option<String> {
-    let tier = match policy.and_then(trimmed_option).as_deref() {
-        Some("off") => "off",
-        Some("cheap") => "cheap",
-        Some("rich") => "rich",
-        _ => "balanced",
-    };
-    Some(default_model_for_tier(tier).into())
-}
-
-/// Single source of truth for model-tier pins. `cheap_model()`, `rich_model()`,
-/// `policy_default_model()`, and `release_classification_models()` all read
-/// their defaults from here instead of hardcoding literals independently —
-/// that independent hardcoding is exactly how `openai/gpt-4o-mini` and
-/// `anthropic/claude-sonnet-4` went stale without anyone noticing. When a
-/// pin needs to move, update it once, here, and bump the review date.
-/// See Powder card landmark-013.
-pub(crate) fn default_model_for_tier(tier: &str) -> &'static str {
-    match tier {
-        "off" => "off",
-        // model pin reviewed: 2026-07
-        "cheap" => "anthropic/claude-haiku-4.5",
-        // model pin reviewed: 2026-07
-        "rich" | "balanced" => "anthropic/claude-sonnet-5",
-        // model pin reviewed: 2026-07
-        "classification" => "deepseek/deepseek-v4-flash",
-        // model pin reviewed: 2026-07
-        "classification-fallback" => "anthropic/claude-haiku-4.5",
-        // model pin reviewed: 2026-07
-        _ => "anthropic/claude-sonnet-5",
-    }
 }
 
 pub(crate) fn read_optional_file(path: &Path) -> Result<Option<String>> {
@@ -873,34 +841,6 @@ pub(crate) fn selected_model_plan(
         ),
     }
 }
-
-pub(crate) fn cheap_model(config: &EffectiveSynthesisConfig) -> String {
-    if config.model != "off" && !config.model.trim().is_empty() {
-        config.model.clone()
-    } else {
-        default_model_for_tier("cheap").into()
-    }
-}
-
-pub(crate) fn rich_model(config: &EffectiveSynthesisConfig) -> String {
-    if config.model != "off" && !config.model.trim().is_empty() {
-        config.model.clone()
-    } else {
-        default_model_for_tier("rich").into()
-    }
-}
-
-pub(crate) fn estimate_model_cost_usd(tier: &str, input_tokens: u64, output_tokens: u64) -> f64 {
-    let (input_per_million, output_per_million) = match tier {
-        "cheap" => (0.15, 0.60),
-        "rich" => (3.00, 15.00),
-        "off" => (0.0, 0.0),
-        _ => (1.00, 5.00),
-    };
-    ((input_tokens as f64 / 1_000_000.0) * input_per_million)
-        + ((output_tokens as f64 / 1_000_000.0) * output_per_million)
-}
-
 pub(crate) fn render_breaking_changes(technical: &str) -> String {
     let mut changes = BTreeSet::new();
     let breaking_commit = Regex::new(r"^[a-z]+(\([^)]*\))?!:").unwrap();

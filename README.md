@@ -179,8 +179,8 @@ jobs:
           github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize model and fallbacks
-          # llm-model: anthropic/claude-sonnet-5
-          # llm-fallback-models: "google/gemini-2.5-flash,anthropic/claude-haiku-4.5"
+          # llm-model: deepseek/deepseek-v4-flash-0731
+          # llm-fallback-models: "google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813"
 ```
 
 Landmark is language-agnostic. Your repo does not need `package.json` or Node.js
@@ -461,8 +461,8 @@ keeps product context, audience, voice, changelog source, artifact outputs, and
 model policy in the repo instead of requiring every workflow to repeat them.
 Non-empty action inputs still win over manifest values.
 When `model.primary` is omitted, `model.policy` selects Landmark's built-in
-default model tier: `cheap` uses `anthropic/claude-haiku-4.5`, while `balanced`
-and `rich` use `anthropic/claude-sonnet-5`. `off` disables LLM synthesis while
+default model tier: `cheap` uses `deepseek/deepseek-v4-flash-0731`, `balanced`
+uses the same Flash pin, and `rich` escalates to `deepseek/deepseek-v4-pro-0813`. `off` disables LLM synthesis while
 still publishing the technical release.
 
 ```yaml
@@ -483,10 +483,10 @@ release:
   profile: full # full or synthesis-only
 model:
   policy: balanced # cheap, balanced, rich, off
-  primary: anthropic/claude-sonnet-5
+  primary: deepseek/deepseek-v4-flash-0731
   fallbacks:
-    - google/gemini-2.5-flash
-    - anthropic/claude-haiku-4.5
+    - google/gemini-3.7-flash
+    - deepseek/deepseek-v4-pro-0813
 budget:
   max_input_tokens: 12000
   max_output_tokens: 1200
@@ -510,8 +510,8 @@ During real synthesis runs with `model.policy` enabled and an API key present,
 Landmark first sends the parsed commits, commit bodies, diff statistics, and the
 rendered changelog context through a cheap OpenAI-compatible classifier. It
 uses the configured `model.primary` when set, falling back to
-`deepseek/deepseek-v4-flash` (with `anthropic/claude-haiku-4.5` as a further
-fallback) when no primary model is configured — the same precedence on every
+`deepseek/deepseek-v4-flash-0731` (with `google/gemini-3.7-flash` and
+`deepseek/deepseek-v4-pro-0813` as further fallbacks) when no primary model is configured — the same precedence on every
 endpoint. Conventional `feat`, `fix`, `perf`,
 security, migration, and breaking-change signals remain the deterministic floor:
 if the model would downgrade or skip them, Landmark records the disagreement in
@@ -567,7 +567,7 @@ release-mutating workflow.
 | `github-token` | Yes | - | GitHub App installation token or PAT with repo write access. Used by `semantic-release` and GitHub API update calls. See [Why a GitHub App, not a PAT](#why-a-github-app-not-a-pat). |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
-| `llm-fallback-models` | No | manifest, then `google/gemini-2.5-flash,anthropic/claude-haiku-4.5` | Comma-separated fallback model IDs tried in order if primary fails. |
+| `llm-fallback-models` | No | manifest, then runtime-derived chain (see `crates/landmark/src/model_policy.rs`) | Comma-separated fallback model IDs tried in order if primary fails; with neither set, the Rust runtime derives the chain at attempt time from the pinned tiers, excluding the selected primary. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
 | `stability` | No | `auto` | Versioning stability policy: `auto` (detect from the latest tag — below 1.0.0 or untagged is pre-stable), `pre-stable` (Cargo-style 0.x rules), or `stable` (standard SemVer). Ignored when the repo ships its own semantic-release config. See [Versioning Philosophy](#versioning-philosophy). |
@@ -775,7 +775,7 @@ The `synthesis-status` output is a compact JSON object for automation:
   "failure_message": "",
   "model_attempts": [
     {
-      "model": "anthropic/claude-sonnet-5",
+      "model": "deepseek/deepseek-v4-flash-0731",
       "succeeded": true,
       "quality": "valid",
       "message": "",
@@ -783,8 +783,8 @@ The `synthesis-status` output is a compact JSON object for automation:
         "input_tokens": 1800,
         "output_tokens": 1000,
         "model_tier": "balanced",
-        "model": "anthropic/claude-sonnet-5",
-        "estimated_usd": 0.0068,
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "estimated_usd": 0.00118,
         "skip": false,
         "skip_reason": ""
       }
@@ -837,9 +837,8 @@ The `synthesis-status` output is a compact JSON object for automation:
       "input_tokens": 1800,
       "output_tokens": 1000,
       "model_tier": "balanced",
-      "model": "anthropic/claude-sonnet-5",
-      "estimated_usd": 0.0068,
-      "skip": false,
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "estimated_usd": 0.00118,
       "skip_reason": ""
     },
     "decision": {

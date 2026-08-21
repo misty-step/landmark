@@ -68,6 +68,6 @@ jobs:
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional: customize synthesis behavior.
           # audience: developer
-          # llm-model: anthropic/claude-sonnet-5
-          # llm-fallback-models: "google/gemini-2.5-flash,anthropic/claude-haiku-4.5"
+          # llm-model: deepseek/deepseek-v4-flash-0731
+          # llm-fallback-models: "google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813"
           # changelog-source: release-body

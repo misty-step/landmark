@@ -121,7 +121,7 @@ model:
         .next()
         .ok_or("cheap policy did not send a synthesis request")?;
     let cheap_context: Value = serde_json::from_str(&fs::read_to_string(&cheap_context_file)?)?;
-    if cheap_request["model"] != "anthropic/claude-haiku-4.5"
+    if cheap_request["model"] != "deepseek/deepseek-v4-flash-0731"
         || cheap_context["cost"]["model_tier"] != "cheap"
         || cheap_context["decision"]["action"] != "used"
         || cheap_context["deterministic"]["manifest"]["present"] != true

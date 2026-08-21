@@ -67,6 +67,7 @@ pub(crate) struct EffectiveSynthesisConfig {
     pub(crate) changelog_source: String,
     pub(crate) model_policy: String,
     pub(crate) model: String,
+    pub(crate) model_explicit: bool,
     pub(crate) fallback_models: String,
     pub(crate) max_input_tokens: Option<u64>,
     pub(crate) max_output_tokens: Option<u64>,
@@ -315,15 +316,13 @@ pub(crate) fn manifest_defaults(args: ManifestDefaultsArgs) -> Result<()> {
     if let Some(value) = manifest.model.policy.as_deref().and_then(trimmed_option) {
         values.push(("model_policy", sanitize_text(&value)));
     }
-    if let Some(value) = manifest
-        .model
-        .primary
-        .as_deref()
-        .and_then(trimmed_option)
-        .or_else(|| policy_default_model(manifest.model.policy.as_deref()))
-    {
+    if let Some(value) = manifest.model.primary.as_deref().and_then(trimmed_option) {
         values.push(("llm_model", sanitize_text(&value)));
     }
+    values.push((
+        "default_model",
+        sanitize_text(&policy_default_model(manifest.model.policy.as_deref()).unwrap_or_default()),
+    ));
     if !manifest.model.fallbacks.is_empty() {
         values.push((
             "llm_fallback_models",

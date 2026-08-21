@@ -17,7 +17,7 @@ inputs:
     description: API key for LLM synthesis (OpenRouter, OpenAI, or any compatible provider).
     required: false
   llm-model:
-    description: Primary model ID for synthesis (e.g., 'anthropic/claude-sonnet-5', 'anthropic/claude-haiku-4.5').
+    description: Primary model ID for synthesis (e.g., 'deepseek/deepseek-v4-flash-0731', 'deepseek/deepseek-v4-pro-0813').
     default: ""
     required: false
   llm-fallback-models:
@@ -231,7 +231,7 @@ runs:
       shell: bash
       env:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
-        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || 'anthropic/claude-sonnet-5' }}
+        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || steps.manifest_defaults.outputs.default_model }}
         MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
@@ -485,7 +485,7 @@ runs:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
         LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
-        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models || 'google/gemini-2.5-flash,anthropic/claude-haiku-4.5' }}
+        LLM_FALLBACK_MODELS: ${{ inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models }}
         MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}
         RELEASE_TAG: ${{ steps.resolve_release.outputs.release_tag }}
         PROMPT_TEMPLATE_PATH: ${{ inputs.prompt-template-path }}
@@ -656,12 +656,16 @@ runs:
         if [ -n "${prompt_template}" ]; then
           synth_source_args+=(--prompt-template "${prompt_template}")
         fi
+        synth_fallback_args=()
+        if [ -n "${LLM_FALLBACK_MODELS}" ]; then
+          synth_fallback_args+=(--fallback-models "${LLM_FALLBACK_MODELS}")
+        fi
         if ! "${LANDMARK_BIN}" synthesize \
           --api-key "${api_key}" \
           --model "${LLM_MODEL}" \
           --model-policy "${MODEL_POLICY}" \
           --api-url "${LLM_API_URL}" \
-          --fallback-models "${LLM_FALLBACK_MODELS}" \
+          "${synth_fallback_args[@]}" \
           --product-name "${product_name}" \
           --product-description "${product_description}" \
           --voice-guide "${voice_guide}" \

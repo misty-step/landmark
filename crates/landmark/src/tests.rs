@@ -712,7 +712,7 @@ model:
     )
     .unwrap();
     let policy_default = resolve_synthesis_config(&args).unwrap();
-    assert_eq!(policy_default.model, "anthropic/claude-sonnet-5");
+    assert_eq!(policy_default.model, "deepseek/deepseek-v4-pro-0813");
 }
 
 #[test]
@@ -925,6 +925,7 @@ fn test_synthesis_config(
         changelog_source: "auto".into(),
         model_policy: model_policy.into(),
         model: "primary/model".into(),
+        model_explicit: true,
         fallback_models: String::new(),
         max_input_tokens,
         max_output_tokens: None,

@@ -163,8 +163,8 @@ jobs:
           github-token: ${{ steps.release-token.outputs.token }}
           llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # Optional:
-          # llm-model: anthropic/claude-sonnet-4
-          # llm-fallback-models: "google/gemini-2.5-flash,openai/gpt-4o-mini"
+          # llm-model: deepseek/deepseek-v4-flash-0731
+          # llm-fallback-models: "google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813"
 ```
 
 ## Requirements

@@ -65,6 +65,7 @@ fn test_synthesis_config() -> EffectiveSynthesisConfig {
         changelog_source: "auto".into(),
         model_policy: "balanced".into(),
         model: "primary/model".into(),
+        model_explicit: true,
         fallback_models: String::new(),
         max_input_tokens: None,
         max_output_tokens: None,
