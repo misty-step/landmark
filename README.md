@@ -504,7 +504,8 @@ estimated input/output tokens, model tier, selected model, skip/use/escalation
 decision, cost estimate, deterministic release classification, and the final
 context sources included in the prompt. In `balanced` mode, docs-only,
 chore-only, dependency-only, and internal-tooling releases are skipped; breaking,
-security, and migration-heavy releases escalate to the rich tier.
+security, and migration-heavy releases escalate to the rich tier — unless an
+explicit `model.primary` is configured, which always wins.
 
 During real synthesis runs with `model.policy` enabled and an API key present,
 Landmark first sends the parsed commits, commit bodies, diff statistics, and the
@@ -516,10 +517,12 @@ Classification and note synthesis resolve fallbacks under different rules:
   `google/gemini-3.7-flash`. It never inherits the runtime-derived synthesis
   fallback chain — `deepseek/deepseek-v4-pro-0813` classifies nothing unless
   explicitly configured.
-- **Note synthesis** attempts the selected primary first (under `balanced`
-  policy, high-significance releases escalate from the Flash pin to the rich
-  pin), then configured fallbacks, or the runtime-derived chain from
-  `crates/landmark/src/model_policy.rs` when nothing is configured.
+- **Note synthesis** attempts the selected primary first, then configured
+  fallbacks, or the runtime-derived chain from
+  `crates/landmark/src/model_policy.rs` when nothing is configured. Under
+  `balanced` policy with a policy-derived Flash primary, high-significance
+  releases escalate to the rich pin; an explicit primary is kept for the rich
+  attempt instead of being replaced by the pin.
 These rules apply on every endpoint.
 Conventional `feat`, `fix`, `perf`, security, migration, and breaking-change signals remain the deterministic floor:
 if the model would downgrade or skip them, Landmark records the disagreement in
