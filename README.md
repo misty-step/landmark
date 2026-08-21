@@ -508,12 +508,20 @@ security, and migration-heavy releases escalate to the rich tier.
 
 During real synthesis runs with `model.policy` enabled and an API key present,
 Landmark first sends the parsed commits, commit bodies, diff statistics, and the
-rendered changelog context through a cheap OpenAI-compatible classifier. It
-uses the configured `model.primary` when set, falling back to
-`deepseek/deepseek-v4-flash-0731` (with `google/gemini-3.7-flash` and
-`deepseek/deepseek-v4-pro-0813` as further fallbacks) when no primary model is configured — the same precedence on every
-endpoint. Conventional `feat`, `fix`, `perf`,
-security, migration, and breaking-change signals remain the deterministic floor:
+rendered changelog context through a cheap OpenAI-compatible classifier.
+Classification and note synthesis resolve fallbacks under different rules:
+- **Classification** uses the configured `model.primary` when set; otherwise
+  the pinned classification tier `deepseek/deepseek-v4-flash-0731`, followed by
+  any configured fallbacks and the classification fallback
+  `google/gemini-3.7-flash`. It never inherits the runtime-derived synthesis
+  fallback chain — `deepseek/deepseek-v4-pro-0813` classifies nothing unless
+  explicitly configured.
+- **Note synthesis** attempts the selected primary first (under `balanced`
+  policy, high-significance releases escalate from the Flash pin to the rich
+  pin), then configured fallbacks, or the runtime-derived chain from
+  `crates/landmark/src/model_policy.rs` when nothing is configured.
+These rules apply on every endpoint.
+Conventional `feat`, `fix`, `perf`, security, migration, and breaking-change signals remain the deterministic floor:
 if the model would downgrade or skip them, Landmark records the disagreement in
 the synthesis context, preserves a synthesis-worthy classification, and appends
 a short classification notice to the generated release notes.
