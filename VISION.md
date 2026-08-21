@@ -1,188 +1,152 @@
 # Landmark Vision
 
-Status: Canonical root vision for Landmark. Revise when the release boundary,
-artifact contract, or supported adoption modes materially change.
+Status: Canonical root vision for Landmark. Philosophy, principles, and
+product direction only — no tickets, no dates, no schedules. Revise when the
+release boundary, artifact contract, or supported adoption modes materially
+change.
 
 ## What Landmark Is
 
-Landmark is public open-source release intelligence for repositories with git
-history and, when available, conventional commits. It can run as a GitHub
-Action, but the product boundary is the Rust CLI: local scripts, generic CI,
-and agents should all be able to ask the same runtime what changed, what
-version follows, what evidence exists, which release artifacts should be
-produced, and whether the resulting public release transaction is complete.
+Landmark is automated release intelligence for every software project. Given
+a git repository — any language, any stack, any forge, any CI — it decides
+the next semantic version, writes the technical changelog, and produces
+user-facing release notes in the project's voice. A release stops being a
+ritual someone performs and becomes a property the repository has.
 
-The job is not merely "make a changelog." Landmark's adopted product boundary
-owns release truth:
-classification, importance, version decisions, synthesis status, release-kit
-plans, provenance, approval state, public release mutation, and
-machine-readable evidence. Release judgment and release mutation are one
-responsibility: Landmark should decide what becomes a release, reconcile the
-public systems that make it a release, and record the completed result.
-Judgment belongs at model-native seams: release classification and audience
-importance should be evaluated from structured commits, diff statistics, and
-release context by a BYOK model policy. Deterministic code still owns parsing,
-version math, provider policy, persistence, approvals, mutation safety, and
-schema contracts. GitHub, Slack, feeds, docs patches, blog drafts, screenshots,
-videos, and other final-mile surfaces are adapters and producers around that
-truth.
+Integration must be a no-brainer:
 
-Landmark is also a Misty Step ecosystem primitive. Every active Misty Step
-project should be able to adopt it so good release hygiene becomes automatic:
-semantic versioning, technical changelogs, user-facing release notes, release
-evidence, and richer release artifacts should not be reimagined by every agent
-in every repository.
+- The first useful result requires zero configuration and zero secrets:
+  point Landmark at a checkout and it previews the version, changelog, and
+  notes locally.
+- Configuration exists only to express taste — product name, audience,
+  voice, artifact destinations — never to make the basic path work.
+- The GitHub Action is one packaging layer, not the product. The product
+  boundary is the portable Rust CLI that local scripts, generic CI, and
+  agents call directly.
+- Landmark releases itself, visibly. A release tool whose own pipeline is
+  stale has no credibility; its self-release is the storefront.
 
-## North Star
+## Principles
 
-A maintainer or cold agent can preview a release locally, inspect the evidence,
-replay the action contract, and then run the same decision in CI without
-discovering hidden GitHub-only behavior. Changelogs, release notes, semantic
-versioning, release evidence, feeds, and artifact plans should feel obvious and
-programmatic. A release should be explainable before it mutates anything
-remote, and disagreements between deterministic floor signals, model
-classification, and publication policy should become visible alarms rather
-than quiet skips.
+**Stack universality.** Git history is the only hard requirement.
+Conventional commits are the recommended floor signal; everything else —
+ecosystem version evidence, package manifests, release pipelines — is an
+optional provider behind a typed seam. No stack is second-class, and nothing
+in the core may require a particular language runtime, forge, or CI system.
 
-## Release Transaction Boundary
+**One deterministic brain.** Version decisions are deterministic,
+explainable, and singular. Every entry point uses the same Rust engine.
+Unknown release intent is named and refused — never silently patched by
+substring heuristics. Model judgment extends the deterministic floor; it
+never replaces it.
 
-Landmark owns the complete release transaction, not only the decision that
-precedes it. Its small public contract should eventually be equivalent to:
+**Models at the seams, commodity cost by default.** LLMs classify and
+prose-write at explicit seams, with schema-constrained outputs, grounded in
+structured commit data, and gated by fabrication checks. Default model policy
+runs on commodity-cost models; premium models are an explicit, budgeted
+choice, never a hidden default. Provider policy is portable BYOK. Pins are
+reviewed on a clock so staleness is impossible to miss.
 
-```text
-publish(candidate release) -> completed release receipt
-```
+**Portable artifacts, explicit publication.** Release notes are portable
+artifacts — Markdown, HTML, JSON, RSS — that can live anywhere: in the
+repository, on a forge, or on a public release-notes surface. Publication to
+any public destination is an explicit, approved decision recorded in the
+release transaction — never a default. Content derived from a private source
+stays private unless that release explicitly opts it in, and ambiguity about
+destinations fails closed. Forge release records are one adapter, not the
+only home.
 
-The depth behind that contract includes version and audience judgment,
-artifact-policy validation, changelog and release-note production, repository
-metadata updates, tags, public release records, stable-channel declarations,
-and a durable receipt tying the result to its source revision and immutable
-artifact identities. Because those mutations cross systems, publication is a
-reconcilable transaction rather than a claim of distributed atomicity: retries
-inspect existing state, finish missing compatible mutations, return the same
-completed result when already applied, and fail closed on contradictions.
+**One release transaction.** `publish(candidate) -> completed receipt`.
+Release judgment and public release mutation are one deep responsibility:
+idempotent, inspect-before-write, resumable after partial failure, failing
+closed on contradictions (ADR 0004). Event delivery is a wake-up signal,
+never release truth. Artifact construction and deployment stay outside the
+boundary.
 
-Artifact construction and deployment remain outside this boundary. A product's
-build pipeline constructs, signs, and publishes its executable artifacts before
-Landmark declares the release stable. Landmark validates the supplied artifact
-manifest and records its immutable identities; it does not rebuild a product's
-container, package, or binary. Deployment systems consume only completed
-release receipts, treat forge or webhook events as wake-up signals, and own
-environment-specific desired state, promotion, health verification, rollback,
-and convergence. Landmark does not deploy releases or assert that an
-environment is current.
+**Explainable before mutation.** Every mutating path has a local dry-run,
+evidence output, or replay oracle. A cold agent can reproduce the CI decision
+locally before anything public changes.
 
-**Implementation status (2026-07-13):** this is the accepted target boundary,
-not a claim about the current output contract. Today's GitHub Action and CLI
-perform several release mutations and emit separate evidence/status outputs,
-but they do not yet expose one reconciled cross-system transaction or completed
-release receipt. That implementation belongs with the Rust-owned full-release
-work tracked in Powder; until it lands, consumers must not infer receipt
-authority from an existing tag, event, or synthesis-status output.
+**Visible disagreement.** When deterministic signals, model classification,
+and publication policy disagree, the disagreement becomes a visible alarm in
+the output — not a quiet skip.
 
-## What Must Stay True
+**Agents are first-class callers.** `describe --json`, versioned schemas,
+typed failure envelopes with `user_action`, and replay scenarios are public
+contract, not internal convenience.
 
-- The Rust CLI is the source of truth. `action.yml`, shell, and Node exist only
-  at platform boundaries.
-- Model-native classification is release intelligence, not a garnish. Parsed
-  commits and diff statistics feed the classifier; rendered changelog prose is
-  context, not the source of truth.
-- Conventional-commit parsing is a deterministic floor signal. It may drive
-  version math and catch obvious feature/fix/breaking signals, but it must not
-  silently replace the product brain with substring heuristics.
-- Version decisions must be deterministic, explainable, and singular. All
-  entry points should use one Rust engine, and unknown release intent should
-  refuse, warn, or require an explicit waiver rather than silently patching.
-- Public release mutation is part of release intelligence. Mutating paths must
-  be idempotent, inspect-before-write, resumable after partial failure, and
-  fail closed when existing public state contradicts the release decision.
-- Under the target contract, a candidate is not a stable release until every
-  required public mutation is reconciled and Landmark emits its completed
-  release receipt. Downstream consumers follow that receipt; event delivery
-  alone is not release truth.
-- Local preview is not optional. Every mutating path needs a dry-run,
-  evidence, replay, or schema oracle that can be exercised before publication.
-- Open-source adoption and internal dogfooding reinforce each other. Landmark
-  should serve external maintainers while staying simple enough to install
-  across Misty Step repos by default.
-- Release-kit artifacts are the boundary between Landmark's release intelligence
-  and downstream producers. Extend typed producer contracts before embedding a
-  bespoke media or CMS workflow in the core runtime.
-- Agent-native contracts are first-class. `landmark describe --json`,
-  `--error-format json`, `schemas/`, and replay scenarios are public surfaces,
-  not internal conveniences.
-- Architecture ratchets are allowed to stop work. When module boundaries blur,
-  split ownership or update the ratchet with an explicit architecture reason.
-- Synthesis failures must be visible and actionable. Weak notes, stale model
-  keys, and provider failures should produce evidence and operator action, not
-  quiet degradation.
+**Boring core, sharp boundaries.** Rust owns release truth. Shell, Node, and
+YAML exist only at platform seams and must stay thin enough to delete.
+Architecture ratchets may stop work; complexity must buy its way in.
+
+**Voice is data.** Release notes speak in the project's voice because voice
+is declared in the manifest — not because someone edited a prompt.
 
 ## What Landmark Refuses
 
-- Shell orchestration as the durable product core.
-- CI-only release behavior that cannot be reproduced locally.
+- Shell orchestration or YAML as the durable product core.
 - Keyword soup or substring matching masquerading as release intelligence.
-- Opaque version bumps, hidden provider policy, or untyped artifact side
-  effects.
-- Silent "successful" skips when structured feature, fix, breaking, or model
-  signals disagree with the skip decision.
-- Declaring a release complete from an event, tag, or partially mutated public
-  state without a reconciled completion receipt.
-- Making every consumer repo or agent reinvent changelog, release-note,
-  semantic-version, and release-evidence logic.
-- Monetization-first product shaping. Landmark may build credibility and
-  leverage, but near-term decisions should optimize usefulness, adoption, and
-  ecosystem defaulting rather than revenue capture.
-- Embedding brand design, demo media production, CMS publication, or long-lived
-  creative pipelines inside the release-intelligence runtime. Rich media output
-  belongs behind typed producer contracts.
+- Premium-model prices for commodity work by default.
+- Silent "successful" skips when structured signals, model judgment, or
+  publication policy disagree.
+- CI-only release behavior that cannot be reproduced locally.
+- Declaring release truth from a tag, an event, or partially mutated public
+  state.
+- Weakening architecture ratchets, schema checks, or gates to ship a feature.
+- Monetization-first product shaping. Landmark optimizes for usefulness,
+  adoption, and ecosystem defaulting.
+- Embedding brand design, demo media production, CMS publication, or
+  long-lived creative pipelines inside the release-intelligence runtime.
 - Building product executables or owning environment-specific deployment,
   promotion, health, rollback, or convergence policy.
-- Weakening `bin/check-architecture` or schema checks to ship a feature.
 
-## Current Bets
+## Direction
 
-1. Keep the CLI boundary sharp while the GitHub Action remains the easiest
-   adoption path.
-2. Make Landmark the default release layer for Misty Step projects before
-   asking strangers to trust it.
-3. Make `release-kit` the durable artifact graph for richer release workflows:
-   docs patches, blog drafts, screenshots, demo GIFs, videos, and other
-   intelligent release artifacts.
-4. Treat schema registry coverage as part of the product, especially for
-   agents.
-5. Prefer portable local and generic-CI modes over GitHub-only affordances.
-6. Turn every failure class into a stable envelope with a clear `user_action`.
-7. Back version decisions with a second, independent signal beyond commit
-   intent — diff-grounded semver evidence (e.g. `cargo-semver-checks` for Rust
-   consumers) reconciled against the conventional-commit bump, with a typed
-   waiver for declared product intent that legitimately overrides both
-   (backlog 005/002/009 — the differentiator arc, deliberately staged behind
-   the bets below until it can build on settled ground).
-8. Thin `action.yml`'s ~1,000 lines of embedded bash into one replayable Rust
-   `landmark action-run` command, with `semantic-release` remaining only as an
-   explicitly named compatibility path (backlog 007, then 010).
-9. Make the fleet self-healing: detect drift between installed consumer
-   workflows/manifests and current templates, and open the fix as a PR instead
-   of letting copy-pasted integration rot silently (backlog 008).
+Themes Landmark is heading toward, in rough order of leverage. This section
+names direction, not schedules or tickets.
 
-### Recently landed
-Model-native classification over parsed commits and diff statistics (with
-conventional commits as the deterministic floor signal), one shared Rust
-version-decision engine across every entry point (unknown commits are named,
-never silently patched), and published per-target release binaries with the
-`dist/` history purge — all three were open bets as of the 2026-07-01 groom;
-treat this file, not that snapshot, as current.
+1. **Thin the Action to CLI primitives.** The GitHub Action becomes a thin
+   assembly of the same commands generic CI calls. No release logic lives
+   only in embedded shell.
+2. **Complete the receipt.** Emit the unified release-transaction receipt
+   ADR 0004 defines so downstream systems follow one authority. Until it
+   ships, consumers must not infer receipt authority from tags, events, or
+   synthesis-status outputs.
+3. **Freshness as a property.** Model pins and dependencies are reviewed on
+   a clock and enforced by the gate. Staleness should be structurally
+   impossible to miss, not something someone happens to notice.
+4. **Diff-grounded semver evidence.** Reconcile the commit-intent bump with
+   independent API-diff evidence, with a typed waiver for declared product
+   intent that legitimately overrides both.
+5. **Hosted public release notes.** Explore a hosted surface that renders
+   Landmark's portable release-note artifacts at stable public URLs per
+   project and version. Only artifacts explicitly published to it appear
+   there; content from a private source reaches it solely through an
+   explicit, approved publication decision. The surface is a deterministic
+   consumer of the artifacts — never a second source of truth — and
+   self-hosting remains fully supported.
+6. **Release media as producer contracts.** Screenshots, GIF walkthroughs,
+   and demo videos are typed release-kit artifacts produced by explicit
+   producer adapters — local, browser, service, harness, or human — never
+   bespoke media pipelines embedded in the core runtime. Commodity
+   vision-capable models make this direction reachable; it stays behind the
+   producer contract until the text pipeline is boring.
+7. **Fleet self-healing.** Detect drift between installed consumer
+   workflows, manifests, and current templates, and open the fix as a PR
+   instead of letting copy-pasted integration rot silently.
 
 ## Where The Depth Lives
 
 - `README.md` explains adoption modes, CLI preview, GitHub Action use, and
   agent-native contracts.
-- `AGENTS.md` carries repo contracts, product boundaries, architecture rules,
-  and gate expectations.
-- `action.yml` is the composite GitHub Action wrapper and input/output contract.
+- `AGENTS.md` carries repo contracts, product boundaries, architecture
+  rules, and gate expectations.
+- `action.yml` is the composite GitHub Action wrapper and input/output
+  contract.
+- `docs/adr/` records boundary decisions; ADR 0002 covers the release-kit
+  producer boundary, ADR 0004 the release-transaction authority.
 - `docs/agent-integration.md` is the cold-start guide for agent adopters.
 - `schemas/` is the checked registry for manifests, release context,
   release-kit, replay, fleet plans, evidence, and failure envelopes.
-- `bin/gate` is the closeout gate; `bin/replay-action` is the release behavior
-  oracle for action and runtime contract changes.
+- `bin/gate` is the closeout gate; `bin/replay-action` is the release
+  behavior oracle for action and runtime contract changes.
