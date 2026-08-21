@@ -45,7 +45,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "policy": { "type": "string", "enum": ["cheap", "balanced", "rich", "off"] },
+        "policy": { "type": "string", "pattern": "^[cC][hH][eE][aA][pP]$|^[bB][aA][lL][aA][nN][cC][eE][dD]$|^[rR][iI][cC][hH]$|^[oO][fF][fF]$" },
         "primary": { "type": "string" },
         "fallbacks": { "type": "array", "items": { "type": "string" } }
       }
