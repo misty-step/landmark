@@ -1,0 +1,8 @@
+repo: misty-step/landmark
+agents:
+  builder:  { poll: "./forest poll builder",  interval: 300 }
+  verifier: { poll: "./forest poll verifier", interval: 120 }
+  fixer:    { poll: "./forest poll fixer",    interval: 300 }
+checks:
+  - name: gate
+    run: ./bin/gate
