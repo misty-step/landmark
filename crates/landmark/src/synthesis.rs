@@ -133,14 +133,7 @@ pub(crate) fn synthesize(args: SynthesizeArgs) -> Result<()> {
     validate_nonblank(&args.api_key, "api-key")?;
     validate_nonblank(&context.cost.model, "model")?;
     let mut models = vec![context.cost.model.clone()];
-    models.extend(
-        config
-            .fallback_models
-            .split(',')
-            .map(str::trim)
-            .filter(|model| !model.is_empty())
-            .map(str::to_string),
-    );
+    models.extend(effective_fallback_models(&config, &context.cost.model));
     let mut last_error = String::new();
     let mut attempts = Vec::new();
     let mut last_ungrounded: Option<ClaimSourceMap> = None;
@@ -257,10 +250,8 @@ pub(crate) fn resolve_synthesis_config(args: &SynthesizeArgs) -> Result<Effectiv
         .unwrap_or_default();
     let fallback_models = if !args.fallback_models.trim().is_empty() {
         args.fallback_models.trim().to_string()
-    } else if !manifest.model.fallbacks.is_empty() {
-        manifest.model.fallbacks.join(",")
     } else {
-        default_fallback_models(&model)
+        manifest.model.fallbacks.join(",")
     };
     let model_explicit = !args.model.trim().is_empty()
         || manifest

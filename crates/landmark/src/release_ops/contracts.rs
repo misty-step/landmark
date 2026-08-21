@@ -585,6 +585,7 @@ pub(crate) fn validate_manifest_action_precedence_contract(action: &str) -> Vec<
         "steps.manifest_defaults.outputs.model_policy",
         "MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}",
         "steps.manifest_defaults.outputs.default_model",
+        "inputs.llm-model || steps.manifest_defaults.outputs.llm_model || steps.manifest_defaults.outputs.default_model",
         "Landmark LLM healthcheck skipped because model.policy=off disables synthesis.",
         "inputs.llm-fallback-models || steps.manifest_defaults.outputs.llm_fallback_models",
         "inputs.audience || steps.manifest_defaults.outputs.audience",

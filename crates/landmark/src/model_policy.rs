@@ -10,7 +10,10 @@
 use crate::*;
 
 pub(crate) fn policy_default_model(policy: Option<&str>) -> Option<String> {
-    let tier = match policy.and_then(trimmed_option).as_deref() {
+    let normalized = policy
+        .and_then(trimmed_option)
+        .map(|value| value.to_ascii_lowercase());
+    let tier = match normalized.as_deref() {
         Some("off") => "off",
         Some("cheap") => "cheap",
         Some("rich") => "rich",
@@ -36,22 +39,32 @@ pub(crate) fn default_model_for_tier(tier: &str) -> &'static str {
     }
 }
 
-/// Default synthesis fallback chain: preference order over the pinned tiers
-/// (commodity flash, provider-diverse Gemini, rich escalation) minus the
-/// resolved primary. Defined here so portable CLI synthesis and the GitHub
-/// Action mirror one chain contract; explicit args or manifest fallbacks win.
-pub(crate) fn default_fallback_models(primary: &str) -> String {
-    if primary == "off" {
-        return String::new();
-    }
-    let mut models = Vec::new();
-    for tier in ["cheap", "classification-fallback", "rich"] {
-        let model = default_model_for_tier(tier);
-        if model != primary {
-            push_unique_model(&mut models, model);
+/// Models attempted for note synthesis: explicitly configured fallbacks when
+/// present, otherwise the derived default chain (preference order over the
+/// pinned tiers minus the SELECTED primary — the escalated rich model, not
+/// just config.model). This is the only place the derived chain exists, so
+/// classification — which reads only configured fallbacks — can never
+/// inherit synthesis escalation.
+pub(crate) fn effective_fallback_models(
+    config: &EffectiveSynthesisConfig,
+    selected_primary: &str,
+) -> Vec<String> {
+    let mut models: Vec<String> = config
+        .fallback_models
+        .split(',')
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(str::to_string)
+        .collect();
+    if models.is_empty() && selected_primary != "off" {
+        for tier in ["cheap", "classification-fallback", "rich"] {
+            let model = default_model_for_tier(tier);
+            if model != selected_primary {
+                push_unique_model(&mut models, model);
+            }
         }
     }
-    models.join(",")
+    models
 }
 
 pub(crate) fn cheap_model(config: &EffectiveSynthesisConfig) -> String {

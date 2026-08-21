@@ -31,6 +31,8 @@ mod errors;
 mod extract_prs_tests;
 mod manifest;
 mod model_policy;
+#[cfg(test)]
+mod model_policy_tests;
 mod pr_range;
 mod providers;
 #[cfg(test)]

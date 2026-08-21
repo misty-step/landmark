@@ -231,7 +231,7 @@ runs:
       shell: bash
       env:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
-        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.default_model }}
+        LLM_MODEL: ${{ inputs.llm-model || steps.manifest_defaults.outputs.llm_model || steps.manifest_defaults.outputs.default_model }}
         MODEL_POLICY: ${{ steps.manifest_defaults.outputs.model_policy }}
         LLM_API_URL: ${{ inputs.llm-api-url }}
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
