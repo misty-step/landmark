@@ -567,7 +567,7 @@ release-mutating workflow.
 | `github-token` | Yes | - | GitHub App installation token or PAT with repo write access. Used by `semantic-release` and GitHub API update calls. See [Why a GitHub App, not a PAT](#why-a-github-app-not-a-pat). |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
-| `llm-fallback-models` | No | manifest, then `google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813` | Comma-separated fallback model IDs tried in order if primary fails; with neither set, the Rust runtime applies the same chain. |
+| `llm-fallback-models` | No | manifest, then runtime-derived chain (see `crates/landmark/src/model_policy.rs`) | Comma-separated fallback model IDs tried in order if primary fails; with neither set, the Rust runtime derives the chain at attempt time from the pinned tiers, excluding the selected primary. |
 | `llm-api-url` | No | `https://openrouter.ai/api/v1/chat/completions` | OpenAI-compatible chat completions endpoint URL. |
 | `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
 | `stability` | No | `auto` | Versioning stability policy: `auto` (detect from the latest tag — below 1.0.0 or untagged is pre-stable), `pre-stable` (Cargo-style 0.x rules), or `stable` (standard SemVer). Ignored when the repo ships its own semantic-release config. See [Versioning Philosophy](#versioning-philosophy). |
