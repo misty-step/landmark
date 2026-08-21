@@ -1,3 +1,8 @@
+# [0.28.2](https://github.com/misty-step/landmark/compare/v0.28.1...v0.28.2) (2026-07-14)
+
+### Features
+
+* prepare and bind atomic release transactions (#215) ([a28a590](https://github.com/misty-step/landmark/commit/a28a5900fc7794be3de5d52196562af3990a64cf))
 # [0.28.1](https://github.com/misty-step/landmark/compare/v0.28.0...v0.28.1) (2026-07-09)
 
 ### Bug Fixes
