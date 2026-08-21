@@ -148,3 +148,51 @@ fn cost_estimates_use_current_commodity_pins() {
     let rich = estimate_model_cost_usd("rich", 12_000, 1_200);
     assert!(rich > flash * 10.0, "rich {rich} must exceed cheap {flash}");
 }
+
+#[test]
+fn manifest_policy_case_is_accepted_and_normalized_end_to_end() {
+    for (manifest_policy, expected_model) in
+        [("OFF", "off"), ("Rich", "deepseek/deepseek-v4-pro-0813")]
+    {
+        let repo = tempfile::tempdir().unwrap();
+        fs::write(
+            repo.path().join(".landmark.yml"),
+            format!("product:\n  name: Demo\nmodel:\n  policy: {manifest_policy}\n"),
+        )
+        .unwrap();
+        let args = SynthesizeArgs {
+            api_key: "test".into(),
+            model: String::new(),
+            model_policy: String::new(),
+            api_url: "http://example.invalid".into(),
+            fallback_models: String::new(),
+            product_name: "Demo".into(),
+            product_description: String::new(),
+            voice_guide: String::new(),
+            audience: None,
+            changelog_source: None,
+            version: "v1.2.3".into(),
+            changelog_file: repo.path().join("CHANGELOG.md"),
+            release_body_file: repo.path().join("release.md"),
+            pr_changelog_file: PathBuf::from("."),
+            prompt_template: PathBuf::from("."),
+            quality_file: repo.path().join("quality.txt"),
+            attempts_file: PathBuf::from("."),
+            templates_dir: PathBuf::from("templates/prompts"),
+            repo_root: repo.path().to_path_buf(),
+            dry_run_cost: false,
+            context_metadata_file: PathBuf::from("."),
+            claim_map_file: PathBuf::from("."),
+        };
+        let config = resolve_synthesis_config(&args).unwrap();
+        assert_eq!(
+            config.model, expected_model,
+            "manifest policy {manifest_policy} must resolve through tier pins"
+        );
+        if expected_model == "off" {
+            let (tier, _, skip, _) = selected_model_plan(&config, &high_significance());
+            assert!(skip);
+            assert_eq!(tier, "off");
+        }
+    }
+}
