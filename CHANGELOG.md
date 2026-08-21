@@ -1,3 +1,13 @@
+# [0.28.3](https://github.com/misty-step/landmark/compare/v0.28.2...v0.28.3) (2026-08-21)
+
+### Features
+
+* **model-policy:** repin all tiers to commodity DeepSeek/Gemini models (#218) ([90dce6f](https://github.com/misty-step/landmark/commit/90dce6fe27624c8a7a10c3aeae85dfac9ab40e69))
+
+### Bug Fixes
+
+* **manifest:** accept any case for model.policy (#220) ([037d2a9](https://github.com/misty-step/landmark/commit/037d2a9b6b642169b8765abf8d5fa55c7d29f4c9))
+* **schema:** make manifest model.policy case-insensitive (#221) ([2938de9](https://github.com/misty-step/landmark/commit/2938de96883bab02cdf270a0725f3c00e040eab1))
 # [0.28.2](https://github.com/misty-step/landmark/compare/v0.28.1...v0.28.2) (2026-07-14)
 
 ### Features
