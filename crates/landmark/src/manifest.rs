@@ -590,7 +590,10 @@ pub(crate) fn validate_manifest(manifest: &LandmarkManifest) -> Vec<String> {
         ));
     }
     if let Some(policy) = manifest.model.policy.as_deref().and_then(trimmed_option)
-        && !matches!(policy.as_str(), "cheap" | "balanced" | "rich" | "off")
+        && !matches!(
+            policy.to_ascii_lowercase().as_str(),
+            "cheap" | "balanced" | "rich" | "off"
+        )
     {
         errors.push(format!(
             "manifest model.policy must be cheap, balanced, rich, or off; got {policy}"
