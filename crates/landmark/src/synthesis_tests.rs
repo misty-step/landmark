@@ -232,3 +232,20 @@ fn fixture_release_repo(release_subject: &str) -> tempfile::TempDir {
     run_ok("git", ["tag", "v1.1.0"], repo.path()).unwrap();
     repo
 }
+
+#[test]
+fn extract_release_section_accepts_single_hash_release_headings() {
+    // Landmark's own semantic-release changelog uses `# [0.28.5](...)` H1
+    // headings. The extractor previously matched only `##`, so reading its own
+    // releases fell back to raw git commits instead of the changelog section.
+    let changelog = "# [0.28.5](https://github.com/misty-step/landmark/compare/v0.28.4...v0.28.5) (2026-08-22)\n\n### Bug Fixes\n\n* **deps:** restore canonical Hmac construction (#242)\n\n# [0.28.4](https://github.com/misty-step/landmark/compare/v0.28.3...v0.28.4) (2026-08-22)\n\n### Features\n\n* **gate:** enforce dependency and model-pin freshness\n";
+    let section = extract_release_section(changelog, "v0.28.5").unwrap();
+    assert!(section.contains("restore canonical Hmac"), "{section}");
+    assert!(!section.contains("enforce dependency freshness"));
+
+    let older = extract_release_section(changelog, "v0.28.4").unwrap();
+    assert!(
+        older.contains("enforce dependency and model-pin freshness"),
+        "{older}"
+    );
+}

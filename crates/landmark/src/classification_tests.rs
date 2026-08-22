@@ -645,3 +645,72 @@ fn fixture_repo_with_landmark_125_commits() -> tempfile::TempDir {
 fn landmark_125_semantic_release_changelog() -> String {
     "# [1.25.0](https://github.com/misty-step/landmark/compare/v1.24.0...v1.25.0) (2026-06-25)\n\n### Features\n\n* **fleet:** deliver backfill-first adoption lane\n* **run:** emit release kit artifact graph\n\n### Bug Fixes\n\n* **fleet:** attach to existing release workflows\n".into()
 }
+
+#[test]
+fn maintenance_scoped_fix_is_not_user_visible() {
+    let commits = vec![context_commit(
+        "fix(deps): restore canonical Hmac construction",
+        "",
+    )];
+    let technical =
+        "### Bug Fixes\n\n* **deps:** restore canonical Hmac construction (#242)\n".to_string();
+    let deterministic = deterministic_context(commits, vec![]);
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(!classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "low");
+    assert!(
+        classification
+            .deterministic_signals
+            .iter()
+            .any(|signal| signal == "conventional:fix(maintenance-scope)"),
+        "{classification:?}"
+    );
+}
+
+#[test]
+fn user_scoped_fix_stays_user_visible() {
+    let commits = vec![context_commit("fix(cli): crash on empty changelog", "")];
+    let technical = "### Bug Fixes\n\n* crash on empty changelog\n".to_string();
+    let deterministic = deterministic_context(commits, vec![]);
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+    assert_eq!(classification.significance, "medium");
+}
+
+#[test]
+fn mixed_scopes_follow_the_visible_majority_signal() {
+    let commits = vec![
+        context_commit("fix(deps): bump sha2 to 0.11", ""),
+        context_commit("fix(cli): reject blank product names", ""),
+    ];
+    let technical =
+        "### Bug Fixes\n\n* bump sha2 to 0.11 (#236)\n* reject blank product names (#242)\n"
+            .to_string();
+    let deterministic = deterministic_context(commits, vec![]);
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+}

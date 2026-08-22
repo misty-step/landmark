@@ -318,16 +318,18 @@ pub(crate) fn read_optional_file(path: &Path) -> Result<Option<String>> {
 pub(crate) fn extract_release_section(text: &str, version: &str) -> Option<String> {
     let normalized =
         normalize_version(version).unwrap_or_else(|_| version.trim_start_matches('v').to_string());
-    let heading = Regex::new(r"(?m)^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9][^\]\s]*)\]?.*$").unwrap();
-    let matches: Vec<_> = heading.find_iter(text).collect();
-    for (index, mat) in matches.iter().enumerate() {
-        let line = text[mat.start()..mat.end()].to_string();
-        if line.contains(&normalized) || line.contains(version) {
-            let end = matches
+    let heading = Regex::new(r"(?m)^#{1,2}\s+\[?v?([0-9]+\.[0-9]+\.[0-9][^\]\s]*)\]?.*$").unwrap();
+    let headings: Vec<(String, usize)> = heading
+        .captures_iter(text)
+        .map(|caps| (caps[1].to_string(), caps.get(0).unwrap().start()))
+        .collect();
+    for (index, (captured, start)) in headings.iter().enumerate() {
+        if captured == &normalized || captured == version.trim_start_matches('v') {
+            let end = headings
                 .get(index + 1)
-                .map(|next| next.start())
+                .map(|(_, next)| *next)
                 .unwrap_or(text.len());
-            return Some(text[mat.start()..end].trim().to_string());
+            return Some(text[*start..end].trim().to_string());
         }
     }
     // No heading matches this release. Silently returning the first (most recent)
