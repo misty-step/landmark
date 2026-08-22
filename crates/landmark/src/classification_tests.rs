@@ -714,3 +714,46 @@ fn mixed_scopes_follow_the_visible_majority_signal() {
 
     assert!(classification.user_visible, "{classification:?}");
 }
+
+#[test]
+fn wrapper_subject_does_not_suppress_body_level_public_feat() {
+    let commits = vec![context_commit(
+        "fix(build): repair wrapper script",
+        "feat(ui): add export command\n",
+    )];
+    let technical =
+        "### Bug Fixes\n\n* repair wrapper script\n\n### Features\n\n* add export command\n"
+            .to_string();
+    let deterministic = deterministic_context(commits, vec![]);
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+}
+
+#[test]
+fn body_level_maintenance_fix_stays_internal_under_public_wrapper() {
+    let commits = vec![context_commit(
+        "fix(cli): reject blank product names",
+        "fix(deps): bump hmac to 0.13\n",
+    )];
+    let technical =
+        "### Bug Fixes\n\n* reject blank product names\n* bump hmac to 0.13\n".to_string();
+    let deterministic = deterministic_context(commits, vec![]);
+    let sources = vec![context_source(
+        "technical_changelog",
+        "changelog",
+        &technical,
+    )];
+
+    let classification =
+        classify_release_context_with_deterministic(&technical, &sources, &deterministic);
+
+    assert!(classification.user_visible, "{classification:?}");
+}

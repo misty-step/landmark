@@ -1,3 +1,0 @@
-0.28.5 (2026-08-22)
-Bug Fixes
-* deps: restore canonical Hmac::new_from_slice construction (#242) (410e5a1)

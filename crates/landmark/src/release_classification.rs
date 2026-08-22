@@ -22,8 +22,8 @@ pub(crate) fn classify_release_context_with_deterministic(
 
     for commit in &relevant_commits {
         let commit_text = format!("{}\n{}", commit.subject, commit.body).to_ascii_lowercase();
-        let maintenance_scope = internal_process_subject(&commit.subject);
-        for commit_type in commit_conventional_types(commit) {
+        for (commit_type, source_line) in commit_conventional_entries(commit) {
+            let maintenance_scope = internal_process_subject(&source_line);
             match commit_type.as_str() {
                 "feat" | "fix" | "perf" if maintenance_scope => {
                     low_value_count += 1;
@@ -471,17 +471,28 @@ pub(crate) fn push_unique_category(categories: &mut Vec<String>, category: &str)
     }
 }
 
-pub(crate) fn commit_conventional_types(commit: &ContextCommit) -> BTreeSet<String> {
-    let mut types = BTreeSet::new();
+pub(crate) fn commit_conventional_entries(commit: &ContextCommit) -> Vec<(String, String)> {
+    // One entry per conventional line, deduplicated by (type, source) so the
+    // same fix appearing twice collapses but same-type opposite-scope entries
+    // (wrapper fix(build) + body fix(ui)) are both preserved and classified
+    // against their own source line.
+    let mut entries: Vec<(String, String)> = Vec::new();
     if !commit.conventional_type.trim().is_empty() {
-        types.insert(commit.conventional_type.clone());
+        entries.push((commit.conventional_type.clone(), commit.subject.clone()));
     }
     for line in commit.body.lines() {
-        if let Some(commit_type) = conventional_commit_type(normalized_commit_line(line)) {
-            types.insert(commit_type.to_string());
+        let normalized = normalized_commit_line(line);
+        if let Some(kind) = conventional_commit_type(normalized) {
+            let source = normalized.to_string();
+            if !entries
+                .iter()
+                .any(|(kind_seen, source_seen)| kind_seen == kind && source_seen == &source)
+            {
+                entries.push((kind.to_string(), source));
+            }
         }
     }
-    types
+    entries
 }
 
 pub(crate) fn release_relevant_commits<'a>(
