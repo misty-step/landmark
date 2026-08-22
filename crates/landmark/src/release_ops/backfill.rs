@@ -611,5 +611,5 @@ pub(crate) fn estimate_prompt_tokens(text: &str) -> usize {
 }
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
