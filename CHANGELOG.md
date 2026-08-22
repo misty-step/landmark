@@ -1,3 +1,8 @@
+# [0.28.5](https://github.com/misty-step/landmark/compare/v0.28.4...v0.28.5) (2026-08-22)
+
+### Bug Fixes
+
+* **deps:** restore canonical Hmac::new_from_slice construction (#242) ([410e5a1](https://github.com/misty-step/landmark/commit/410e5a1c34c0944440c96649309cca7a6383925e))
 # [0.28.4](https://github.com/misty-step/landmark/compare/v0.28.3...v0.28.4) (2026-08-22)
 
 ### Features
