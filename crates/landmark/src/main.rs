@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use clap::{Args, CommandFactory, Parser, Subcommand};
-use hmac::{Hmac, Mac};
+use hmac::{KeyInit, Mac, SimpleHmac};
 use pulldown_cmark::{Options, Parser as MarkdownParser, html};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
