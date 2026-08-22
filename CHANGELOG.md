@@ -1,3 +1,8 @@
+# [0.28.4](https://github.com/misty-step/landmark/compare/v0.28.3...v0.28.4) (2026-08-22)
+
+### Features
+
+* **gate:** enforce dependency and model-pin freshness ([bfd2fd9](https://github.com/misty-step/landmark/commit/bfd2fd9ba1d1cbaa51248dbbfa9c2b75fd265387))
 # [0.28.3](https://github.com/misty-step/landmark/compare/v0.28.2...v0.28.3) (2026-08-21)
 
 ### Features
