@@ -271,7 +271,7 @@ pub(crate) fn notify_webhook(args: NotifyWebhookArgs) -> Result<()> {
 }
 
 pub(crate) fn compute_signature(secret: &str, body: &[u8]) -> Result<String> {
-    let mut mac = SimpleHmac::<Sha256>::new_from_slice(secret.as_bytes())?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())?;
     mac.update(body);
     Ok(format!(
         "sha256={}",
