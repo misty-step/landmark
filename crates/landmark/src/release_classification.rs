@@ -22,8 +22,15 @@ pub(crate) fn classify_release_context_with_deterministic(
 
     for commit in &relevant_commits {
         let commit_text = format!("{}\n{}", commit.subject, commit.body).to_ascii_lowercase();
+        let maintenance_scope = internal_process_subject(&commit.subject);
         for commit_type in commit_conventional_types(commit) {
             match commit_type.as_str() {
+                "feat" | "fix" | "perf" if maintenance_scope => {
+                    low_value_count += 1;
+                    categories.insert("maintenance");
+                    deterministic_signals
+                        .insert(format!("conventional:{commit_type}(maintenance-scope)"));
+                }
                 "feat" | "fix" | "perf" => {
                     user_visible = true;
                     categories.insert("user-visible");
