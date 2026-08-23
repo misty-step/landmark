@@ -1,3 +1,8 @@
+# [0.28.7](https://github.com/misty-step/landmark/compare/v0.28.6...v0.28.7) (2026-08-23)
+
+### Bug Fixes
+
+* **gate:** make the semantic-release dry-run proof fail loudly (#249) ([e33c216](https://github.com/misty-step/landmark/commit/e33c21681433da36720a9d3a7eada599239cb386))
 # [0.28.6](https://github.com/misty-step/landmark/compare/v0.28.5...v0.28.6) (2026-08-23)
 
 ### Features
