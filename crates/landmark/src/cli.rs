@@ -803,6 +803,13 @@ pub(crate) struct PublishSelfReleaseArgs {
     pub(crate) github_output: String,
     #[arg(long = "api-base-url", default_value = "https://api.github.com")]
     pub(crate) api_base_url: String,
+    /// Compose this file's notes ahead of the technical changelog in the
+    /// created release body
+    #[arg(long = "release-notes-file", default_value = "")]
+    pub(crate) release_notes_file: String,
+    /// Emit the pending-release decision without creating anything
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Serialize)]

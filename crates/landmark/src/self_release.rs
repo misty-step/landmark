@@ -152,6 +152,44 @@ pub(crate) fn emit_self_release_plan(plan: &SelfReleasePlan, github_output: &str
 pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     validate_repo(&args.repository)?;
     validate_nonblank(&args.target_sha, "target-sha")?;
+    let mut plan = self_release_plan(&args)?;
+    if args.dry_run || !plan.published {
+        // Dry-run shares the live output schema so the workflow can gate
+        // synthesis on `published` before any mutation or LLM spend. The plan
+        // is local-only (no network), so dry-run works without credentials.
+        return emit_self_release_publish(&plan, &args.github_output);
+    }
+
+    // The release-already-exists check needs the forge API, so it stays on
+    // the live path after the dry-run gate.
+    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
+    if let Some(value) = provider.release_by_tag(&args.repository, &plan.release_tag)? {
+        plan.published = false;
+        plan.reason = "release already exists".into();
+        plan.release_url = value["html_url"].as_str().unwrap_or("").to_string();
+        return emit_self_release_publish(&plan, &args.github_output);
+    }
+
+    let mut body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &plan.version)?;
+    if !args.release_notes_file.trim().is_empty() {
+        // Pre-publication synthesis must yield real notes: an empty or
+        // missing file fails here instead of silently publishing a
+        // technical-only body.
+        let notes = read_nonempty(Path::new(&args.release_notes_file))?;
+        body = compose_release_body(&notes, &body);
+    }
+
+    let release_url =
+        provider.create_release(&args.repository, &plan.release_tag, &args.target_sha, &body)?;
+    plan.reason = "published release from landed release pull request".into();
+    plan.release_url = release_url;
+    emit_self_release_publish(&plan, &args.github_output)
+}
+
+/// Shared local-only pre-mutation decision for self-releases: metadata must
+/// be ahead of the latest tag. No network; the forge exists-check stays on
+/// the live publish path after the dry-run gate.
+fn self_release_plan(args: &PublishSelfReleaseArgs) -> Result<SelfReleasePublish> {
     let latest_version = latest_repo_version(&args.repo_root)?;
     let package_version = package_version(&args.repo_root)?;
     let cargo = cargo_version(&args.repo_root.join("crates/landmark/Cargo.toml"))
@@ -163,43 +201,24 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
         .into());
     }
     if semver_key(&package_version)? <= semver_key(&latest_version)? {
-        let publish = SelfReleasePublish {
+        return Ok(SelfReleasePublish {
             published: false,
             reason: "metadata is not ahead of latest release tag".into(),
             latest_version,
             version: package_version,
             release_tag: String::new(),
             release_url: String::new(),
-        };
-        return emit_self_release_publish(&publish, &args.github_output);
+        });
     }
-
     let release_tag = format!("v{package_version}");
-    let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
-    if let Some(value) = provider.release_by_tag(&args.repository, &release_tag)? {
-        let publish = SelfReleasePublish {
-            published: false,
-            reason: "release already exists".into(),
-            latest_version,
-            version: package_version,
-            release_tag,
-            release_url: value["html_url"].as_str().unwrap_or("").to_string(),
-        };
-        return emit_self_release_publish(&publish, &args.github_output);
-    }
-
-    let body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &package_version)?;
-    let release_url =
-        provider.create_release(&args.repository, &release_tag, &args.target_sha, &body)?;
-    let publish = SelfReleasePublish {
+    Ok(SelfReleasePublish {
         published: true,
-        reason: "published release from landed release pull request".into(),
+        reason: "pending release from landed release pull request".into(),
         latest_version,
         version: package_version,
         release_tag,
-        release_url,
-    };
-    emit_self_release_publish(&publish, &args.github_output)
+        release_url: String::new(),
+    })
 }
 
 pub(crate) fn emit_self_release_publish(
