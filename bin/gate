@@ -60,20 +60,27 @@ git diff --check
 # majors cannot merge without proving they load, analyze, and generate
 # notes (landmark-semrel-dryrun-proof).
 if [ -d node_modules/semantic-release ]; then
+  # The fixture origin and the working clone share HEAD so semantic-release
+  # treats the branch as up to date and actually runs verify/analyze/notes
+  # instead of short-circuiting on a stale-branch check (which exits 0 even
+  # with a broken analyzer).
   semrel_fix="$(mktemp -d)"
-  git init -q -b master "$semrel_fix"
-  git -C "$semrel_fix" config user.email gate@localhost
-  git -C "$semrel_fix" config user.name gate
-  echo "# proof" > "$semrel_fix/README.md"
-  git -C "$semrel_fix" add -A
-  git -C "$semrel_fix" commit -qm "chore: base"
-  git -C "$semrel_fix" tag v0.1.0
-  echo "feat(proof): exercise the semantic-release stack" > "$semrel_fix/proof.txt"
-  git -C "$semrel_fix" add -A
-  git -C "$semrel_fix" commit -qm "feat(proof): exercise the semantic-release stack"
-  cat > "$semrel_fix/.releaserc.json" <<'JSON'
+  git init -q --bare -b master "$semrel_fix/origin.git"
+  git clone -q "$semrel_fix/origin.git" "$semrel_fix/repo"
+  git -C "$semrel_fix/repo" config user.email gate@localhost
+  git -C "$semrel_fix/repo" config user.name gate
+  echo "# proof" > "$semrel_fix/repo/README.md"
+  git -C "$semrel_fix/repo" add -A
+  git -C "$semrel_fix/repo" commit -qm "chore: base"
+  git -C "$semrel_fix/repo" tag v0.1.0
+  git -C "$semrel_fix/repo" push -q origin master
+  git -C "$semrel_fix/repo" push -q origin v0.1.0
+  echo "feat(proof): exercise the semantic-release stack" > "$semrel_fix/repo/proof.txt"
+  git -C "$semrel_fix/repo" add -A
+  git -C "$semrel_fix/repo" commit -qm "feat(proof): exercise the semantic-release stack"
+  cat > "$semrel_fix/repo/.releaserc.json" <<JSON
 {
-  "repositoryUrl": "https://github.com/misty-step/landmark",
+  "repositoryUrl": "file://$semrel_fix/origin.git",
   "branches": ["master"],
   "plugins": [
     "@semantic-release/commit-analyzer",
@@ -83,10 +90,16 @@ if [ -d node_modules/semantic-release ]; then
   ]
 }
 JSON
-  if ! (cd "$semrel_fix" && GH_TOKEN=dummy CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run); then
+  semrel_log="$(mktemp)"
+  if ! (cd "$semrel_fix/repo" && CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run) | tee "$semrel_log"; then
     echo "::error::semantic-release dry-run proof failed; the release stack cannot load or analyze"
-    rm -rf "$semrel_fix"
+    rm -rf "$semrel_fix" "$semrel_log"
     exit 1
   fi
-  rm -rf "$semrel_fix"
+  if ! grep -q "The next release version is 0.2.0" "$semrel_log"; then
+    echo "::error::semantic-release dry-run never analyzed commits; analyzer proof inconclusive"
+    rm -rf "$semrel_fix" "$semrel_log"
+    exit 1
+  fi
+  rm -rf "$semrel_fix" "$semrel_log"
 fi
