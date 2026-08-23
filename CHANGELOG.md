@@ -1,3 +1,13 @@
+# [0.28.6](https://github.com/misty-step/landmark/compare/v0.28.5...v0.28.6) (2026-08-23)
+
+### Features
+
+* **self-release:** synthesize notes before publication; compose once (#247) ([ebd2619](https://github.com/misty-step/landmark/commit/ebd2619b50455644231f0c8085313d14b955b705))
+
+### Bug Fixes
+
+* **classification:** maintenance scopes are not user-visible; extract H1 changelog sections (#244) ([e129c05](https://github.com/misty-step/landmark/commit/e129c05b763baf91620681951275808a4a9a598d))
+* **classification:** classify each conventional entry against its own scope (#246) ([33f2a49](https://github.com/misty-step/landmark/commit/33f2a491e866af92254c57f6da7b389f635f71df))
 # [0.28.5](https://github.com/misty-step/landmark/compare/v0.28.4...v0.28.5) (2026-08-22)
 
 ### Bug Fixes
