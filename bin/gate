@@ -55,3 +55,35 @@ else
 fi
 
 git diff --check
+
+# Exercise the semantic-release stack on a throwaway repo so dependency
+# majors cannot merge without proving they load, analyze, and generate
+# notes (landmark-semrel-dryrun-proof).
+if [ -d node_modules/semantic-release ]; then
+  semrel_fix="$(mktemp -d)"
+  git init -q "$semrel_fix"
+  git -C "$semrel_fix" config user.email gate@localhost
+  git -C "$semrel_fix" config user.name gate
+  echo "# proof" > "$semrel_fix/README.md"
+  git -C "$semrel_fix" add -A
+  git -C "$semrel_fix" commit -qm "chore: base"
+  git -C "$semrel_fix" tag v0.1.0
+  echo "feat(proof): exercise the semantic-release stack" > "$semrel_fix/proof.txt"
+  git -C "$semrel_fix" add -A
+  git -C "$semrel_fix" commit -qm "feat(proof): exercise the semantic-release stack"
+  cat > "$semrel_fix/.releaserc.json" <<'JSON'
+{
+  "branches": ["master"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    ["@semantic-release/git", { "assets": ["CHANGELOG.md"] }]
+  ]
+}
+JSON
+  (cd "$semrel_fix" && GH_TOKEN=dummy CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run > /dev/null 2>&1) || {
+    errors+=("semantic-release dry-run proof failed; the release stack cannot load or analyze")
+  }
+  rm -rf "$semrel_fix"
+fi
