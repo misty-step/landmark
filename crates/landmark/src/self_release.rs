@@ -153,7 +153,7 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     validate_repo(&args.repository)?;
     validate_nonblank(&args.target_sha, "target-sha")?;
     let mut plan = self_release_plan(&args)?;
-    if args.dry_run || !plan.published {
+    if args.dry_run || !plan.pending && !plan.published {
         // Dry-run shares the live output schema so the workflow can gate
         // synthesis on `published` before any mutation or LLM spend. The plan
         // is local-only (no network), so dry-run works without credentials.
@@ -165,22 +165,28 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
     if let Some(value) = provider.release_by_tag(&args.repository, &plan.release_tag)? {
         plan.published = false;
+        plan.pending = false;
         plan.reason = "release already exists".into();
         plan.release_url = value["html_url"].as_str().unwrap_or("").to_string();
         return emit_self_release_publish(&plan, &args.github_output);
     }
 
-    let mut body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &plan.version)?;
-    if !args.release_notes_file.trim().is_empty() {
-        // Pre-publication synthesis must yield real notes: an empty or
-        // missing file fails here instead of silently publishing a
-        // technical-only body.
-        let notes = read_nonempty(Path::new(&args.release_notes_file))?;
-        body = compose_release_body(&notes, &body);
+    if args.release_notes_file.trim().is_empty() {
+        return Err(
+            "pending self-release requires --release-notes-file (pre-publication synthesis output)"
+                .into(),
+        );
     }
+    let mut body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &plan.version)?;
+    // Pre-publication synthesis must yield real notes: an empty or missing
+    // file fails here instead of silently publishing a technical-only body.
+    let notes = read_nonempty(Path::new(&args.release_notes_file))?;
+    body = compose_release_body(&notes, &body);
 
     let release_url =
         provider.create_release(&args.repository, &plan.release_tag, &args.target_sha, &body)?;
+    plan.pending = false;
+    plan.published = true;
     plan.reason = "published release from landed release pull request".into();
     plan.release_url = release_url;
     emit_self_release_publish(&plan, &args.github_output)
@@ -203,6 +209,7 @@ fn self_release_plan(args: &PublishSelfReleaseArgs) -> Result<SelfReleasePublish
     if semver_key(&package_version)? <= semver_key(&latest_version)? {
         return Ok(SelfReleasePublish {
             published: false,
+            pending: false,
             reason: "metadata is not ahead of latest release tag".into(),
             latest_version,
             version: package_version,
@@ -212,7 +219,8 @@ fn self_release_plan(args: &PublishSelfReleaseArgs) -> Result<SelfReleasePublish
     }
     let release_tag = format!("v{package_version}");
     Ok(SelfReleasePublish {
-        published: true,
+        published: false,
+        pending: true,
         reason: "pending release from landed release pull request".into(),
         latest_version,
         version: package_version,
@@ -231,6 +239,7 @@ pub(crate) fn emit_self_release_publish(
             Path::new(github_output),
             &[
                 ("published", publish.published.to_string()),
+                ("pending", publish.pending.to_string()),
                 ("reason", sanitize_text(&publish.reason)),
                 ("release_tag", publish.release_tag.clone()),
                 ("release_url", publish.release_url.clone()),

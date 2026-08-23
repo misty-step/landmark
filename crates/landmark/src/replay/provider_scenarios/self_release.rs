@@ -62,6 +62,56 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     );
     let server = start_fake_server(fake)?;
     let publish_output = temp_file("landmark-self-release-publish")?;
+    // Dry-run must report pending without mutating anything: pending=true,
+    // published=false, zero LLM calls, and no release on the fake forge.
+    let inspect_output = temp_file("landmark-self-release-inspect")?;
+    let inspect = Command::new(current_exe())
+        .args([
+            "publish-self-release",
+            "--dry-run",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--github-token",
+            "token",
+            "--repository",
+            "owner/repo",
+            "--target-sha",
+            &target_sha,
+            "--api-base-url",
+            &server.url,
+            "--github-output",
+        ])
+        .arg(&inspect_output)
+        .output()?;
+    if !inspect.status.success() {
+        return Err(String::from_utf8_lossy(&inspect.stderr).to_string().into());
+    }
+    let inspect_outputs = parse_outputs(&inspect_output)?;
+    if inspect_outputs.get("pending").map(String::as_str) != Some("true")
+        || inspect_outputs.get("published").map(String::as_str) != Some("false")
+    {
+        return Err(
+            "dry-run must set pending=true/published=false for a pending self-release".into(),
+        );
+    }
+    let llm_calls_before_publish = {
+        let state = server.state.lock().unwrap();
+        state
+            .requests
+            .iter()
+            .filter(|request| request.to_string().contains("/chat/completions"))
+            .count()
+    };
+    if llm_calls_before_publish != 0 {
+        return Err("dry-run must make zero LLM calls".into());
+    }
+
+    let notes_file = repo.join("whats-new.md");
+    fs::write(
+        &notes_file,
+        "Landmark 1.1.0 ships grounded release notes.\n",
+    )?;
+
     let publish = Command::new(current_exe())
         .args([
             "publish-self-release",
@@ -75,6 +125,8 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
             &target_sha,
             "--api-base-url",
             &server.url,
+            "--release-notes-file",
+            notes_file.to_str().unwrap(),
             "--github-output",
         ])
         .arg(&publish_output)
@@ -91,6 +143,18 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
         .releases
         .get("v1.1.0")
         .ok_or("fake GitHub release was not created")?;
+    let created_body = created["body"]
+        .as_str()
+        .ok_or("created release missing body")?;
+    if !created_body.contains("landmark:whats-new:start")
+        || !created_body.contains("Landmark 1.1.0 ships grounded release notes.")
+        || !created_body.contains("# [1.1.0]")
+    {
+        return Err(
+            "created release body must compose marker-bounded notes ahead of the technical changelog"
+                .into(),
+        );
+    }
     Ok(json!({
         "prepare": prepare_outputs,
         "publish": publish_outputs,

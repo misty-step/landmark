@@ -848,6 +848,10 @@ pub(crate) struct SelfReleaseCommit {
 #[derive(Serialize)]
 pub(crate) struct SelfReleasePublish {
     pub(crate) published: bool,
+    /// True when metadata is ahead of the latest tag and the release has
+    /// not been created yet. Distinct from `published` so dry-run output can
+    /// gate synthesis without forging a mutation receipt.
+    pub(crate) pending: bool,
     pub(crate) reason: String,
     pub(crate) latest_version: String,
     pub(crate) version: String,

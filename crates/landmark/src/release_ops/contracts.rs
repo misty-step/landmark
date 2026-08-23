@@ -528,6 +528,26 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
         errors.push("release workflow missing landed synthesis step".into());
     }
 
+    // Pre-publication synthesis invariant: notes are generated BEFORE the
+    // public release exists, gated on the dry-run pending decision.
+    if release.find("name: Inspect pending self-release").is_none() {
+        errors.push("release workflow missing pre-publication inspection step".into());
+    }
+    if release
+        .find("steps.inspect.outputs.pending == 'true'")
+        .is_none()
+    {
+        errors.push("synthesis must be gated on the dry-run pending decision".into());
+    }
+    if release
+        .find("--release-notes-file \"${NOTES_FILE}\"")
+        .is_none()
+    {
+        errors.push(
+            "publish-self-release must consume the fixed pre-publication notes path".into(),
+        );
+    }
+
     Ok(errors)
 }
 

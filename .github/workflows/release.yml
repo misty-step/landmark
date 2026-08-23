@@ -117,7 +117,7 @@ jobs:
             --github-output "${GITHUB_OUTPUT}"
 
       - name: Synthesize pending release notes
-        if: steps.inspect.outputs.published == 'true'
+        if: steps.inspect.outputs.pending == 'true'
         shell: bash
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
