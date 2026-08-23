@@ -1137,3 +1137,14 @@ fn floating_tag_yields_v0_for_pre_stable_line() {
     assert_eq!(parse_major_tag("v0.3.0").as_deref(), Some("v0"));
     assert_eq!(parse_major_tag("0.17.2").as_deref(), Some("v0"));
 }
+
+#[test]
+fn cheap_policy_never_skips_low_significance_releases() {
+    let mut config = test_synthesis_config("cheap", None, None);
+    config.model = String::new();
+    config.model_explicit = false;
+    let classification = test_release_classification("low");
+    let (tier, _, skip, _) = selected_model_plan(&config, &classification);
+    assert!(!skip);
+    assert_eq!(tier, "cheap");
+}
