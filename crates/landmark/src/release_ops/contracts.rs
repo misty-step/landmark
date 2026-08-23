@@ -543,9 +543,8 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
         .find("--release-notes-file \"${NOTES_FILE}\"")
         .is_none()
     {
-        errors.push(
-            "publish-self-release must consume the fixed pre-publication notes path".into(),
-        );
+        errors
+            .push("publish-self-release must consume the fixed pre-publication notes path".into());
     }
 
     Ok(errors)
