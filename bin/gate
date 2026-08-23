@@ -91,7 +91,13 @@ if [ -d node_modules/semantic-release ]; then
 }
 JSON
   semrel_log="$(mktemp)"
-  if ! (cd "$semrel_fix/repo" && CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run) | tee "$semrel_log"; then
+  if ! (
+    cd "$semrel_fix/repo" &&
+    # Strip Actions PR-trigger variables: semantic-release skips analysis
+    # entirely on pull_request events, and this proof must run everywhere.
+    unset GITHUB_EVENT_NAME GITHUB_ACTIONS
+    CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run
+  ) | tee "$semrel_log"; then
     echo "::error::semantic-release dry-run proof failed; the release stack cannot load or analyze"
     rm -rf "$semrel_fix" "$semrel_log"
     exit 1
