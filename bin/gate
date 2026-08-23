@@ -61,7 +61,7 @@ git diff --check
 # notes (landmark-semrel-dryrun-proof).
 if [ -d node_modules/semantic-release ]; then
   semrel_fix="$(mktemp -d)"
-  git init -q "$semrel_fix"
+  git init -q -b master "$semrel_fix"
   git -C "$semrel_fix" config user.email gate@localhost
   git -C "$semrel_fix" config user.name gate
   echo "# proof" > "$semrel_fix/README.md"
@@ -73,6 +73,7 @@ if [ -d node_modules/semantic-release ]; then
   git -C "$semrel_fix" commit -qm "feat(proof): exercise the semantic-release stack"
   cat > "$semrel_fix/.releaserc.json" <<'JSON'
 {
+  "repositoryUrl": "https://github.com/misty-step/landmark",
   "branches": ["master"],
   "plugins": [
     "@semantic-release/commit-analyzer",
@@ -82,8 +83,10 @@ if [ -d node_modules/semantic-release ]; then
   ]
 }
 JSON
-  (cd "$semrel_fix" && GH_TOKEN=dummy CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run > /dev/null 2>&1) || {
-    errors+=("semantic-release dry-run proof failed; the release stack cannot load or analyze")
-  }
+  if ! (cd "$semrel_fix" && GH_TOKEN=dummy CI=true "$ROOT/node_modules/.bin/semantic-release" --dry-run); then
+    echo "::error::semantic-release dry-run proof failed; the release stack cannot load or analyze"
+    rm -rf "$semrel_fix"
+    exit 1
+  fi
   rm -rf "$semrel_fix"
 fi
