@@ -160,14 +160,20 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
         return emit_self_release_publish(&plan, &args.github_output);
     }
 
-    // The release-already-exists check needs the forge API, so it stays on
-    // the live path after the dry-run gate.
+    // Shared reconciliation core with release-transaction commit: tag
+    // identity is authoritative, drafts and moved tags fail closed instead of
+    // skipping silently.
     let provider = GitHubProvider::required(&args.api_base_url, &args.github_token);
-    if let Some(value) = provider.release_by_tag(&args.repository, &plan.release_tag)? {
+    let identity = ReleaseIdentity {
+        release_tag: plan.release_tag.clone(),
+        source_revision: args.target_sha.to_ascii_lowercase(),
+    };
+    let observed = observe_release_state(&provider, &args.repository, &identity.release_tag)?;
+    if let CommitPlan::Reconcile { html_url, .. } = plan_publication(&identity, &observed)? {
         plan.published = false;
         plan.pending = false;
         plan.reason = "release already exists".into();
-        plan.release_url = value["html_url"].as_str().unwrap_or("").to_string();
+        plan.release_url = html_url;
         return emit_self_release_publish(&plan, &args.github_output);
     }
 
@@ -183,8 +189,14 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     let notes = read_nonempty(Path::new(&args.release_notes_file))?;
     body = compose_release_body(&notes, &body);
 
-    let release_url =
-        provider.create_release(&args.repository, &plan.release_tag, &args.target_sha, &body)?;
+    provider.create_release(&args.repository, &plan.release_tag, &args.target_sha, &body)?;
+    // Post-mutation re-observation closes the inspection-to-creation race on
+    // tag identity before the workflow treats the release as published.
+    let post = observe_release_state(&provider, &args.repository, &identity.release_tag)?;
+    let release_url = match plan_publication(&identity, &post)? {
+        CommitPlan::Reconcile { html_url, .. } => html_url,
+        _ => return Err("self-release publication did not reconcile after creation".into()),
+    };
     plan.pending = false;
     plan.published = true;
     plan.reason = "published release from landed release pull request".into();

@@ -196,6 +196,33 @@ impl GitHubProvider {
         Ok(Some(serde_json::from_str(&response.body)?))
     }
 
+    /// Resolves the commit a tag points at; None when the tag does not exist.
+    pub(crate) fn tag_ref(&self, repository: &str, tag: &str) -> Result<Option<String>> {
+        validate_repo(repository)?;
+        let response = curl_json(
+            "GET",
+            &format!(
+                "{}/repos/{repository}/git/ref/tags/{tag}",
+                self.api_base_url
+            ),
+            self.token(),
+            None,
+        )?;
+        if response.status == 404 {
+            return Ok(None);
+        }
+        if !(200..300).contains(&response.status) {
+            return Err(format!("GitHub tag fetch failed with HTTP {}", response.status).into());
+        }
+        let value: Value = serde_json::from_str(&response.body)?;
+        Ok(Some(
+            value["object"]["sha"]
+                .as_str()
+                .ok_or("tag ref response missing object.sha")?
+                .to_ascii_lowercase(),
+        ))
+    }
+
     pub(crate) fn update_release_body(
         &self,
         repository: &str,

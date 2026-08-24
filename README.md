@@ -103,6 +103,36 @@ phase proves it exists remotely. For keyless Sigstore verification, replace
 verifies the bundle signature offline against that key; keyless mode keeps
 Sigstore transparency-log verification enabled.
 
+#### Commit the Transaction and Emit the Receipt
+
+`release-transaction commit` applies the public mutations and completes the
+release transaction (ADR 0004). It inspects before it writes: the tag ref and
+release record are resolved from the GitHub API, tag identity is authoritative
+(a moved tag fails closed), drafts block adoption, and a release already
+consistent with the immutable candidate is adopted without mutation. On
+success the transaction becomes `completed` and carries a receipt binding the
+source revision, tag, release id, and release URL. Retries re-verify that the
+recorded release still backs the receipt and then return the same completed
+result; drift or deletion is a visible failure, never a silent success.
+
+```bash
+landmark release-transaction commit \
+  --transaction .landmark/release-transaction.json \
+  --notes-file .landmark/whats-new.md
+
+# Inspect without mutating anything:
+landmark release-transaction commit \
+  --transaction .landmark/release-transaction.json --dry-run
+```
+
+`GITHUB_TOKEN` or `GH_TOKEN` supplies the credential; pass `--github-token`
+explicitly elsewhere. `--repository` must match the transaction's immutable
+candidate — mismatches fail closed; re-prepare instead of overriding.
+
+Scope note: Landmark's own self-release pipeline shares this reconciliation
+core but does not yet bind OCI/Sigstore artifact identities, so it publishes
+without emitting a completed receipt.
+
 ### Generic CI
 
 A shell script, GitLab CI job, Forgejo workflow, Buildkite step, or agent can run
