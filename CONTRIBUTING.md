@@ -52,6 +52,32 @@ bin/gate
 
 GitHub Actions calls the same local gate on PRs and pushes to `master`. The gate also runs `cargo run --locked -- check-version-sync`, which ensures `package.json` and `crates/landmark/Cargo.toml` match the latest semver git tag.
 
+Budgets:
+
+- **CI latency budget:** the full gate must finish in under 6 minutes.
+  Measured baseline is ~2m20s on GitHub-hosted runners. If the gate exceeds
+  the budget, split or speed it up — do not skip work.
+
+- **Flaky tests:** never ignore a flake. Quarantine it immediately with an
+  owner named next to the ignore attribute, then fix or delete it within one
+  week. A flake with no owner gets deleted.
+
+## Hooks
+
+Committed hooks live in `.githooks/`. Install once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- `pre-commit` (tight): `cargo fmt --check`, staged whitespace check
+  (`git diff --cached --check`), and `actionlint` when installed.
+- `pre-push` (broader): `cargo clippy --locked --all-targets -- -D warnings`
+  and `cargo test --locked`.
+
+`bin/gate` remains the authoritative full check; CI re-runs it from a clean
+checkout.
+
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/). semantic-release uses these to determine version bumps:
