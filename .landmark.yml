@@ -7,17 +7,11 @@ changelog:
   source: auto
 artifacts:
   markdown: docs/releases/{version}.md
-  plaintext: null
-  html: null
   json: docs/releases/releases.json
-  rss: null
 release:
   profile: full
 model:
   policy: balanced
-  primary: null
-  fallbacks: []
 budget:
   max_input_tokens: 12000
   max_output_tokens: 1200
-  max_usd: null
