@@ -166,18 +166,20 @@ on:
       - CI
     types:
       - completed
-    branches:
-      - main
-      - master
   workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}-${{ github.event.repository.default_branch }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -188,13 +190,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Skip if default branch has advanced
+        id: bound
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha)"
+          if [ "${head}" != "${TESTED_SHA}" ]; then
+            echo "stale=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Skipping stale Landmark run tested=${TESTED_SHA} origin/${DEFAULT_BRANCH}=${head}"
+          else
+            echo "stale=false" >> "${GITHUB_OUTPUT}"
+          fi
 
       # Short-lived installation token from a GitHub App installed on this
       # repo, in place of a personal access token. See "Why a GitHub App,
       # not a PAT" below.
       - name: Mint release token
+        if: steps.bound.outputs.stale != 'true'
         id: release-token
         uses: actions/create-github-app-token@v2
         with:
@@ -204,6 +224,7 @@ jobs:
       # Landmark: Automated semantic-release pipeline
       # https://github.com/misty-step/landmark
       - name: Run Landmark
+        if: steps.bound.outputs.stale != 'true'
         uses: misty-step/landmark@v0
         with:
           github-token: ${{ steps.release-token.outputs.token }}

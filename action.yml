@@ -267,6 +267,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
         STABILITY_INPUT: ${{ inputs.stability }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
 
@@ -379,17 +380,36 @@ runs:
         if [ "${resolved_stability}" = "pre-stable" ]; then
           bundled_config=".releaserc.prestable.json"
         fi
-        sr_extends_arg="--extends ${GITHUB_ACTION_PATH}/configs/${bundled_config}"
+        sr_args=()
         consumer_config=""
         for config_file in .releaserc .releaserc.json .releaserc.yml .releaserc.yaml \
                            release.config.js release.config.cjs release.config.mjs; do
           if [ -f "${GITHUB_WORKSPACE}/${config_file}" ]; then
             echo "::notice::Using repo semantic-release config: ${config_file}"
-            sr_extends_arg=""
             consumer_config="${config_file}"
             break
           fi
         done
+
+        if [ -z "${consumer_config}" ]; then
+          release_branch="${DEFAULT_BRANCH:-}"
+          if [ -z "${release_branch}" ]; then
+            release_branch="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || true)"
+          fi
+          if [ -z "${release_branch}" ]; then
+            echo "::error::Cannot determine the repository default branch for bundled semantic-release config"
+            exit 1
+          fi
+          case "${release_branch}" in
+            *[!A-Za-z0-9._/-]*)
+              echo "::error::Refusing bundled semantic-release branch with invalid characters: ${release_branch}"
+              exit 1
+              ;;
+          esac
+          sr_args+=(--extends "${GITHUB_ACTION_PATH}/configs/${bundled_config}")
+          sr_args+=(--branches "${release_branch}")
+          echo "::notice::Landmark bundled semantic-release branch: ${release_branch}"
+        fi
 
         # No-tags seeding: a pre-stable repo with no v* tag on the REMOTE starts
         # from v0.0.0 on the first commit so the first release computes below
@@ -416,9 +436,8 @@ runs:
         after_tags="$(mktemp)"
         git tag | sort > "${before_tags}"
 
-        # shellcheck disable=SC2086
         npx --yes --prefix "${GITHUB_ACTION_PATH}" semantic-release \
-          ${sr_extends_arg}
+          "${sr_args[@]}"
 
         git tag | sort > "${after_tags}"
         new_tag="$(comm -13 "${before_tags}" "${after_tags}" | tail -n1 || true)"

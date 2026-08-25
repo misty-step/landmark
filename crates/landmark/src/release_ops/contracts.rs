@@ -171,6 +171,9 @@ pub(crate) fn check_action_contract(args: CheckActionContractArgs) -> Result<()>
     errors.extend(validate_manifest_action_precedence_contract(
         &fs::read_to_string(&action_path)?,
     ));
+    errors.extend(validate_bundled_release_branch_contract(
+        &fs::read_to_string(&action_path)?,
+    ));
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     errors.extend(validate_agent_native_contracts(&args.repo_root)?);
     errors.extend(validate_release_integrity_contract(&readme));
@@ -388,6 +391,47 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     if manual_example.contains("github.ref_name") || manual_example.contains("ref_nameevent") {
         errors
             .push("examples/manual-tag.yml contains stale tag-push release-tag expression".into());
+    }
+    let full_example =
+        fs::read_to_string(repo_root.join("examples/release.yml")).unwrap_or_default();
+    if let Err(error) = serde_norway::from_str::<serde_norway::Value>(&full_example) {
+        errors.push(format!("examples/release.yml is invalid YAML: {error}"));
+    }
+    for required in [
+        "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+        "github.event.workflow_run.event == 'push'",
+        "github.event.workflow_run.head_branch == github.event.repository.default_branch",
+        "group: release-${{ github.repository }}-${{ github.event.repository.default_branch }}",
+        "Skipping stale Landmark run",
+    ] {
+        if !full_example.contains(required) {
+            errors.push(format!(
+                "examples/release.yml missing SHA-bound workflow_run token `{required}`"
+            ));
+        }
+    }
+    if full_example.contains("group: release-${{ github.event.workflow_run.head_sha")
+        || full_example.contains("group: landmark-release-${{ github.event.workflow_run.head_sha")
+    {
+        errors.push(
+            "examples/release.yml must serialize Landmark releases per repository/default-branch, not per SHA".into(),
+        );
+    }
+    let site_example =
+        fs::read_to_string(repo_root.join("site/get-started.html")).unwrap_or_default();
+    for required in [
+        "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+        "Skipping stale Landmark run",
+        "misty-step/landmark@v0",
+    ] {
+        if !site_example.contains(required) {
+            errors.push(format!(
+                "site/get-started.html missing SHA-bound workflow_run token `{required}`"
+            ));
+        }
+    }
+    if site_example.contains("misty-step/landmark@v1") {
+        errors.push("site/get-started.html must pin the published v0 Action line, not v1".into());
     }
 
     Ok(errors)
@@ -628,6 +672,30 @@ pub(crate) fn validate_manifest_action_precedence_contract(action: &str) -> Vec<
         .collect()
 }
 
+pub(crate) fn validate_bundled_release_branch_contract(action: &str) -> Vec<String> {
+    let mut errors = [
+        "DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}",
+        r#"sr_args+=(--extends "${GITHUB_ACTION_PATH}/configs/${bundled_config}")"#,
+        r#"sr_args+=(--branches "${release_branch}")"#,
+        "Landmark bundled semantic-release branch:",
+        "Cannot determine the repository default branch for bundled semantic-release config",
+        r#""${sr_args[@]}""#,
+    ]
+    .iter()
+    .filter(|needle| !action.contains(**needle))
+    .map(|needle| format!("action.yml missing bundled release-branch wiring `{needle}`"))
+    .collect::<Vec<_>>();
+    if action.contains("landmark-releaserc.json")
+        || action.contains("{extends:$ext, branches:[$b]}")
+    {
+        errors.push(
+            "action.yml must pass bundled semantic-release config directly; nested extends wrappers are not resolved"
+                .into(),
+        );
+    }
+    errors
+}
+
 pub(crate) fn validate_landmark_usage_inputs(
     path: &Path,
     text: &str,
@@ -686,4 +754,31 @@ pub(crate) fn default_contract_scan_paths(repo_root: &Path) -> Vec<PathBuf> {
         }
     }
     paths
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_release_branch_contract_requires_runtime_selection() {
+        let errors = validate_bundled_release_branch_contract("branches: [master]");
+        assert!(
+            errors.iter().any(|error| error.contains("DEFAULT_BRANCH")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn action_yml_selects_consumer_default_branch_for_bundled_config() {
+        let action =
+            fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"))
+                .expect("action.yml");
+        assert_eq!(
+            validate_bundled_release_branch_contract(&action),
+            Vec::<String>::new()
+        );
+        assert!(action.contains(r#"sr_args+=(--branches "${release_branch}")"#));
+        assert!(!action.contains("landmark-releaserc.json"));
+    }
 }
