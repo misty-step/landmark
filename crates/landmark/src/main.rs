@@ -56,6 +56,8 @@ mod synthesis;
 mod synthesis_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod manifest_schema_tests;
 mod util;
 mod version_decision;
 #[cfg(test)]
