@@ -144,7 +144,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: release-${{ github.repository }}-${{ github.event.repository.default_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -164,13 +164,30 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Skip if default branch has advanced
+        id: bound
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha)"
+          if [ "${head}" != "${TESTED_SHA}" ]; then
+            echo "stale=true" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Skipping stale Landmark run tested=${TESTED_SHA} origin/${DEFAULT_BRANCH}=${head}"
+          else
+            echo "stale=false" >> "${GITHUB_OUTPUT}"
+          fi
       - name: Mint release token
+        if: steps.bound.outputs.stale != 'true'
         id: release-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
           private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
       - name: Run Landmark
+        if: steps.bound.outputs.stale != 'true'
         uses: misty-step/landmark@v0
         with:
           mode: full

@@ -400,7 +400,8 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     for required in [
         "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
         "github.event.workflow_run.event == 'push'",
-        "group: release-${{ github.event.workflow_run.head_sha || github.sha }}",
+        "group: release-${{ github.repository }}-${{ github.event.repository.default_branch }}",
+        "Skipping stale Landmark run",
     ] {
         if !full_example.contains(required) {
             errors.push(format!(
@@ -408,9 +409,11 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
             ));
         }
     }
-    if full_example.contains("group: release-${{ github.ref }}") {
+    if full_example.contains("group: release-${{ github.event.workflow_run.head_sha")
+        || full_example.contains("group: landmark-release-${{ github.event.workflow_run.head_sha")
+    {
         errors.push(
-            "examples/release.yml must not key concurrency to github.ref for workflow_run".into(),
+            "examples/release.yml must serialize Landmark releases per repository/default-branch, not per SHA".into(),
         );
     }
 
