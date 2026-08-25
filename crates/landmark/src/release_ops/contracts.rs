@@ -392,6 +392,27 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
         errors
             .push("examples/manual-tag.yml contains stale tag-push release-tag expression".into());
     }
+    let full_example =
+        fs::read_to_string(repo_root.join("examples/release.yml")).unwrap_or_default();
+    if let Err(error) = serde_norway::from_str::<serde_norway::Value>(&full_example) {
+        errors.push(format!("examples/release.yml is invalid YAML: {error}"));
+    }
+    for required in [
+        "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+        "github.event.workflow_run.event == 'push'",
+        "group: release-${{ github.event.workflow_run.head_sha || github.sha }}",
+    ] {
+        if !full_example.contains(required) {
+            errors.push(format!(
+                "examples/release.yml missing SHA-bound workflow_run token `{required}`"
+            ));
+        }
+    }
+    if full_example.contains("group: release-${{ github.ref }}") {
+        errors.push(
+            "examples/release.yml must not key concurrency to github.ref for workflow_run".into(),
+        );
+    }
 
     Ok(errors)
 }
