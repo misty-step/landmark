@@ -380,7 +380,7 @@ runs:
         if [ "${resolved_stability}" = "pre-stable" ]; then
           bundled_config=".releaserc.prestable.json"
         fi
-        sr_extends_arg=""
+        sr_args=()
         consumer_config=""
         for config_file in .releaserc .releaserc.json .releaserc.yml .releaserc.yaml \
                            release.config.js release.config.cjs release.config.mjs; do
@@ -406,10 +406,8 @@ runs:
               exit 1
               ;;
           esac
-          tmp_config="${RUNNER_TEMP}/landmark-releaserc.json"
-          jq -n --arg ext "${GITHUB_ACTION_PATH}/configs/${bundled_config}" --arg b "${release_branch}" \
-            '{extends:$ext, branches:[$b]}' > "${tmp_config}"
-          sr_extends_arg="--extends ${tmp_config}"
+          sr_args+=(--extends "${GITHUB_ACTION_PATH}/configs/${bundled_config}")
+          sr_args+=(--branches "${release_branch}")
           echo "::notice::Landmark bundled semantic-release branch: ${release_branch}"
         fi
 
@@ -438,9 +436,8 @@ runs:
         after_tags="$(mktemp)"
         git tag | sort > "${before_tags}"
 
-        # shellcheck disable=SC2086
         npx --yes --prefix "${GITHUB_ACTION_PATH}" semantic-release \
-          ${sr_extends_arg}
+          "${sr_args[@]}"
 
         git tag | sort > "${after_tags}"
         new_tag="$(comm -13 "${before_tags}" "${after_tags}" | tail -n1 || true)"

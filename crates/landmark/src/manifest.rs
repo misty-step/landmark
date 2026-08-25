@@ -727,11 +727,23 @@ pub(crate) fn readme_title(root: &Path) -> Option<String> {
 
 pub(crate) fn readme_description(root: &Path) -> Option<String> {
     let readme = fs::read_to_string(root.join("README.md")).ok()?;
-    readme
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty() && !line.starts_with('#'))
-        .and_then(trimmed_option)
+    let mut paragraph: Vec<&str> = Vec::new();
+    for line in readme.lines().map(str::trim) {
+        if line.starts_with('#') {
+            if !paragraph.is_empty() {
+                break;
+            }
+            continue;
+        }
+        if line.is_empty() {
+            if !paragraph.is_empty() {
+                break;
+            }
+            continue;
+        }
+        paragraph.push(line);
+    }
+    trimmed_option(&paragraph.join(" "))
 }
 
 pub(crate) fn display_name_from_package(name: &str) -> String {

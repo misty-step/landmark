@@ -166,9 +166,6 @@ on:
       - CI
     types:
       - completed
-    branches:
-      - main
-      - master
   workflow_dispatch:
 
 concurrency:
@@ -178,11 +175,11 @@ concurrency:
 jobs:
   release:
     if: |
-      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       (github.event.workflow_run.head_branch == 'master' || github.event.workflow_run.head_branch == 'main'))
+       github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

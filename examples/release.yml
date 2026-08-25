@@ -8,10 +8,6 @@ on:
     # Trigger only after the upstream CI workflow completes.
     types:
       - completed
-    # Keep both names for repositories that still use master.
-    branches:
-      - main
-      - master
   # Optional manual trigger for one-off release runs.
   workflow_dispatch:
 
@@ -22,11 +18,11 @@ concurrency:
 jobs:
   release:
     if: |
-      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       (github.event.workflow_run.head_branch == 'master' || github.event.workflow_run.head_branch == 'main'))
+       github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # semantic-release and release body updates need write permissions.

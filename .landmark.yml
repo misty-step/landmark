@@ -9,7 +9,7 @@ artifacts:
   markdown: docs/releases/{version}.md
   json: docs/releases/releases.json
 release:
-  profile: full
+  profile: synthesis-only
 model:
   policy: balanced
 budget:

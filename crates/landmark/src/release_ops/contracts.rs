@@ -400,6 +400,7 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
     for required in [
         "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
         "github.event.workflow_run.event == 'push'",
+        "github.event.workflow_run.head_branch == github.event.repository.default_branch",
         "group: release-${{ github.repository }}-${{ github.event.repository.default_branch }}",
         "Skipping stale Landmark run",
     ] {
@@ -415,6 +416,21 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
         errors.push(
             "examples/release.yml must serialize Landmark releases per repository/default-branch, not per SHA".into(),
         );
+    }
+    let site_example = fs::read_to_string(repo_root.join("site/get-started.html")).unwrap_or_default();
+    for required in [
+        "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+        "Skipping stale Landmark run",
+        "misty-step/landmark@v0",
+    ] {
+        if !site_example.contains(required) {
+            errors.push(format!(
+                "site/get-started.html missing SHA-bound workflow_run token `{required}`"
+            ));
+        }
+    }
+    if site_example.contains("misty-step/landmark@v1") {
+        errors.push("site/get-started.html must pin the published v0 Action line, not v1".into());
     }
 
     Ok(errors)
@@ -656,18 +672,27 @@ pub(crate) fn validate_manifest_action_precedence_contract(action: &str) -> Vec<
 }
 
 pub(crate) fn validate_bundled_release_branch_contract(action: &str) -> Vec<String> {
-    let required = [
+    let mut errors = [
         "DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}",
-        "landmark-releaserc.json",
+        r#"sr_args+=(--extends "${GITHUB_ACTION_PATH}/configs/${bundled_config}")"#,
+        r#"sr_args+=(--branches "${release_branch}")"#,
         "Landmark bundled semantic-release branch:",
         "Cannot determine the repository default branch for bundled semantic-release config",
-        r#"'{extends:$ext, branches:[$b]}'"#,
-    ];
-    required
-        .iter()
-        .filter(|needle| !action.contains(**needle))
-        .map(|needle| format!("action.yml missing bundled release-branch wiring `{needle}`"))
-        .collect()
+        r#""${sr_args[@]}""#,
+    ]
+    .iter()
+    .filter(|needle| !action.contains(**needle))
+    .map(|needle| format!("action.yml missing bundled release-branch wiring `{needle}`"))
+    .collect::<Vec<_>>();
+    if action.contains("landmark-releaserc.json")
+        || action.contains("{extends:$ext, branches:[$b]}")
+    {
+        errors.push(
+            "action.yml must pass bundled semantic-release config directly; nested extends wrappers are not resolved"
+                .into(),
+        );
+    }
+    errors
 }
 
 pub(crate) fn validate_landmark_usage_inputs(
@@ -748,6 +773,7 @@ mod tests {
         let action = fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"))
             .expect("action.yml");
         assert_eq!(validate_bundled_release_branch_contract(&action), Vec::<String>::new());
-        assert!(!action.contains("sr_extends_arg=\"--extends ${GITHUB_ACTION_PATH}/configs/${bundled_config}\""));
+        assert!(action.contains(r#"sr_args+=(--branches "${release_branch}")"#));
+        assert!(!action.contains("landmark-releaserc.json"));
     }
 }
