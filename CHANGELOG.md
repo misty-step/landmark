@@ -1,3 +1,12 @@
+# [0.28.8](https://github.com/misty-step/landmark/compare/v0.28.7...v0.28.8) (2026-08-25)
+
+### Features
+
+* **release-transaction:** complete ADR-0004 publish-to-receipt (#253) ([a5869d7](https://github.com/misty-step/landmark/commit/a5869d7bc7a89febb47e2f73f49bdd8a75fa9309))
+
+### Bug Fixes
+
+* **gate:** semrel proof requires real origin and an analysis result (#251) ([6eac842](https://github.com/misty-step/landmark/commit/6eac842bfea1a1aa9f84825bc8f37a7fedc3ca6b))
 # [0.28.7](https://github.com/misty-step/landmark/compare/v0.28.6...v0.28.7) (2026-08-23)
 
 ### Bug Fixes
