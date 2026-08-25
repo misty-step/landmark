@@ -417,7 +417,8 @@ pub(crate) fn validate_first_run_adoption_contract(repo_root: &Path) -> Result<V
             "examples/release.yml must serialize Landmark releases per repository/default-branch, not per SHA".into(),
         );
     }
-    let site_example = fs::read_to_string(repo_root.join("site/get-started.html")).unwrap_or_default();
+    let site_example =
+        fs::read_to_string(repo_root.join("site/get-started.html")).unwrap_or_default();
     for required in [
         "ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
         "Skipping stale Landmark run",
@@ -770,9 +771,13 @@ mod tests {
 
     #[test]
     fn action_yml_selects_consumer_default_branch_for_bundled_config() {
-        let action = fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"))
-            .expect("action.yml");
-        assert_eq!(validate_bundled_release_branch_contract(&action), Vec::<String>::new());
+        let action =
+            fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"))
+                .expect("action.yml");
+        assert_eq!(
+            validate_bundled_release_branch_contract(&action),
+            Vec::<String>::new()
+        );
         assert!(action.contains(r#"sr_args+=(--branches "${release_branch}")"#));
         assert!(!action.contains("landmark-releaserc.json"));
     }

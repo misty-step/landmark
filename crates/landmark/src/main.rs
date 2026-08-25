@@ -30,6 +30,8 @@ mod errors;
 #[cfg(test)]
 mod extract_prs_tests;
 mod manifest;
+#[cfg(test)]
+mod manifest_schema_tests;
 mod model_policy;
 #[cfg(test)]
 mod model_policy_tests;
@@ -56,8 +58,6 @@ mod synthesis;
 mod synthesis_tests;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod manifest_schema_tests;
 mod util;
 mod version_decision;
 #[cfg(test)]

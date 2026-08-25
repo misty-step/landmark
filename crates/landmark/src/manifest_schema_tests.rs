@@ -109,7 +109,9 @@ fn json_conforms_to_schema(
                     }
                 }
             }
-            if let Some(properties) = schema.get("properties").and_then(serde_json::Value::as_object)
+            if let Some(properties) = schema
+                .get("properties")
+                .and_then(serde_json::Value::as_object)
             {
                 for (key, nested) in properties {
                     if let Some(child) = object.get(key) {

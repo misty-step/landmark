@@ -537,7 +537,6 @@ fn fleet_classifiers_distinguish_rollout_kinds_and_surfaces() {
     );
 }
 
-
 #[test]
 fn setup_projects_manifest_defaults_into_generated_workflows() {
     let diagnosis = SetupDiagnosis {
@@ -1120,4 +1119,3 @@ fn cheap_policy_never_skips_low_significance_releases() {
     assert!(!skip);
     assert_eq!(tier, "cheap");
 }
-
