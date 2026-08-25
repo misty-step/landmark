@@ -171,6 +171,9 @@ pub(crate) fn check_action_contract(args: CheckActionContractArgs) -> Result<()>
     errors.extend(validate_manifest_action_precedence_contract(
         &fs::read_to_string(&action_path)?,
     ));
+    errors.extend(validate_bundled_release_branch_contract(
+        &fs::read_to_string(&action_path)?,
+    ));
     errors.extend(validate_self_release_workflow_contract(&args.repo_root)?);
     errors.extend(validate_agent_native_contracts(&args.repo_root)?);
     errors.extend(validate_release_integrity_contract(&readme));
@@ -628,6 +631,21 @@ pub(crate) fn validate_manifest_action_precedence_contract(action: &str) -> Vec<
         .collect()
 }
 
+pub(crate) fn validate_bundled_release_branch_contract(action: &str) -> Vec<String> {
+    let required = [
+        "DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}",
+        "landmark-releaserc.json",
+        "Landmark bundled semantic-release branch:",
+        "Cannot determine the repository default branch for bundled semantic-release config",
+        r#"'{extends:$ext, branches:[$b]}'"#,
+    ];
+    required
+        .iter()
+        .filter(|needle| !action.contains(**needle))
+        .map(|needle| format!("action.yml missing bundled release-branch wiring `{needle}`"))
+        .collect()
+}
+
 pub(crate) fn validate_landmark_usage_inputs(
     path: &Path,
     text: &str,
@@ -686,4 +704,26 @@ pub(crate) fn default_contract_scan_paths(repo_root: &Path) -> Vec<PathBuf> {
         }
     }
     paths
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_release_branch_contract_requires_runtime_selection() {
+        let errors = validate_bundled_release_branch_contract("branches: [master]");
+        assert!(
+            errors.iter().any(|error| error.contains("DEFAULT_BRANCH")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn action_yml_selects_consumer_default_branch_for_bundled_config() {
+        let action = fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"))
+            .expect("action.yml");
+        assert_eq!(validate_bundled_release_branch_contract(&action), Vec::<String>::new());
+        assert!(!action.contains("sr_extends_arg=\"--extends ${GITHUB_ACTION_PATH}/configs/${bundled_config}\""));
+    }
 }
