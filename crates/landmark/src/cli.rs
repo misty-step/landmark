@@ -488,6 +488,8 @@ pub(crate) enum ReleaseTransactionCommand {
     Prepare(PrepareReleaseTransactionArgs),
     /// Bind verified immutable artifacts to a prepared transaction
     Bind(BindReleaseTransactionArgs),
+    /// Apply public mutations and emit the completed receipt (idempotent)
+    Commit(CommitReleaseTransactionArgs),
 }
 
 #[derive(Args)]
@@ -535,6 +537,28 @@ pub(crate) struct BindReleaseTransactionArgs {
     /// Expected keyless certificate OIDC issuer
     #[arg(long = "certificate-oidc-issuer", default_value = "")]
     pub(crate) certificate_oidc_issuer: String,
+}
+
+#[derive(Args)]
+pub(crate) struct CommitReleaseTransactionArgs {
+    /// Ready release transaction JSON
+    #[arg(long)]
+    pub(crate) transaction: PathBuf,
+    /// GitHub token; GITHUB_TOKEN or GH_TOKEN env when omitted
+    #[arg(long = "github-token", default_value = "")]
+    pub(crate) github_token: String,
+    /// owner/repo override; must match the immutable transaction candidate
+    #[arg(long, default_value = "")]
+    pub(crate) repository: String,
+    /// GitHub API base URL
+    #[arg(long = "api-base-url", default_value = "https://api.github.com")]
+    pub(crate) api_base_url: String,
+    /// Inspect remote state and print the plan without mutating anything
+    #[arg(long = "dry-run")]
+    pub(crate) dry_run: bool,
+    /// Notes written into the created release body
+    #[arg(long = "notes-file", default_value = "")]
+    pub(crate) notes_file: String,
 }
 
 #[derive(Args)]

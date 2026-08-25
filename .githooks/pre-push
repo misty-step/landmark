@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "${ROOT}"
+
+# Broader push gate; the authoritative full gate remains bin/gate in CI.
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked

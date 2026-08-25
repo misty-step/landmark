@@ -248,6 +248,10 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_release_transaction_prepare_and_bind,
     );
     map.insert(
+        "release_transaction_commit_receipt".to_string(),
+        scenario_release_transaction_commit_receipt,
+    );
+    map.insert(
         "synthesis-only-success".to_string(),
         scenario_consumer_synthesis_only_success,
     );
@@ -323,5 +327,6 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "action_side_effect_coverage",
         "release_feed_adapter",
         "release_transaction_prepare_and_bind",
+        "release_transaction_commit_receipt",
     ]
 }

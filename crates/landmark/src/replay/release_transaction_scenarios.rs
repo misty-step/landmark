@@ -2,8 +2,22 @@ use crate::*;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-pub(crate) fn scenario_release_transaction_prepare_and_bind(tmp_root: &Path) -> Result<Value> {
-    let repo = tmp_root.join("release-transaction");
+/// A fully prepared and artifact-bound (`ready`) transaction plus every
+/// fixture path needed to drive further phases against it.
+pub(crate) struct ReadyTransactionFixture {
+    pub(crate) repo: PathBuf,
+    pub(crate) transaction: PathBuf,
+    pub(crate) tags_before: Vec<String>,
+    pub(crate) ready: Value,
+}
+
+/// Builds a disposable repository, prepares a release candidate, and binds
+/// locally verified artifacts through the fixture cosign adapter.
+pub(crate) fn prepare_and_bind_ready_transaction(
+    root: &Path,
+    name: &str,
+) -> Result<ReadyTransactionFixture> {
+    let repo = root.join(name);
     init_fixture_repo(&repo, "v1.0.0")?;
     fs::write(repo.join("feature.txt"), "portable release\n")?;
     run_ok("git", ["add", "feature.txt"], &repo)?;
@@ -43,22 +57,6 @@ pub(crate) fn scenario_release_transaction_prepare_and_bind(tmp_root: &Path) -> 
     let same = Command::new(current_exe()).args(prepare_args).output()?;
     if !same.status.success() || serde_json::from_slice::<Value>(&same.stdout)? != prepared_json {
         return Err("same-candidate prepare did not return canonical state idempotently".into());
-    }
-    fs::write(repo.join("other.txt"), "different candidate\n")?;
-    run_ok("git", ["add", "other.txt"], &repo)?;
-    run_ok(
-        "git",
-        ["commit", "-q", "-m", "fix: change candidate"],
-        &repo,
-    )?;
-    let different = Command::new(current_exe()).args(prepare_args).output()?;
-    if different.status.success()
-        || !String::from_utf8_lossy(&different.stderr).contains("different candidate")
-    {
-        return Err("different-candidate prepare did not fail closed".into());
-    }
-    if git_tags(&repo)? != tags_before {
-        return Err("release transaction prepare mutated git tags".into());
     }
 
     let artifact_root = repo.join("local-artifacts");
@@ -233,11 +231,49 @@ openssl dgst -sha256 -verify "$key" -signature "$sig" "$manifest" >/dev/null
     if !retry.status.success() || serde_json::from_slice::<Value>(&retry.stdout)? != ready {
         return Err("identical bind retry did not return the same canonical packet".into());
     }
+    Ok(ReadyTransactionFixture {
+        repo,
+        transaction: transaction_path,
+        tags_before,
+        ready,
+    })
+}
+
+pub(crate) fn scenario_release_transaction_prepare_and_bind(tmp_root: &Path) -> Result<Value> {
+    let fixture = prepare_and_bind_ready_transaction(tmp_root, "release-transaction")?;
+    let artifact_root = fixture.repo.join("local-artifacts");
 
     let alternate_image = br#"{"mediaType":"application/vnd.oci.image.index.v1+json","schemaVersion":2,"manifests":[{}]}"#;
+    // Different-candidate prepare must fail closed against canonical state.
+    let prepare_args = [
+        "release-transaction",
+        "prepare",
+        "--repo-root",
+        fixture.repo.to_str().unwrap(),
+        "--repository",
+        "example/product",
+        "--transaction",
+        fixture.transaction.to_str().unwrap(),
+    ];
+    fs::write(fixture.repo.join("other.txt"), "different candidate\n")?;
+    run_ok("git", ["add", "other.txt"], &fixture.repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "fix: change candidate"],
+        &fixture.repo,
+    )?;
+    let different = Command::new(current_exe()).args(prepare_args).output()?;
+    if different.status.success()
+        || !String::from_utf8_lossy(&different.stderr).contains("different candidate")
+    {
+        return Err("different-candidate prepare did not fail closed".into());
+    }
+
     fs::write(artifact_root.join("alternate-index.json"), alternate_image)?;
     let alternate_digest = format!("sha256:{}", sha256_hex(alternate_image));
-    let mut substituted = artifact_manifest;
+    let stored_manifest: Value =
+        serde_json::from_str(&fs::read_to_string(fixture.repo.join("artifacts.json"))?)?;
+    let mut substituted = stored_manifest;
     let image = substituted["artifacts"]
         .as_array_mut()
         .unwrap()
@@ -246,29 +282,41 @@ openssl dgst -sha256 -verify "$key" -signature "$sig" "$manifest" >/dev/null
         .unwrap();
     image["digest"] = json!(alternate_digest);
     image["path"] = json!("alternate-index.json");
-    let substituted_path = repo.join("substituted.json");
+    let substituted_path = fixture.repo.join("substituted.json");
     fs::write(
         &substituted_path,
         serde_json::to_string_pretty(&substituted)? + "\n",
     )?;
-    let mut substituted_args = bind_args;
-    substituted_args[5] = substituted_path.to_str().unwrap();
-    let rejected = Command::new(current_exe())
-        .args(substituted_args)
-        .output()?;
+    let verifier_path = fixture.repo.join("fixture-cosign");
+    let verification_key = fixture.repo.join("fixture-public.pem");
+    let bind_args = [
+        "release-transaction",
+        "bind",
+        "--transaction",
+        fixture.transaction.to_str().unwrap(),
+        "--artifact-manifest",
+        substituted_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--cosign",
+        verifier_path.to_str().unwrap(),
+        "--verification-key",
+        verification_key.to_str().unwrap(),
+    ];
+    let rejected = Command::new(current_exe()).args(bind_args).output()?;
     if rejected.status.success()
         || !String::from_utf8_lossy(&rejected.stderr).contains("substitution rejected")
     {
         return Err("artifact substitution was not rejected".into());
     }
-    if git_tags(&repo)? != tags_before {
+    if git_tags(&fixture.repo)? != fixture.tags_before {
         return Err("release transaction bind mutated git tags".into());
     }
 
     Ok(json!({
-        "transaction_id": ready["transaction_id"],
-        "artifact_set_sha256": ready["artifact_set_sha256"],
-        "release_tag": ready["candidate"]["release_tag"],
+        "transaction_id": fixture.ready["transaction_id"],
+        "artifact_set_sha256": fixture.ready["artifact_set_sha256"],
+        "release_tag": fixture.ready["candidate"]["release_tag"],
         "remote_mutations": 0,
         "same_candidate_prepare_idempotent": true,
         "different_candidate_rejected": true,
@@ -276,5 +324,135 @@ openssl dgst -sha256 -verify "$key" -signature "$sig" "$manifest" >/dev/null
         "verifier_adapter_exercised": true,
         "idempotent_retry": true,
         "substitution_rejected": true
+    }))
+}
+
+/// Proves the ADR 0004 commit phase against a fake forge: dry-run preview,
+/// completed receipt, identical retry, and fail-closed drift or deletion.
+pub(crate) fn scenario_release_transaction_commit_receipt(tmp_root: &Path) -> Result<Value> {
+    let fixture = prepare_and_bind_ready_transaction(tmp_root, "commit-receipt")?;
+    let mut fake = FakeState {
+        llm_status: 200,
+        llm_notes: String::new(),
+        update_status: 200,
+        ..Default::default()
+    };
+    let _ = &mut fake;
+    let server = start_fake_server(fake)?;
+    let tag = fixture.ready["candidate"]["release_tag"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let commit_args = |extra: &[&str]| -> Vec<String> {
+        let mut args: Vec<String> = [
+            "release-transaction",
+            "commit",
+            "--transaction",
+            fixture.transaction.to_str().unwrap(),
+            "--repository",
+            "example/product",
+            "--api-base-url",
+            server.url.as_str(),
+            "--github-token",
+            "fixture-token",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect();
+        args.extend(extra.iter().map(|value| value.to_string()));
+        args
+    };
+
+    // Dry-run previews the plan without mutating the canonical packet.
+    let preview = Command::new(current_exe())
+        .args(commit_args(&["--dry-run"]))
+        .output()?;
+    if !preview.status.success() {
+        return Err(format!(
+            "commit --dry-run failed: {}",
+            String::from_utf8_lossy(&preview.stderr)
+        )
+        .into());
+    }
+    let preview_json: Value = serde_json::from_slice(&preview.stdout)?;
+    assert_json_eq(&preview_json, "/action", "create", "dry-run plan action")?;
+    assert_json_eq(&preview_json, "/state", "ready", "dry-run saw ready state")?;
+    let on_disk: Value = serde_json::from_str(&fs::read_to_string(&fixture.transaction)?)?;
+    assert_json_eq(&on_disk, "/state", "ready", "dry-run left state untouched")?;
+
+    // The real commit creates the release and completes the transaction.
+    let committed = Command::new(current_exe())
+        .args(commit_args(&[]))
+        .output()?;
+    if !committed.status.success() {
+        return Err(format!(
+            "release transaction commit failed: {}",
+            String::from_utf8_lossy(&committed.stderr)
+        )
+        .into());
+    }
+    let receipt_json: Value = serde_json::from_slice(&committed.stdout)?;
+    assert_json_eq(&receipt_json, "/state", "completed", "committed state")?;
+    assert_json_eq(&receipt_json, "/receipt/tag_name", &tag, "receipt tag")?;
+    if receipt_json["receipt"]["release_id"].as_u64().is_none() {
+        return Err("completed receipt missing numeric release id".into());
+    }
+    if !receipt_json["receipt"]["release_url"]
+        .as_str()
+        .is_some_and(|url| url.starts_with("https://"))
+    {
+        return Err("completed receipt missing https release url".into());
+    }
+    {
+        let state = server.state.lock().unwrap();
+        if !state.releases.contains_key(&tag) {
+            return Err("fake forge has no release after commit".into());
+        }
+    }
+
+    // Retry re-verifies remote identity and returns the identical receipt.
+    let retry = Command::new(current_exe())
+        .args(commit_args(&[]))
+        .output()?;
+    if !retry.status.success() || serde_json::from_slice::<Value>(&retry.stdout)? != receipt_json {
+        return Err("completed retry did not return the same receipt".into());
+    }
+
+    // A moved tag is a visible contradiction, never a silent success.
+    {
+        let mut state = server.state.lock().unwrap();
+        let release = state.releases.get_mut(&tag).unwrap();
+        release["target_commitish"] = json!("f".repeat(40));
+    }
+    let drifted = Command::new(current_exe())
+        .args(commit_args(&[]))
+        .output()?;
+    if drifted.status.success() || !String::from_utf8_lossy(&drifted.stderr).contains("drifted") {
+        return Err("moved-tag drift was not rejected on retry".into());
+    }
+
+    // Deletion of the public record also fails closed on retry.
+    {
+        let mut state = server.state.lock().unwrap();
+        state.releases.clear();
+    }
+    let deleted = Command::new(current_exe())
+        .args(commit_args(&[]))
+        .output()?;
+    if deleted.status.success()
+        || !String::from_utf8_lossy(&deleted.stderr).contains("no longer public")
+    {
+        return Err("deleted release was not rejected on retry".into());
+    }
+
+    Ok(json!({
+        "transaction_id": receipt_json["transaction_id"],
+        "release_tag": tag,
+        "receipt_release_id": receipt_json["receipt"]["release_id"],
+        "dry_run_preview_without_mutation": true,
+        "completed_receipt_emitted": true,
+        "retry_returns_same_receipt": true,
+        "moved_tag_drift_rejected": true,
+        "deleted_release_rejected": true
     }))
 }

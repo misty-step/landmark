@@ -63,6 +63,19 @@ pub(crate) fn start_fake_server(mut state: FakeState) -> Result<FakeServer> {
                         json_response(404, json!({"message": "Not Found"}))
                     }
                 }
+                (Method::Get, url) if url.contains("/git/ref/tags/") => {
+                    let tag = url.rsplit("/git/ref/tags/").next().unwrap();
+                    let tag = urlencoding::decode(tag).unwrap_or_default().to_string();
+                    let sha = state
+                        .releases
+                        .get(&tag)
+                        .and_then(|release| release["target_commitish"].as_str())
+                        .filter(|sha| is_full_hex(sha));
+                    match sha {
+                        Some(sha) => json_response(200, json!({ "object": { "sha": sha } })),
+                        None => json_response(404, json!({"message": "Not Found"})),
+                    }
+                }
                 (Method::Patch, url) if url.contains("/releases/") => {
                     if state.update_status >= 400 {
                         json_response(state.update_status, json!({"message": "update failed"}))

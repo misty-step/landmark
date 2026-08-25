@@ -18,8 +18,11 @@ classification, release-kit plans, provenance, approval state, public release
 mutation, reconciliation, and the completed release receipt. Release judgment
 and mutation are one deep module: inspect before writing, make retries
 idempotent, finish compatible partial state, and fail closed on contradictions.
-The current Action and CLI do not yet emit that unified receipt; do not infer
-the target behavior from existing tags, events, or synthesis-status outputs.
+`release-transaction prepare|bind|commit` emits that receipt for artifact-bound
+releases. The self-release pipeline shares the same reconciliation core but is
+not yet artifact-bound — its publication carries no OCI/Sigstore identity and
+emits no completed receipt; revisit when product builds supply one. Until then,
+do not infer receipt authority from tags, events, or synthesis-status outputs.
 
 Product build pipelines own construction, signing, and publication of their
 executable artifacts. Landmark validates supplied artifact manifests and binds

@@ -67,6 +67,7 @@ fn ready(
             verified_at: "2026-07-14T00:00:01Z".into(),
         }),
         bound_at: Some("2026-07-14T00:00:01Z".into()),
+        receipt: None,
     };
     (transaction, artifacts, digest)
 }

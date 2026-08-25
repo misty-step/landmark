@@ -4,12 +4,12 @@
   "title": "Landmark release transaction v1",
   "type": "object",
   "additionalProperties": false,
-  "x-landmark-artifact": "prepared or artifact-bound release transaction",
-  "required": ["schema_version", "transaction_id", "state", "prepared_at", "candidate", "required_artifact_roles", "artifacts", "artifact_set_sha256", "verification", "bound_at"],
+  "x-landmark-artifact": "prepared, artifact-bound, or completed release transaction",
+  "required": ["schema_version", "transaction_id", "state", "prepared_at", "candidate", "required_artifact_roles", "artifacts", "artifact_set_sha256", "verification", "bound_at", "receipt"],
   "properties": {
     "schema_version": { "const": "landmark.release-transaction.v1" },
     "transaction_id": { "$ref": "#/$defs/digest" },
-    "state": { "enum": ["prepared", "ready"] },
+    "state": { "enum": ["prepared", "ready", "completed"] },
     "prepared_at": { "type": "string", "format": "date-time" },
     "candidate": {
       "type": "object",
@@ -38,7 +38,8 @@
     "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" }, "maxItems": 3 },
     "artifact_set_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
     "verification": { "anyOf": [{ "$ref": "#/$defs/verification" }, { "type": "null" }] },
-    "bound_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] }
+    "bound_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+    "receipt": { "anyOf": [{ "$ref": "#/$defs/receipt" }, { "type": "null" }] }
   },
   "allOf": [
     {
@@ -48,7 +49,8 @@
           "artifacts": { "maxItems": 0 },
           "artifact_set_sha256": { "type": "null" },
           "verification": { "type": "null" },
-          "bound_at": { "type": "null" }
+          "bound_at": { "type": "null" },
+          "receipt": { "type": "null" }
         }
       }
     },
@@ -59,7 +61,20 @@
           "artifacts": { "minItems": 3, "maxItems": 3 },
           "artifact_set_sha256": { "$ref": "#/$defs/digest" },
           "verification": { "$ref": "#/$defs/verification" },
-          "bound_at": { "type": "string", "format": "date-time" }
+          "bound_at": { "type": "string", "format": "date-time" },
+          "receipt": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "state": { "const": "completed" } }, "required": ["state"] },
+      "then": {
+        "properties": {
+          "artifacts": { "minItems": 3, "maxItems": 3 },
+          "artifact_set_sha256": { "$ref": "#/$defs/digest" },
+          "verification": { "$ref": "#/$defs/verification" },
+          "bound_at": { "type": "string", "format": "date-time" },
+          "receipt": { "$ref": "#/$defs/receipt" }
         }
       }
     }
@@ -127,6 +142,17 @@
           }
         }
       ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["committed_at", "release_id", "release_url", "tag_name"],
+      "properties": {
+        "committed_at": { "type": "string", "format": "date-time" },
+        "release_id": { "type": "integer", "minimum": 1 },
+        "release_url": { "type": "string", "pattern": "^https://" },
+        "tag_name": { "type": "string", "minLength": 1 }
+      }
     }
   }
 }

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "${ROOT}"
+
+# Tight pre-commit checks only; bin/gate (CI-enforced) owns the full closeout.
+cargo fmt --check
+git diff --cached --check
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+else
+  echo "warning: actionlint not found; skipping workflow lint (see CONTRIBUTING.md)" >&2
+fi
