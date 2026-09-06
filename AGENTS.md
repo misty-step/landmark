@@ -182,9 +182,10 @@ jobs:
   on that trigger.
 - `OPENROUTER_API_KEY` secret (or another compatible provider API key)
 
-## Work Ledger And Docs
-- Active and completed work lives in deployed Powder under `repo=landmark`;
-  repository-local ticket directories are forbidden.
+## Work And Docs
+- Work from the operator's current request. Check current code and overlapping
+  work, then report the result and verification evidence in the session or PR.
+  Historical tickets are context; do not maintain a replacement backlog.
 - Strategic groom reports live under `.groom/`.
 - Keep README, `action.yml`, examples, and this file aligned. Stale agent-facing
   prose is a release risk because agents use it as an operating contract.
