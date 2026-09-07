@@ -29,5 +29,10 @@ Severity: high
 Category: classification
 Evidence: command/path/PR URL
 Impact: what would go wrong during real rollout
-Action: fixed now / backlog / downstream PR / blocked by missing secret
+Action: fixed within request / proposed work / approved downstream PR / blocked prerequisite
 ```
+
+A finding is evidence, not an assignment. For selected non-R90 follow-up,
+link the Linear record; otherwise label it a proposal and return it to the
+operator. Do not create tickets automatically. Link retained sanitized proof
+by run/revision rather than copying raw scan or terminal output.

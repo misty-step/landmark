@@ -42,10 +42,11 @@ any binary; the self-release PR path only touches `CHANGELOG.md`,
 Every consumer platform (Linux x86_64/arm64, macOS x86_64/arm64) gets a real
 packaged binary; local CLI users can download one instead of requiring Cargo.
 Release commits are small permanently; the repository stops accumulating a
-committed binary's history weight release over release. `dist/` and its
-history are removed from the repository in a follow-up, separately authorized
-`git filter-repo` history rewrite (see backlog 006), since past commits
-already carry the binary's weight.
+committed binary's history weight release over release. The original plan
+proposed removing `dist/` history with a separately authorized
+`git filter-repo` rewrite (historical backlog 006). That proposal is not
+authorization to rewrite history or delete retained evidence. Any current
+work must be explicitly selected and tracked in Linear.
 
 The action now has a hard network dependency at the very first step: if
 `github.com/misty-step/landmark/releases` is unreachable, no Landmark step can

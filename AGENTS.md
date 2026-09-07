@@ -1,196 +1,67 @@
-# Landmark Agent Contract
+# Landmark
 
-*A reusable GitHub Action that handles the complete release pipeline: analyze
-conventional commits to determine version bump, generate a technical
-changelog (CHANGELOG.md), push the version bump + changelog to the repo,
-create a GitHub Release, LLM-synthesize user-facing release notes from the
-technical changelog, and update the GitHub Release body with those notes.*
+## Release authority
 
-## Product Boundary
-Landmark is a portable release-intelligence runtime. The GitHub Action is one
-packaging layer, not the product boundary. Keep release analysis, synthesis,
-artifact planning, artifact writing, feed generation, notifications, evidence,
-and provider policy in the Rust CLI. Keep GitHub-specific behavior behind
-explicit adapter seams.
+Landmark is a portable release-intelligence runtime. The Rust CLI owns release
+analysis, synthesis, classification, release-kit plans, provenance, approval
+state, public release mutation, reconciliation, and the completed receipt.
+GitHub Actions and other forge integrations are adapters, not the product
+boundary. Non-GitHub callers use the same CLI, local git, manifests, and JSON
+contracts; adapters cannot invent their own meaning of "published."
 
-Landmark's target boundary owns release truth, audience/importance
-classification, release-kit plans, provenance, approval state, public release
-mutation, reconciliation, and the completed release receipt. Release judgment
-and mutation are one deep module: inspect before writing, make retries
-idempotent, finish compatible partial state, and fail closed on contradictions.
-`release-transaction prepare|bind|commit` emits that receipt for artifact-bound
-releases. The self-release pipeline shares the same reconciliation core but is
-not yet artifact-bound — its publication carries no OCI/Sigstore identity and
-emits no completed receipt; revisit when product builds supply one. Until then,
-do not infer receipt authority from tags, events, or synthesis-status outputs.
+Release judgment and mutation are one responsibility: inspect before writing,
+make retries idempotent, finish compatible partial state, and fail closed on
+contradictions. `release-transaction prepare|bind|commit` emits the completed
+receipt for artifact-bound releases. Self-release shares the reconciliation
+core but is not artifact-bound: it carries no OCI/Sigstore identity and emits
+no completed receipt. Tags, forge events, and synthesis-status outputs are not
+substitutes for that authority.
 
-Product build pipelines own construction, signing, and publication of their
-executable artifacts. Landmark validates supplied artifact manifests and binds
-immutable artifact identities into release truth; it does not rebuild product
-containers, packages, or binaries. Deployment systems consume completed
-release receipts and own environment-specific promotion, verification,
-rollback, and convergence. Forge events are wake-up signals, not release
-authority, and Landmark does not deploy.
+Product builds own artifact construction, signing, and publication. Landmark
+validates supplied manifests and binds immutable artifact identities; it does
+not rebuild containers, packages, or binaries. Deployers consume completed
+receipts and own promotion, verification, rollback, and convergence. Landmark
+does not deploy.
 
-Landmark also does not own bespoke media production, brand design, CMS
-publishing, or long-running creative pipelines. Demo videos, GIFs, images, blog
-posts, essays, and docs updates should be represented as typed
-planned/produced artifacts and delegated to explicit local, browser, service,
-harness, or human producer adapters. See
-`docs/adr/0004-release-transaction-authority.md` for the boundary decision.
+Release-kit contracts delegate bespoke media, brand design, CMS publishing,
+and long-running creative work to explicit producer adapters. Keep artifact
+dependencies, acceptance, provenance, and approval in the typed kit rather
+than embedding those producers in the core. See
+[ADR 0004](docs/adr/0004-release-transaction-authority.md).
 
-Read `VISION.md` before changing release boundaries, adoption modes,
-agent-native contracts, or release-kit producer responsibilities.
+The [README](README.md), accepted [ADRs](docs/adr/), and versioned
+[schemas](schemas/) define supported behavior. [VISION.md](VISION.md) is
+optional rationale, not required reading or a product lock.
 
-## Architecture
+## Adapter safety
 
-### Runtime Structure
-- `crates/landmark/src/main.rs` is the Rust binary facade: parse CLI, dispatch,
-  and render top-level errors. Runtime responsibilities should live in focused
-  modules under `crates/landmark/src/`.
-- `bin/check-architecture` ratchets the facade and extracted module sizes; if
-  a module needs to grow past its current budget, split ownership first or
-  update the ratchet with an explicit architecture reason.
-- `action.yml` is a composite GitHub Action wrapper around a bootstrap-
-  downloaded Landmark release binary plus `semantic-release` for full GitHub
-  release mode. The bootstrap step downloads and checksum-verifies the
-  release binary matching the runner's OS/arch from the GitHub Release for
-  the action's own pinned version; there is no checked-in binary.
-- Release binaries are built for `x86_64-unknown-linux-musl`,
-  `aarch64-unknown-linux-musl`, `aarch64-apple-darwin`, and
-  `x86_64-apple-darwin` and published with `checksums.txt` as GitHub Release
-  assets by `.github/workflows/release.yml`. For local development use
-  `cargo run --locked -p landmark -- ...` or a locally built
-  `target/debug/landmark`.
-- Node is only for `semantic-release` in full mode. Do not add new Node or
-  shell orchestration unless the platform boundary requires it.
-- Python is not part of the active runtime. Do not reintroduce Python scripts
-  for release behavior.
+- Bind the Action's downloaded runtime and checksums to its own pinned release,
+  not an independently selected latest binary.
+- Pass untrusted Action inputs and secrets through `env:`; never interpolate
+  them into `run:` shell source.
+- Best-effort synthesis, artifact writes, and notifications report failure
+  through outputs without blocking an otherwise valid release.
+  `synthesis-required: "true"` is the explicit hard-failure policy.
+- Token choice affects downstream automation: the ambient GitHub token's
+  tags/releases do not trigger workflows like an App installation token's do.
+  Preserve that distinction when changing publication adapters.
 
-### Pipeline Steps
-Composite GitHub Action with these steps:
-- `semantic-release` handles steps 1-4 (analyze commits, generate changelog,
-  push version bump + changelog, create GitHub Release) — proven,
-  battle-tested.
-- A bootstrap-downloaded Rust runtime handles step 5-6 (LLM-synthesize
-  user-facing release notes, update the GitHub Release body) plus policy,
-  artifacts, notifications, and replay.
+## Work authority
 
-## Key Design Decisions
-- **Unix philosophy**: This does ONE thing — releases. Not code review,
-  monitoring, artifact construction, or deployment.
-- **Wraps semantic-release**: Don't reinvent the wheel. Extend it.
-- **LLM synthesis is the value-add**: Technical changelogs exist. User-facing notes don't.
-- **OpenRouter by default**: Supports provider choice and model fallback chains.
-- **Reusable Action**: Any repo can opt in with a simple workflow file.
+Work starts from the current operator request, not a timer or historical
+queue. Linear owns selected current non-R90 work and priorities, not
+runtime transaction state or release receipts; no ticket is required to act
+on a direct request. Do not enable automatic intake or duplicate that work
+in repo task lists. R90 continues to use Habitat. Dated `.groom/` and
+`docs/dogfood/` records are historical evidence, not rollout authority or an
+intake backlog. Keep run evidence in approved retained artifact storage and
+link its revision from work summaries.
 
-## Portability Direction
-- A non-GitHub caller must be able to drive Landmark through CLI commands,
-  manifest files, JSON artifacts, and local git state.
-- `synthesis-only`, `backfill --mode artifacts-only`, `write-artifacts`,
-  `update-feed`, and webhook/Slack notification paths are the portable core.
-- `release-kit` artifacts are the planning/evidence boundary for richer
-  final-mile output; prefer extending the typed kit contract over embedding a
-  producer in the core runtime.
-- GitHub operations such as release-body mutation, PR extraction, issue
-  lifecycle, fleet scan, and Action outputs must be treated as adapter-specific.
-- Cross-system release mutations must share one transaction model and receipt;
-  adapters do not get to define independent meanings of "published."
-- Prefer adding a provider interface or local artifact sink over broadening
-  GitHub assumptions.
+`agents/*/agent.md` and their task prompts are opt-in Forest runtime protocols,
+separate from coding guidance. Their authorization, exact-Revision checks,
+immutable evidence, and atomic publication requirements remain local to that
+runtime. A poll is not permission to select work or activate a scheduler.
 
-## Repo Gates
-- Run `bin/gate` before closeout for code or contract changes.
-- `bin/gate` includes `bin/check-architecture`; do not weaken the ratchet to
-  land feature work.
-- For action contract changes, also ensure `check-action-contract` coverage
-  remains green through the gate.
-- Use `bin/replay-action` when touching release orchestration, synthesis,
-  artifact outputs, release-body mutation, notifications, feeds, or failure
-  lifecycle behavior.
-
-## action.yml Safety Patterns
-- Never interpolate an `inputs.*` or `secrets.*` value directly into a `run:`
-  shell block; pass it through an `env:` block and reference the shell
-  variable instead. Direct interpolation is a shell-injection vector (a repo
-  name, commit subject, or synthesized note containing shell metacharacters
-  becomes code). Every `run:` step in `action.yml` follows this today; keep it
-  that way when adding steps.
-- Non-blocking pipeline stages (synthesis, artifact writes, RSS/webhook/Slack
-  notifications) must `exit 0` on failure and record `succeeded`/
-  `failure_stage`/`failure_message` outputs instead. A release must still
-  publish when a best-effort stage fails; only `synthesis-required: "true"`
-  turns a synthesis/publication failure into a hard blocker (see "Enforce
-  synthesis required" in `action.yml`).
-
-## File Structure
-```
-landmark/
-├── action.yml              # Reusable GitHub Action (called by repos)
-├── crates/
-│   └── landmark/           # Rust runtime
-├── templates/
-│   └── synthesis-prompt.md # Prompt template for LLM
-├── configs/
-│   └── .releaserc.json    # Default semantic-release config
-├── README.md
-├── AGENTS.md               # Canonical agent contract (CLAUDE.md is a symlink to this file)
-└── package.json            # For semantic-release deps
-```
-
-## How Repos Use It
-```yaml
-name: Release
-on:
-  push:
-    branches: [master, main]
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/create-github-app-token@v2
-        id: release-token
-        with:
-          app-id: ${{ secrets.LANDMARK_RELEASER_APP_ID }}
-          private-key: ${{ secrets.LANDMARK_RELEASER_PRIVATE_KEY }}
-      - uses: misty-step/landmark@v0
-        with:
-          github-token: ${{ steps.release-token.outputs.token }}
-          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          # Optional:
-          # llm-model: deepseek/deepseek-v4-flash-0731
-          # llm-fallback-models: "google/gemini-3.7-flash,deepseek/deepseek-v4-pro-0813"
-```
-
-## Requirements
-- Node.js 22+
-- Rust stable
-- A GitHub App installed on the repo with Contents: read/write, and its App
-  ID + private key as `LANDMARK_RELEASER_APP_ID` / `LANDMARK_RELEASER_PRIVATE_KEY`
-  secrets (see README's "Why a GitHub App, not a PAT"). The default
-  `${{ github.token }}` covers landmark's own action invocation but its tags
-  and releases do not trigger further workflow runs the way an App
-  installation token does — use the App when downstream automation depends
-  on that trigger.
-- `OPENROUTER_API_KEY` secret (or another compatible provider API key)
-
-## Work And Docs
-- Work from the operator's current request. Check current code and overlapping
-  work, then report the result and verification evidence in the session or PR.
-  Historical tickets are context; do not maintain a replacement backlog.
-- Strategic groom reports live under `.groom/`.
-- Keep README, `action.yml`, examples, and this file aligned. Stale agent-facing
-  prose is a release risk because agents use it as an operating contract.
-
-## Git
-Prefer `jj` for local status and commits when it is available; fall back to
-non-destructive `git` commands when an agent environment does not provide it.
-Preserve user changes and avoid destructive git commands.
+Contributor commands live in [CONTRIBUTING.md](CONTRIBUTING.md). Toolchain and
+dependency requirements come from the manifests, `rust-toolchain.toml`, and
+current CI, not a second version or gate inventory here.

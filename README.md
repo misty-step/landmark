@@ -6,9 +6,24 @@ is the Rust CLI: local scripts, generic CI systems, and agents can invoke the
 same runtime to produce version decisions, technical changelogs, public release
 notes, release-kit plans, feeds, and machine-readable evidence.
 
+This README is the current human entrypoint. Accepted [ADRs](docs/adr/),
+versioned [schemas](schemas/), and portable procedures belong in the repo;
+[VISION.md](VISION.md) is optional rationale, not a roadmap or approval gate.
+Linear owns current non-R90 work, prioritization, and selected unresolved
+opportunities. Work still starts from an operator request; no ticket or
+automatic queue intake is required. R90 continues to use Habitat.
+
+Release transactions and completed receipts retain their native release
+authority. Keep per-run proof in approved retained artifact storage and link
+its run/revision in work summaries; Linear is not the transaction store.
+Dated dogfood reports are historical observations, not current fleet status
+or a rollout mandate. Use the
+[fleet playbook](docs/fleet-integration-playbook.md) for reusable adoption
+procedure.
+
 ## What It Does
 
-1. Uses a checked-in Rust runtime for Landmark-owned release behavior
+1. Uses the Rust CLI for Landmark-owned release behavior
 2. Sets up Node.js only when full semantic-release mode is requested
 3. Installs `semantic-release` and release plugins
 4. Runs `semantic-release` (version bump, changelog update, release creation)
@@ -52,8 +67,7 @@ Build from source with `cargo run --locked -p landmark -- ...` or a locally buil
 (`landmark-x86_64-unknown-linux-musl`, `landmark-aarch64-unknown-linux-musl`,
 `landmark-aarch64-apple-darwin`, `landmark-x86_64-apple-darwin`) plus
 `checksums.txt` from a [GitHub Release](https://github.com/misty-step/landmark/releases).
-The GitHub Action downloads and checksum-verifies the matching binary itself;
-it no longer ships a checked-in binary.
+The GitHub Action downloads and checksum-verifies the matching published binary.
 
 The executable quickstart oracle is:
 
@@ -76,8 +90,8 @@ manifest must reproduce the exact prepared candidate and bind the exact OCI
 descriptor digest and media type. The signature bundle must be a Sigstore v0.3
 bundle that passes `cosign verify-blob` before the canonical transaction changes
 from `prepared` to `ready`. A ready retry must request the exact stored key hash
-or keyless identity and issuer; Landmark rejects trust-policy substitution. This
-slice does not yet prove a remote registry or publish/reconcile GitHub state.
+or keyless identity and issuer; Landmark rejects trust-policy substitution.
+Binding alone does not prove a remote registry or publish/reconcile GitHub state.
 
 ```bash
 landmark release-transaction prepare \
@@ -95,10 +109,10 @@ The packet schemas are `schemas/release-transaction.v1.schema.json`,
 `schemas/release-artifact-manifest.v1.schema.json`, and
 `schemas/release-publication-manifest.v1.schema.json`. The artifact manifest names
 normalized paths relative to `--artifact-root` plus expected SHA-256 digests.
-The OCI descriptor is bound only by its recomputed local digest; a published
-registry reference is deliberately absent until the future public commit
-phase proves it exists remotely. For keyless Sigstore verification, replace
-`--verification-key` with both
+The OCI descriptor is bound only by its recomputed local digest; this binding
+does not assert that a registry reference exists remotely. Public tag and
+release reconciliation is the separate `commit` command below. For keyless
+Sigstore verification, replace `--verification-key` with both
 `--certificate-identity` and `--certificate-oidc-issuer`. Trusted-key mode
 verifies the bundle signature offline against that key; keyless mode keeps
 Sigstore transparency-log verification enabled.
@@ -480,8 +494,8 @@ directories, and an `APPLY.md` packet with the remote branch, commit, PR,
 rollback, and monitoring commands. Operators merge one downstream PR, watch its
 release run, then continue the fleet rollout deliberately.
 
-For the Misty Step factory-wide adoption standard, including when to choose
-full mode versus synthesis-only, see
+For requested integrations, including when to choose full mode versus
+synthesis-only, see
 [`docs/fleet-integration-playbook.md`](docs/fleet-integration-playbook.md).
 
 ## Product Manifest

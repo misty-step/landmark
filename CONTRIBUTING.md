@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- Rust stable
-- Node.js 24+
+- Rust from `rust-toolchain.toml`
+- Node from `package.json` `engines.node` and the version current CI installs
 - npm (ships with Node)
 
 ## Setup

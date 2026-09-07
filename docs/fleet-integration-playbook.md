@@ -1,7 +1,9 @@
 # Landmark Fleet Integration Playbook
 
-This is the factory-wide adoption standard for Landmark. Use it when wiring a
-Misty Step repo so release intelligence is consistent across lanes.
+Use this portable procedure for an explicitly requested Landmark integration.
+It is not a fleet rollout mandate or work queue. Linear owns selected current
+non-R90 adoption work and ordering; each operator owns its actual deployment
+bindings. Dated dogfood reports do not establish current readiness.
 
 Landmark owns release truth: version decisions, technical changelogs,
 user-facing release-note synthesis, release-kit plans, artifact paths,
@@ -31,6 +33,18 @@ target/debug/landmark fleet open-prs --dry-run --plan-dir /tmp/landmark-fleet-pl
 Use `--deep-checks` for a smaller owner slice when you need GitHub to verify
 branch protection and Actions secret names. Secret values are never requested or
 printed.
+
+Treat scan and plan output as evidence and proposals, not authorization to
+open PRs or provision credentials. Choose a bounded target set from the current
+request. Use environment-based token discovery rather than token-bearing
+command arguments, and keep downstream clones outside the Landmark workspace
+so Cargo does not infer an accidental workspace relationship.
+
+Stage per-run proof under an ignored local output directory or a caller-chosen
+scratch location, then retain any shared decision evidence in approved
+access-controlled artifact storage. A Linear summary should link the run,
+revision, and retained packet; the repo keeps this reusable procedure and
+curated fixtures, not raw fleet scans or a second rollout ledger.
 
 ## Files
 

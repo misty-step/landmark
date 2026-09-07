@@ -59,7 +59,7 @@ landmark run \
 Without `--publish-release-body`, the GitHub provider still produces local
 evidence and artifacts without mutating the release body.
 
-For fleet-wide Misty Step adoption, use
+For an explicitly requested integration, use
 [`docs/fleet-integration-playbook.md`](fleet-integration-playbook.md) before
 opening consumer-repo branches. It defines the standard manifest, when to choose
 full mode versus synthesis-only, and the required verification steps.
@@ -99,8 +99,13 @@ separately trusted public key or an exact keyless identity/issuer policy. A
 same-set retry returns the canonical packet only when the requested key hash or
 keyless identity and issuer exactly match the stored verification policy;
 a different candidate or artifact set fails closed under a file lock and
-compare-and-swap write. This slice does not prove remote registry existence or
-publish/reconcile public tags, releases, or assets.
+compare-and-swap write. These local prepare/bind commands do not prove remote
+registry existence or publish/reconcile public tags, releases, or assets.
+
+For explicitly approved public mutation, `release-transaction commit`
+reconciles the GitHub tag and release and emits the completed receipt. Follow
+the [README command and scope note](../README.md#commit-the-transaction-and-emit-the-receipt);
+the self-release path is not yet artifact-bound and emits no completed receipt.
 
 ## Release Kit Boundary
 

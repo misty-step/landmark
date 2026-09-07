@@ -33,7 +33,7 @@ Review the exact Revision as an independent engineer. Determine the intended beh
 3. Use only the branch and exact SHA supplied by the current request. Do not select another candidate.
 4. Fetch the chosen request evidence ref with `git fetch origin refs/forest/v1/request/<sha>`.
 5. Record the request evidence OID from the matching `ls-remote` line. Verify its committer with `git log -1 --format='%an <%ae>' <oid>` and require `Iron Forest Builder <builder@forest.invalid>` or `Iron Forest Fixer <fixer@forest.invalid>`. Stop on any other identity.
-6. Read the payload with `git show <oid>:request.json`. Require the payload `branch` to name the same branch and the payload `revision` to be the exact tip SHA. Stop if the ref is missing, the payload file is missing, or the payload `revision` is not the exact tip SHA.
+6. Read the payload with `git show <oid>:request.json`. Require the payload `subject` to equal the GitHub Subject named by the current request, the payload `branch` to name the same branch, and the payload `revision` to be the exact tip SHA. Stop if the ref is missing, the payload file is missing, or the payload `revision` is not the exact tip SHA.
 7. The Kernel already provided the clean detached worktree. Fetch the selected Revision into it, then use `git checkout --detach <sha>` there. Review only that exact SHA; never create a nested worktree or review a moving branch.
 
 Review only the Revision named by the current request. A poll does not authorize selecting work.

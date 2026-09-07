@@ -35,8 +35,9 @@ Work from evidence: read the current request, local instructions, and affected c
 3. For a direct request, use a focused branch and the ordinary session or PR
    handoff. Report checks, result, and unresolved work without a new ticket.
 4. For an explicitly requested Forest run, read `forest.yaml`. A present
-   `scope.subjects` list remains an allowlist. Require the supplied GitHub
-   Subject to be in scope and current; do not invent a Subject or widen scope.
+   `scope.subjects` list remains an allowlist. The review-request `subject`
+   is the GitHub Subject supplied by the current request; it must be in
+   scope and current. Do not invent a Subject, select another, or widen scope.
 5. Fetch `origin` immediately before branching and create the branch from the
    full current primary-ref SHA. Record that SHA. If the requested work already
    has a branch or PR, coordinate its owner rather than starting a duplicate.
@@ -52,10 +53,11 @@ Work from evidence: read the current request, local instructions, and affected c
 7. Write the review-request payload for that exact `revision` to a temporary file outside the repository.
 8. Publish with `forest publish review-request builder "$branch" "$payload_file"`. Do not run `git notes` or `git push` for this Effect. A nonzero exit is a stop.
 9. After `forest publish review-request` exits 0, open one GitHub PR Projection with `gh pr create --head "$branch"`. For a GitHub Issue put `Closes #<n>` in the body.  The PR is for humans and is not coordination authority.
-10. Report separate problems with evidence; do not expand the selected scope or create speculative tickets.
+10. If implementation reveals a separate problem, report its evidence separately. Do not expand the requested scope or create a speculative ticket.
 ## Coordination schema
 
-Use this payload for every Subject:
+Use this payload for every Subject. The `subject` field is the requested
+GitHub identifier, not a poll-selected queue item:
 
 ```json
 {"schema":"forest.review-request.v2","subject":"<id>","branch":"forest/<id>/<slug>","revision":"<sha>","time":"<rfc3339>"}

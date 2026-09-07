@@ -1,5 +1,20 @@
 # Fleet Adoption Dogfood — 2026-06-13
 
+Status: historical adoption report, including the dated 2026-06-15 update.
+Findings, severities, fixed outcomes, deadlines, and rollout steps below are
+observations or proposals from that run, not current product/fleet status or
+work authorization. The original PR, release, and CI links are retained as
+historical proof. Do not rerun the fleet rollout, provision credentials, or
+import these findings as tickets automatically.
+
+Use the [README](../../README.md) and
+[fleet playbook](../fleet-integration-playbook.md) for current portable
+procedure. Linear owns selected current non-R90 work and prioritization;
+reconfirm a historical proposal against current behavior before selecting it.
+The ignored evidence directory below is an original local locator, not a
+shared retention guarantee. Raw scan/terminal output stays in approved
+access-controlled artifact storage; share only sanitized summaries and links.
+
 ## Scope
 
 Dogfood Landmark against active `phrazzld` and `misty-step` repositories using the Rust fleet workflow.
