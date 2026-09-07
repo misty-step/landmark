@@ -4,7 +4,9 @@ use crate::*;
 #[serde(default)]
 pub(crate) struct LandmarkManifest {
     pub(crate) product: ProductManifest,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) audience: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) voice: Option<String>,
     pub(crate) changelog: ChangelogManifest,
     pub(crate) artifacts: ArtifactManifest,
@@ -16,45 +18,60 @@ pub(crate) struct LandmarkManifest {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ProductManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) description: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ChangelogManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) source: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ArtifactManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) markdown: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) plaintext: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) html: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) rss: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ReleaseManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) profile: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ModelManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) primary: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) fallbacks: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct BudgetManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_output_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_usd: Option<f64>,
 }
 
@@ -710,11 +727,23 @@ pub(crate) fn readme_title(root: &Path) -> Option<String> {
 
 pub(crate) fn readme_description(root: &Path) -> Option<String> {
     let readme = fs::read_to_string(root.join("README.md")).ok()?;
-    readme
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty() && !line.starts_with('#'))
-        .and_then(trimmed_option)
+    let mut paragraph: Vec<&str> = Vec::new();
+    for line in readme.lines().map(str::trim) {
+        if line.starts_with('#') {
+            if !paragraph.is_empty() {
+                break;
+            }
+            continue;
+        }
+        if line.is_empty() {
+            if !paragraph.is_empty() {
+                break;
+            }
+            continue;
+        }
+        paragraph.push(line);
+    }
+    trimmed_option(&paragraph.join(" "))
 }
 
 pub(crate) fn display_name_from_package(name: &str) -> String {

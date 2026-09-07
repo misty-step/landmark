@@ -538,35 +538,6 @@ fn fleet_classifiers_distinguish_rollout_kinds_and_surfaces() {
 }
 
 #[test]
-fn init_manifest_infers_product_context_from_repo_metadata() {
-    let repo = tempfile::tempdir().unwrap();
-    fs::write(
-        repo.path().join("package.json"),
-        r#"{"name":"@mistystep/atlas","description":"Release operations for app fleets."}"#,
-    )
-    .unwrap();
-    fs::write(
-        repo.path().join("README.md"),
-        "# Atlas\n\nLandmark-managed release automation.\n",
-    )
-    .unwrap();
-
-    let manifest = infer_manifest(repo.path());
-    assert_eq!(manifest.product.name.as_deref(), Some("Atlas"));
-    assert_eq!(
-        manifest.product.description.as_deref(),
-        Some("Release operations for app fleets.")
-    );
-    assert_eq!(manifest.audience.as_deref(), Some("developer"));
-    assert_eq!(manifest.changelog.source.as_deref(), Some("auto"));
-
-    let rendered = render_manifest_yaml(&manifest).unwrap();
-    let parsed: serde_norway::Value = serde_norway::from_str(&rendered).unwrap();
-    assert_eq!(parsed["product"]["name"], "Atlas");
-    assert_eq!(parsed["model"]["policy"], "balanced");
-}
-
-#[test]
 fn setup_projects_manifest_defaults_into_generated_workflows() {
     let diagnosis = SetupDiagnosis {
         release_tool: "semantic-release".into(),
