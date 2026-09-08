@@ -6,16 +6,17 @@ description: |
   adoption, fleet rollout, classification, or release artifact evidence.
   Trigger phrases: "Landmark", "release intelligence", "changelog",
   "release notes", "version bump", "release kit".
-argument-hint: "[describe|run|setup|fleet|release-kit|classify]"
+argument-hint: "[describe|run|synthesize|setup|fleet|doctor]"
 ---
 
 # Landmark
 
-Landmark owns release intelligence. Use it before hand-writing release truth
-from git memory or ad-hoc commit summaries.
+Landmark combines automated versioning with product-aware LLM synthesis.
+Use it to explain changes and user impact from release evidence, rather than
+hand-writing release truth from remembered commits.
 
-Read `VISION.md` before changing release boundaries, adoption modes,
-agent-native contracts, or release-kit producer responsibilities.
+Use the README, accepted ADRs, and versioned schemas for current contracts.
+`VISION.md` is optional product rationale.
 
 ## Route
 
@@ -23,6 +24,7 @@ agent-native contracts, or release-kit producer responsibilities.
 |---|---|
 | Describe the current release state | `landmark describe --json` |
 | Dry-run release analysis | `landmark run --provider local --dry-run` |
+| Generate product-aware release notes with a configured provider | `landmark synthesize --help`; [synthesis configuration](README.md#product-manifest) |
 | Install in a repo | `landmark setup` |
 | Fleet adoption | `fleet scan`, `fleet plan`, `fleet open-prs` |
 | GitHub Action use | `misty-step/landmark@v0` |
@@ -43,29 +45,19 @@ agent-native contracts, or release-kit producer responsibilities.
 - Release-kit artifacts are the planning/evidence boundary for richer final
   output. Do not embed bespoke media production in the core runtime.
 
-## MCP (landmark-920)
+## MCP
 
-`crates/landmark-mcp` is a thin stdio JSON-RPC wrap (mirrors `bastion-mcp`'s
-pattern: shell out to the real binary, pass its `--json`/`--error-format
-json` output straight through) over three read-only, side-effect-free
-verbs:
+`crates/landmark-mcp` exposes three inspection commands over stdio JSON-RPC:
 
 - `describe` — the agent-native self-description (`landmark describe --json`).
-- `run_dry_run` — the release decision + release-kit plan, always forced to
-  `--provider local --dry-run` (no GitHub calls, no files written).
+- `run_dry_run` — the release decision and release-kit plan, forced to
+  `--provider local --dry-run`. Optional API-evidence collection may execute
+  local tools; this is not a sandbox.
 - `doctor` — manifest validation (`landmark doctor --format json`).
 
-`synthesize` (the LLM-calling changelog step) is a deliberate exclusion, not
-an oversight: it needs an API key and spends real money per call, which does
-not belong behind an MCP tool argument any agent can invoke. Anything that
-mutates a release (`run --provider github`, `update-release`,
-`notify-webhook`, `fleet open-prs`, self-release) stays CLI/action-only —
-this server has no path to reach them.
-
-**API face: waived.** Landmark's CLI + GitHub Action already cover every
-non-GitHub caller (`--json`, structured error envelopes, local git/manifest
-state); a REST API would be a second transport for verbs the CLI/MCP pair
-already exposes, with no new consumer it would unblock.
+LLM synthesis and public mutations stay on the CLI/Action surface, where
+provider credentials, cost policy, and publication permissions are explicit.
+MCP does not expose `synthesize`, release mutation, or notifications.
 
 Run it: `cargo run --locked -p landmark-mcp` (stdio). Tests:
 `cargo test -p landmark-mcp` (also covered by `cargo test --locked`).

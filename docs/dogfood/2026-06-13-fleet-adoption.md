@@ -1,5 +1,11 @@
 # Fleet Adoption Dogfood — 2026-06-13
 
+Historical observations and proposals from June 2026, not current fleet
+status or a rollout mandate. Original PR, release, and CI links are retained.
+Use the [fleet playbook](../fleet-integration-playbook.md) for current procedure.
+The ignored evidence directory below is a historical local locator, not
+shared retained storage.
+
 ## Scope
 
 Dogfood Landmark against active `phrazzld` and `misty-step` repositories using the Rust fleet workflow.
@@ -154,7 +160,11 @@ Action: add a hardening ticket to test Landmark and generated workflows with `FO
 - The healthcheck/no-release/full-mode path now has real downstream evidence,
   not just local unit coverage.
 
-## Next Rollout Steps
+## Historical rollout proposals
+
+These were the next steps proposed in June, not an active queue. The date-bound
+Node runtime recommendation and remaining finding status require fresh
+selection and current evidence; this report does not claim they are still open.
 
 1. Add Node 24 workflow-runtime verification before GitHub switches hosted actions to Node 24 by default on 2026-06-16.
 2. Add a Landmark fix so synthesis-only/manual-tag setup generates exactly one trigger, avoiding duplicate LLM spend.

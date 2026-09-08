@@ -29,5 +29,5 @@ Severity: high
 Category: classification
 Evidence: command/path/PR URL
 Impact: what would go wrong during real rollout
-Action: fixed now / backlog / downstream PR / blocked by missing secret
+Action: fixed within request / proposed work / approved downstream PR / blocked prerequisite
 ```
