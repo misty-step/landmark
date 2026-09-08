@@ -399,10 +399,10 @@ pub(crate) fn validate_docs_link_targets(repo_root: &Path, readme: &str) -> Vec<
         .captures_iter(readme)
         .filter_map(|caps| {
             let path = caps.get(1).unwrap().as_str();
-            if repo_root.join(path).is_file() {
+            if repo_root.join(path).exists() {
                 None
             } else {
-                Some(format!("README links to nonexistent file `{path}`"))
+                Some(format!("README links to nonexistent path `{path}`"))
             }
         })
         .collect()

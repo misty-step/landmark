@@ -1148,3 +1148,16 @@ fn cheap_policy_never_skips_low_significance_releases() {
     assert!(!skip);
     assert_eq!(tier, "cheap");
 }
+
+#[test]
+fn docs_links_accept_files_and_directories_but_reject_missing_targets() {
+    let repo = tempfile::tempdir().unwrap();
+    fs::create_dir_all(repo.path().join("docs/adr")).unwrap();
+    fs::write(repo.path().join("docs/guide.md"), "# Guide\n").unwrap();
+    let readme = "[Decisions](docs/adr/)\n[Guide](docs/guide.md)\n";
+    assert!(validate_docs_link_targets(repo.path(), readme).is_empty());
+
+    let missing = validate_docs_link_targets(repo.path(), "[Missing](docs/missing.md)");
+    assert_eq!(missing.len(), 1);
+    assert!(missing[0].contains("docs/missing.md"));
+}
