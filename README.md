@@ -1,14 +1,21 @@
 # Landmark
 
-Landmark is a portable release-intelligence runtime for repositories that use
-conventional commits. It can run as a GitHub Action, but the product boundary
-is the Rust CLI: local scripts, generic CI systems, and agents can invoke the
-same runtime to produce version decisions, technical changelogs, public release
-notes, release-kit plans, feeds, and machine-readable evidence.
+Landmark combines automated versioning with LLM synthesis of commits, diffs,
+and product context into clear, user-friendly changelogs and release notes:
+what changed, what was fixed, and why users should care.
+
+The portable Rust CLI is the product boundary. GitHub Actions, local scripts,
+generic CI, and agents can use the same runtime for version decisions,
+technical changelogs, public notes, release-kit plans, feeds, and evidence.
+Deterministic local previews work without model credentials.
+
+This README is the current human entrypoint. Accepted [ADRs](docs/adr/),
+versioned [schemas](schemas/), and portable procedures belong in the repo;
+[VISION.md](VISION.md) is optional rationale, not a roadmap or approval gate.
 
 ## What It Does
 
-1. Uses a checked-in Rust runtime for Landmark-owned release behavior
+1. Uses a published Rust runtime for Landmark-owned release behavior
 2. Sets up Node.js only when full semantic-release mode is requested
 3. Installs `semantic-release` and release plugins
 4. Runs `semantic-release` (version bump, changelog update, release creation)
@@ -76,8 +83,8 @@ manifest must reproduce the exact prepared candidate and bind the exact OCI
 descriptor digest and media type. The signature bundle must be a Sigstore v0.3
 bundle that passes `cosign verify-blob` before the canonical transaction changes
 from `prepared` to `ready`. A ready retry must request the exact stored key hash
-or keyless identity and issuer; Landmark rejects trust-policy substitution. This
-slice does not yet prove a remote registry or publish/reconcile GitHub state.
+or keyless identity and issuer; Landmark rejects trust-policy substitution.
+Binding alone does not prove a remote registry or publish/reconcile GitHub state.
 
 ```bash
 landmark release-transaction prepare \
@@ -95,9 +102,10 @@ The packet schemas are `schemas/release-transaction.v1.schema.json`,
 `schemas/release-artifact-manifest.v1.schema.json`, and
 `schemas/release-publication-manifest.v1.schema.json`. The artifact manifest names
 normalized paths relative to `--artifact-root` plus expected SHA-256 digests.
-The OCI descriptor is bound only by its recomputed local digest; a published
-registry reference is deliberately absent until the future public commit
-phase proves it exists remotely. For keyless Sigstore verification, replace
+The OCI descriptor is bound only by its recomputed local digest; this binding
+does not assert that a registry reference exists remotely. Public tag and
+release reconciliation is the separate `commit` command below. For keyless
+Sigstore verification, replace
 `--verification-key` with both
 `--certificate-identity` and `--certificate-oidc-issuer`. Trusted-key mode
 verifies the bundle signature offline against that key; keyless mode keeps

@@ -1,10 +1,10 @@
 # Landmark Agent Contract
 
-*A reusable GitHub Action that handles the complete release pipeline: analyze
-conventional commits to determine version bump, generate a technical
-changelog (CHANGELOG.md), push the version bump + changelog to the repo,
-create a GitHub Release, LLM-synthesize user-facing release notes from the
-technical changelog, and update the GitHub Release body with those notes.*
+Landmark combines automated versioning with LLM synthesis of commits, diffs,
+and product context into coherent, user-friendly changelogs and release notes.
+Explain what changed and why users should care. The portable Rust CLI owns
+this behavior; the GitHub Action is an integration layer. Deterministic local
+previews complement, rather than replace, the model-assisted product.
 
 ## Product Boundary
 Landmark is a portable release-intelligence runtime. The GitHub Action is one
@@ -39,8 +39,9 @@ planned/produced artifacts and delegated to explicit local, browser, service,
 harness, or human producer adapters. See
 `docs/adr/0004-release-transaction-authority.md` for the boundary decision.
 
-Read `VISION.md` before changing release boundaries, adoption modes,
-agent-native contracts, or release-kit producer responsibilities.
+Use the README, accepted ADRs, and versioned schemas when changing release
+boundaries, adoption modes, agent-native contracts, or producer responsibilities.
+`VISION.md` is optional rationale, not a mandatory workflow or higher authority.
 
 ## Architecture
 
@@ -186,9 +187,16 @@ jobs:
 - Work from the operator's current request. Check current code and overlapping
   work, then report the result and verification evidence in the session or PR.
   Historical tickets are context; do not maintain a replacement backlog.
-- Strategic groom reports live under `.groom/`.
+- Track selected work in the [Landmark Linear project](https://linear.app/misty-step/project/landmark-055a74dda93a);
+  do not create a second backlog or automatically select historical work.
+- Dated `.groom/` and `docs/dogfood/` reports are historical evidence, not live
+  plans. Return selected unresolved findings with sources and proposal status;
+  do not automatically import old reports as issues.
 - Keep README, `action.yml`, examples, and this file aligned. Stale agent-facing
   prose is a release risk because agents use it as an operating contract.
+- Keep runner scheduling, generic agent roles, and coordination protocols in
+  the owning harness, not vendored into this repository. Repository checks
+  remain executable through `bin/gate`.
 
 ## Git
 Prefer `jj` for local status and commits when it is available; fall back to

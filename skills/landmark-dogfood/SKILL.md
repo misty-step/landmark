@@ -1,52 +1,36 @@
 ---
 name: landmark-dogfood
-description: Dogfood Landmark fleet adoption and release-note automation across GitHub repositories. Use when asked to integrate Landmark into personal or organization repos, run fleet scan/plan/open-prs, evaluate adoption friction, capture release-pipeline evidence, or turn dogfood findings into Landmark fixes/backlog.
+description: Dogfood Landmark adoption and release-note automation for explicitly selected GitHub repositories; evaluate adoption friction and return release-pipeline evidence and scoped findings.
 ---
 
 # Landmark Dogfood
 
-Use Landmark against real repositories before claiming adoption quality. The output is not just a plan: it is an evidence packet, concrete downstream PRs where safe, and upstream fixes or backlog where the dogfood loop exposes product gaps.
+Use Landmark against real repositories to assess adoption friction and release
+quality. Follow the [fleet integration playbook](../../docs/fleet-integration-playbook.md)
+for commands, integration modes, credential handling, and retained evidence.
+Use `setup` for one repository; use the fleet planner for a selected group.
 
-## Workflow
+## Local entrypoint
 
-1. Start from the local Landmark checkout and read `AGENTS.md`.
-2. Create an evidence directory under `.landmark/dogfood/<date-or-run>/`.
-3. Build/run the Rust binary locally with `cargo run --locked -- ...` or `target/debug/landmark`. The action itself bootstrap-downloads a published release binary; there is no checked-in binary to run locally.
-4. Run a read-only fleet scan first:
+From the Landmark checkout, use `cargo run --locked -p landmark -- ...` or
+`target/debug/landmark`. The GitHub Action downloads a published binary.
 
-```bash
-target/debug/landmark fleet scan \
-  --owner phrazzld \
-  --owner misty-step \
-  --active-only \
-  --output .landmark/dogfood/<run>/active-scan.json
-```
+## Integration hazards
 
-5. Run `--deep-checks` before opening or recommending PRs; default scans intentionally mark secret metadata unavailable.
-6. Generate `fleet plan`, then `fleet open-prs --dry-run`; inspect the rendered files before mutating downstream repos.
-7. Use the plan's `repository_kind`, `release_surface`, `integration_mode`, and `integration_rationale` fields as the first-pass rollout map. Separate applications, libraries, infrastructure, archived repos, experiments, non-release repos, no-release-tool repos, and already-adopted repos. Do not treat every active repo as an app.
-8. For each candidate, inspect existing workflows, releases, tags, `AGENTS.md`, and release notes. Existing Landmark workflows should become manifest/upgrade work, not duplicate workflow installation.
-9. Apply downstream integration only when the generated diff is repo-fit and required secrets are present or intentionally provisioned. Use `fleet open-prs --confirm-remote --max-prs 1` only after the dry-run receipt is inspected; never provision secrets for `local`, `generic-ci`, `manifest-only`, `backfill-first`, or skipped non-release modes just to make a GitHub plan look ready.
-10. Roll out one repository at a time. After a downstream PR merges, monitor the release run or local/generic CI artifact path named in the receipt before continuing the fleet.
-11. Record friction immediately. Use [references/finding-taxonomy.md](references/finding-taxonomy.md) for categories and severity.
-12. Fix Landmark itself when the product made the dogfood run unsafe, confusing, or wrong. Add replay coverage for each fixed failure mode.
+- Keep downstream clones outside this Cargo workspace.
+- Inspect existing release ownership; upgrade an existing Landmark integration
+  instead of installing a duplicate workflow.
+- Run deep checks before recommending GitHub adoption. Default scans do not
+  establish secret readiness, and artifact-only modes do not need release tokens.
+- Inspect `fleet open-prs --dry-run` before approved remote changes. Apply one
+  repository at a time and verify its actual release or artifact path before
+  continuing; opening a PR alone is not adoption proof.
+- Keep tokens out of command arguments and shared output. Retain sanitized
+  evidence with the source revision; ignored local output is only staging.
 
-## Evidence
+## Findings
 
-Every run should leave:
-
-- `active-scan.json` and, when used, `deep-active-scan.json`
-- `plan/plan.json` and `plan/README.md`
-- dry-run PR artifacts under `plan/prs/`
-- `plan/prs/open-prs.json` receipts with branch, commit message, rollback, disposition, evidence directory, monitoring status, and `APPLY.md` for confirmed one-repo rollout packets
-- a short `report.md` listing adopted repos, blocked repos, friction, fixes made, and next rollout steps
-- exact commands and hosted PR/check URLs for downstream integrations
-
-## Safety
-
-- Prefer env-based token discovery. Avoid passing secrets as CLI arguments, especially through `cargo run`, because Cargo echoes arguments.
-- Never print secret values. Search dogfood artifacts for token-like strings before committing.
-- Do not set or overwrite repository secrets in bulk until the target set is narrowed to real applications and the token/value source is explicit.
-- Do not open duplicate release workflows for repos that already invoke `misty-step/landmark`.
-- Do not add GitHub workflows for `local`, `generic-ci`, `manifest-only`, or `backfill-first` plans unless repo-specific review deliberately overrides the generated receipt.
-- Treat generated `open-prs` output as a proposal, not authority. The lead agent owns repo-fit.
+Record observed behavior, impact, exact commands, PR/check URLs, and remaining
+uncertainty using the [finding taxonomy](references/finding-taxonomy.md).
+Distinguish verified fixes from proposed work. Follow the repository's work
+authority rules rather than turning the report into another rollout queue.
