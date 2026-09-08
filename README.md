@@ -67,7 +67,8 @@ Build from source with `cargo run --locked -p landmark -- ...` or a locally buil
 (`landmark-x86_64-unknown-linux-musl`, `landmark-aarch64-unknown-linux-musl`,
 `landmark-aarch64-apple-darwin`, `landmark-x86_64-apple-darwin`) plus
 `checksums.txt` from a [GitHub Release](https://github.com/misty-step/landmark/releases).
-The GitHub Action downloads and checksum-verifies the matching published binary.
+The GitHub Action downloads and checksum-verifies the matching binary itself;
+it no longer ships a checked-in binary.
 
 The executable quickstart oracle is:
 
