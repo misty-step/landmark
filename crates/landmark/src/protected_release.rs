@@ -97,17 +97,27 @@ fn checked_candidate(
 }
 
 fn top_section(path: &Path) -> Result<Option<String>> {
-    let changelog = fs::read_to_string(path)?;
-    let Some(heading) = changelog.lines().next() else {
+    let changelog = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut lines = changelog.lines();
+    let Some(heading) = lines.next() else {
         return Ok(None);
     };
-    let Some(version) = heading
-        .strip_prefix("# [")
-        .and_then(|value| value.split_once(']').map(|(version, _)| version))
-    else {
+    if !heading.starts_with("# [") {
         return Ok(None);
-    };
-    Ok(Some(changelog_section(path, version)?))
+    }
+    let mut section = heading.to_string();
+    for line in lines {
+        if line.starts_with("# ") || line.starts_with("## ") {
+            break;
+        }
+        section.push('\n');
+        section.push_str(line);
+    }
+    Ok(Some(section.trim_end().to_string()))
 }
 
 pub(crate) fn prepare_protected_release(args: PrepareProtectedReleaseArgs) -> Result<()> {
@@ -503,6 +513,60 @@ mod tests {
         assert!(quiet_server.state.lock().unwrap().requests.is_empty());
         Ok(())
     }
+    #[test]
+    fn missing_changelog_and_titled_changelog_preserve_candidate_boundary() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing");
+        init_self_release_fixture(&missing)?;
+        let output = temp.path().join("output");
+        fs::remove_file(missing.join("CHANGELOG.md"))?;
+        let missing_sha = run_ok("git", ["rev-parse", "HEAD"], &missing)?
+            .trim()
+            .to_string();
+        let missing_server = start_fake_server(FakeState::default())?;
+        publish(&missing, &missing_sha, &missing_server.url, &output)?;
+        assert!(missing_server.state.lock().unwrap().requests.is_empty());
+        prepare(&missing, &output)?;
+        assert_eq!(parse_outputs(&output)?["release_tag"], "v1.1.0");
+
+        let titled = temp.path().join("titled");
+        init_self_release_fixture(&titled)?;
+        let previous = fs::read_to_string(titled.join("CHANGELOG.md"))?;
+        fs::write(
+            titled.join("CHANGELOG.md"),
+            format!("# Changelog\n\nProject history preamble.\n\n{previous}"),
+        )?;
+        run_ok("git", ["add", "CHANGELOG.md"], &titled)?;
+        run_ok(
+            "git",
+            ["commit", "-q", "-m", "docs: title changelog"],
+            &titled,
+        )?;
+        prepare(&titled, &output)?;
+        run_ok("git", ["add", "CHANGELOG.md"], &titled)?;
+        run_ok(
+            "git",
+            ["commit", "-q", "-m", "chore(release): 1.1.0"],
+            &titled,
+        )?;
+        let sha = run_ok("git", ["rev-parse", "HEAD"], &titled)?
+            .trim()
+            .to_string();
+        let server = start_fake_server(FakeState::default())?;
+        publish(&titled, &sha, &server.url, &output)?;
+        let state = server
+            .state
+            .lock()
+            .map_err(|_| "fake server lock poisoned")?;
+        let body = state.releases["v1.1.0"]["body"]
+            .as_str()
+            .ok_or("protected release body missing")?;
+        assert!(body.contains("### Features"));
+        assert!(!body.contains("Project history preamble"));
+        assert!(!body.contains("# Changelog"));
+        Ok(())
+    }
+
     #[test]
     fn source_drift_blocks_pending_release() -> Result<()> {
         let temp = tempfile::tempdir()?;

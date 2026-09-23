@@ -973,7 +973,7 @@ runs:
 
     - name: Update RSS feed file
       id: update_rss
-      if: (inputs.rss-feed-file != '' || steps.manifest_defaults.outputs.rss_feed_file != '') && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
+      if: inputs.mode != 'publish-protected' && (inputs.rss-feed-file != '' || steps.manifest_defaults.outputs.rss_feed_file != '') && steps.resolve_release.outputs.released == 'true' && steps.write_artifacts.outputs.succeeded == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
