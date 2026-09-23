@@ -1,3 +1,8 @@
+# [0.28.9](https://github.com/misty-step/landmark/compare/v0.28.8...v0.28.9) (2026-09-23)
+
+### Features
+
+* **release:** stage protected changelog before publication (#259) ([f4a6e62](https://github.com/misty-step/landmark/commit/f4a6e62cad0bd511a04657e0fa9d3f8abee5b193))
 # [0.28.8](https://github.com/misty-step/landmark/compare/v0.28.7...v0.28.8) (2026-09-08)
 
 ### Features
