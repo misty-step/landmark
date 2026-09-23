@@ -3,11 +3,19 @@ description: Focused release pipeline using semantic-release with optional LLM-p
 
 inputs:
   mode:
-    description: "Pipeline mode: 'full' (semantic-release + synthesis), 'synthesis-only' (synthesize for existing tag)."
+    description: "Pipeline mode: full, synthesis-only, prepare-protected, or publish-protected."
     default: "full"
     required: false
   release-tag:
     description: Release tag to synthesize notes for (required when mode is synthesis-only).
+    default: ""
+    required: false
+  release-branch:
+    description: Branch name for a protected release PR.
+    default: "landmark/release"
+    required: false
+  target-sha:
+    description: Exact landed commit SHA to tag in publish-protected mode (defaults to github.sha).
     default: ""
     required: false
   github-token:
@@ -39,6 +47,10 @@ inputs:
   synthesis:
     description: Whether to synthesize user-facing release notes.
     default: "true"
+    required: false
+  protected-synthesis:
+    description: Opt in to synthesis after publish-protected (otherwise protected publication is technical-only).
+    default: "false"
     required: false
   synthesis-required:
     description: Whether synthesis failures should fail the action. When true, a failed LLM key validation (healthcheck) also blocks the run before the release is published.
@@ -119,11 +131,23 @@ inputs:
 
 outputs:
   released:
-    description: Whether a release was created (full mode) or targeted (synthesis-only mode).
+    description: Whether a release was created or a protected release PR was prepared.
     value: ${{ steps.resolve_release.outputs.released }}
   release-tag:
-    description: Release tag (created by semantic-release in full mode, or from input in synthesis-only mode).
+    description: Release tag, if one was prepared, published, or targeted.
     value: ${{ steps.resolve_release.outputs.release_tag }}
+  published:
+    description: Whether publish-protected created the public GitHub Release.
+    value: ${{ steps.publish_protected.outputs.published || 'false' }}
+  release-branch:
+    description: Protected release PR branch.
+    value: ${{ steps.prepare_protected.outputs.release_branch }}
+  pull-request-title:
+    description: Protected release PR title.
+    value: ${{ steps.prepare_protected.outputs.pull_request_title }}
+  commit-message:
+    description: Protected release PR commit message.
+    value: ${{ steps.prepare_protected.outputs.commit_message }}
   synthesis-succeeded:
     description: Whether synthesis and release body update completed successfully.
     value: ${{ steps.synthesis_result.outputs.succeeded }}
@@ -204,13 +228,13 @@ runs:
         echo "LANDMARK_BIN=${bin_path}" >> "${GITHUB_ENV}"
 
     - name: Setup Node.js
-      if: inputs.mode != 'synthesis-only'
+      if: inputs.mode == 'full'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
 
     - name: Install Node dependencies
-      if: inputs.mode != 'synthesis-only'
+      if: inputs.mode == 'full'
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
@@ -227,7 +251,7 @@ runs:
           --github-output "${GITHUB_OUTPUT}"
 
     - name: Validate LLM API key
-      if: (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
+      if: (inputs.mode == 'full' || inputs.mode == 'synthesis-only' || (inputs.mode == 'publish-protected' && inputs.protected-synthesis == 'true')) && (inputs.synthesis == 'true' || inputs.healthcheck == 'true') && inputs.llm-api-key != ''
       shell: bash
       env:
         LLM_API_KEY: ${{ inputs.llm-api-key }}
@@ -252,7 +276,7 @@ runs:
           "${WARN_ONLY_ARGS[@]}"
 
     - name: Preflight tag history check
-      if: inputs.mode != 'synthesis-only'
+      if: inputs.mode == 'full'
       shell: bash
       run: |
         set -euo pipefail
@@ -261,7 +285,7 @@ runs:
 
     - name: Run semantic-release
       id: semantic_release
-      if: inputs.mode != 'synthesis-only'
+      if: inputs.mode == 'full'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -454,6 +478,36 @@ runs:
           echo "release_tag=" >> "${GITHUB_OUTPUT}"
         fi
 
+    - name: Prepare protected release
+      id: prepare_protected
+      if: inputs.mode == 'prepare-protected'
+      shell: bash
+      env:
+        RELEASE_BRANCH: ${{ inputs.release-branch }}
+      run: |
+        set -euo pipefail
+        "${LANDMARK_BIN}" prepare-protected-release \
+          --repo-root "${GITHUB_WORKSPACE}" \
+          --repository "${GITHUB_REPOSITORY}" \
+          --release-branch "${RELEASE_BRANCH}" \
+          --github-output "${GITHUB_OUTPUT}"
+
+    - name: Publish protected release
+      id: publish_protected
+      if: inputs.mode == 'publish-protected'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        TARGET_SHA: ${{ inputs.target-sha || github.sha }}
+      run: |
+        set -euo pipefail
+        "${LANDMARK_BIN}" publish-protected-release \
+          --repo-root "${GITHUB_WORKSPACE}" \
+          --repository "${GITHUB_REPOSITORY}" \
+          --github-token "${GITHUB_TOKEN}" \
+          --target-sha "${TARGET_SHA}" \
+          --github-output "${GITHUB_OUTPUT}"
+
     - name: Resolve release context
       id: resolve_release
       shell: bash
@@ -462,6 +516,10 @@ runs:
         INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
         SR_RELEASED: ${{ steps.semantic_release.outputs.released }}
         SR_RELEASE_TAG: ${{ steps.semantic_release.outputs.release_tag }}
+        PREP_RELEASED: ${{ steps.prepare_protected.outputs.released }}
+        PREP_RELEASE_TAG: ${{ steps.prepare_protected.outputs.release_tag }}
+        PUBLISH_PUBLISHED: ${{ steps.publish_protected.outputs.published }}
+        PUBLISH_RELEASE_TAG: ${{ steps.publish_protected.outputs.release_tag }}
       run: |
         set -euo pipefail
         if [ "${MODE}" = "synthesis-only" ]; then
@@ -471,6 +529,15 @@ runs:
           fi
           echo "released=true" >> "${GITHUB_OUTPUT}"
           echo "release_tag=${INPUT_RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+        elif [ "${MODE}" = "prepare-protected" ]; then
+          echo "released=${PREP_RELEASED}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${PREP_RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+        elif [ "${MODE}" = "publish-protected" ]; then
+          echo "released=${PUBLISH_PUBLISHED}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${PUBLISH_RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+        elif [ "${MODE}" != "full" ]; then
+          echo "::error::Unsupported Landmark mode: ${MODE}"
+          exit 1
         else
           echo "released=${SR_RELEASED}" >> "${GITHUB_OUTPUT}"
           echo "release_tag=${SR_RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
@@ -478,7 +545,7 @@ runs:
 
     - name: Synthesize user-facing notes
       id: synthesize
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -730,7 +797,7 @@ runs:
 
     - name: Evaluate synthesis publication policy
       id: synthesis_publish_policy
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true'
       shell: bash
       env:
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
@@ -752,7 +819,7 @@ runs:
 
     - name: Update release body
       id: update_release
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.can_update_release == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.can_update_release == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -828,7 +895,7 @@ runs:
 
     - name: Write release notes artifacts
       id: write_artifacts
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.succeeded == 'true' && steps.update_release.outputs.succeeded == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true' && steps.synthesis_publish_policy.outputs.succeeded == 'true' && steps.update_release.outputs.succeeded == 'true'
       shell: bash
       env:
         NOTES_FILE: ${{ steps.synthesize.outputs.notes_file }}
@@ -1127,7 +1194,7 @@ runs:
       id: synthesis_result
       shell: bash
       env:
-        SYNTHESIS_ENABLED: ${{ inputs.synthesis }}
+        SYNTHESIS_ENABLED: ${{ inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') }}
         RELEASED: ${{ steps.resolve_release.outputs.released }}
         SYNTH_STEP_SUCCEEDED: ${{ steps.synthesis_publish_policy.outputs.succeeded }}
         SYNTH_QUALITY: ${{ steps.synthesis_publish_policy.outputs.quality }}
@@ -1178,7 +1245,7 @@ runs:
 
     - name: Update floating major tag
       id: update_floating_tag
-      if: inputs.floating-tags == 'true' && steps.resolve_release.outputs.released == 'true' && (inputs.synthesis != 'true' || steps.synthesis_result.outputs.succeeded == 'true')
+      if: inputs.mode == 'full' && inputs.floating-tags == 'true' && steps.resolve_release.outputs.released == 'true' && (inputs.synthesis != 'true' || steps.synthesis_result.outputs.succeeded == 'true')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -1227,7 +1294,7 @@ runs:
 
     - name: Close resolved synthesis failure issues
       id: close_failure_issues
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded == 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -1251,7 +1318,7 @@ runs:
 
     - name: Report synthesis failure
       id: report_synthesis_failure
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true' && steps.synthesis_result.outputs.failure_stage != 'configuration'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true' && inputs.synthesis-failure-issue == 'true' && steps.synthesis_result.outputs.succeeded != 'true' && steps.synthesis_result.outputs.failure_stage != 'configuration'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -1281,7 +1348,7 @@ runs:
         fi
 
     - name: Enforce synthesis required
-      if: inputs.synthesis == 'true' && steps.resolve_release.outputs.released == 'true'
+      if: inputs.synthesis == 'true' && inputs.mode != 'prepare-protected' && (inputs.mode != 'publish-protected' || inputs.protected-synthesis == 'true') && steps.resolve_release.outputs.released == 'true'
       shell: bash
       env:
         SYNTHESIS_REQUIRED: ${{ inputs.synthesis-required }}
