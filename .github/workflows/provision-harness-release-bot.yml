@@ -1,0 +1,49 @@
+name: Provision harness release-bot secret
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seal-key:
+    if: github.repository == 'misty-step/landmark' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sealed-box implementation
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sealed-box"
+          "$RUNNER_TEMP/sealed-box/bin/pip" install --disable-pip-version-check PyNaCl==1.5.0
+
+      - name: Encrypt key to harness repository public key
+        env:
+          RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          HARNESS_PUBLIC_KEY: wYI6CYgZLT9cMxk1cIsFyHhFXxnHNZhaKp4eUhQJdFk=
+          HARNESS_KEY_ID: '3380204578043523366'
+        run: |
+          "$RUNNER_TEMP/sealed-box/bin/python" - <<'PY'
+          import base64
+          import json
+          import os
+          from nacl.public import PublicKey, SealedBox
+
+          secret = os.environ['RELEASE_BOT_PRIVATE_KEY']
+          if not secret:
+              raise SystemExit('Landmark release-bot secret is missing')
+          recipient = PublicKey(base64.b64decode(os.environ['HARNESS_PUBLIC_KEY'], validate=True))
+          ciphertext = SealedBox(recipient).encrypt(secret.encode())
+          with open('sealed-harness-secret.json', 'x', encoding='utf-8') as output:
+              json.dump({
+                  'key_id': os.environ['HARNESS_KEY_ID'],
+                  'encrypted_value': base64.b64encode(ciphertext).decode(),
+              }, output)
+          PY
+
+      - name: Deliver only sealed ciphertext
+        uses: actions/upload-artifact@v4
+        with:
+          name: sealed-harness-release-bot-key
+          path: sealed-harness-secret.json
+          retention-days: 1
+          if-no-files-found: error
