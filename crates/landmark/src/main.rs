@@ -36,6 +36,7 @@ mod model_policy;
 #[cfg(test)]
 mod model_policy_tests;
 mod pr_range;
+mod protected_release;
 mod providers;
 #[cfg(test)]
 mod release_artifact_tests;
@@ -71,6 +72,7 @@ pub(crate) use errors::*;
 pub(crate) use manifest::*;
 pub(crate) use model_policy::*;
 pub(crate) use pr_range::*;
+pub(crate) use protected_release::*;
 pub(crate) use providers::*;
 pub(crate) use release_body::*;
 pub(crate) use release_classification::*;

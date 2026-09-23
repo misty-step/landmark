@@ -157,6 +157,14 @@ pub(crate) fn action_subcommand_replay_coverage() -> BTreeMap<&'static str, Vec<
         ),
         ("healthcheck", vec!["http_resilience_policy"]),
         ("preflight-tags", vec!["action_side_effect_coverage"]),
+        (
+            "prepare-protected-release",
+            vec!["protected_release_pr_path"],
+        ),
+        (
+            "publish-protected-release",
+            vec!["protected_release_pr_path"],
+        ),
         ("fetch-release-body", vec!["consumer_full_mode_success"]),
         (
             "extract-prs",

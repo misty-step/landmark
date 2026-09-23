@@ -483,6 +483,24 @@ pub(crate) fn command_contracts() -> Vec<CommandContract> {
             stderr: "logs and errors only",
             json_output: true,
         },
+        CommandContract {
+            command: "prepare-protected-release",
+            mode: "protected-release",
+            mutates: true,
+            preview: "not available; writes only a bound CHANGELOG.md release candidate",
+            stdout: "ProtectedReleasePlan JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
+        CommandContract {
+            command: "publish-protected-release",
+            mode: "protected-release",
+            mutates: true,
+            preview: "not available; reconciles and publishes a landed changelog release",
+            stdout: "ProtectedReleasePublish JSON",
+            stderr: "logs and errors only",
+            json_output: true,
+        },
     ]
 }
 

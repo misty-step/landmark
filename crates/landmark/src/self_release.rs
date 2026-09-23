@@ -277,10 +277,24 @@ pub(crate) fn package_version(repo_root: &Path) -> Result<String> {
 }
 
 pub(crate) fn self_release_commits(repo_root: &Path, tag: &str) -> Result<Vec<ClassifiedCommit>> {
-    let range = format!("{tag}..HEAD");
+    self_release_commits_until(repo_root, tag, "HEAD")
+}
+
+pub(crate) fn self_release_commits_until(
+    repo_root: &Path,
+    tag: &str,
+    until: &str,
+) -> Result<Vec<ClassifiedCommit>> {
+    let range = format!("{tag}..{until}");
     let log = run_ok(
         "git",
-        ["log", "--reverse", "--format=%H%x00%s%x00%b%x1e", &range],
+        [
+            "log",
+            "--no-merges",
+            "--reverse",
+            "--format=%H%x00%s%x00%b%x1e",
+            &range,
+        ],
         repo_root,
     )?;
     let mut commits = Vec::new();

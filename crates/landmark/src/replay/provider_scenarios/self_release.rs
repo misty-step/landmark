@@ -165,6 +165,96 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     }))
 }
 
+pub(crate) fn scenario_protected_release_pr_path(tmp_root: &Path) -> Result<Value> {
+    let repo = tmp_root.join("protected-release-pr");
+    init_self_release_fixture(&repo)?;
+    let output = temp_file("landmark-protected-release")?;
+    let prepare = Command::new(current_exe())
+        .args([
+            "prepare-protected-release",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "owner/repo",
+            "--release-branch",
+            "landmark/release",
+            "--github-output",
+        ])
+        .arg(&output)
+        .output()?;
+    if !prepare.status.success() {
+        return Err(String::from_utf8_lossy(&prepare.stderr).to_string().into());
+    }
+    let planned = parse_outputs(&output)?;
+    if planned.get("released").map(String::as_str) != Some("true")
+        || planned.get("release_tag").map(String::as_str) != Some("v1.1.0")
+    {
+        return Err("protected release did not stage expected candidate".into());
+    }
+    let changed = run_ok("git", ["diff", "--name-only"], &repo)?;
+    if changed.trim() != "CHANGELOG.md" {
+        return Err(format!("protected release changed unexpected files: {changed}").into());
+    }
+    run_ok("git", ["add", "CHANGELOG.md"], &repo)?;
+    run_ok(
+        "git",
+        ["commit", "-q", "-m", "chore(release): 1.1.0"],
+        &repo,
+    )?;
+    let sha = run_ok("git", ["rev-parse", "HEAD"], &repo)?
+        .trim()
+        .to_string();
+    let server = start_fake_server(FakeState::default())?;
+    let publish = Command::new(current_exe())
+        .args([
+            "publish-protected-release",
+            "--repo-root",
+            repo.to_str().unwrap(),
+            "--repository",
+            "owner/repo",
+            "--github-token",
+            "token",
+            "--target-sha",
+            &sha,
+            "--api-base-url",
+            &server.url,
+            "--github-output",
+        ])
+        .arg(&output)
+        .output()?;
+    if !publish.status.success() {
+        return Err(String::from_utf8_lossy(&publish.stderr).to_string().into());
+    }
+    let published = parse_outputs(&output)?;
+    if published.get("published").map(String::as_str) != Some("true") {
+        return Err("landed protected release was not published".into());
+    }
+    let state = server
+        .state
+        .lock()
+        .map_err(|_| "fake server lock poisoned")?;
+    let release = state
+        .releases
+        .get("v1.1.0")
+        .ok_or("protected release missing from fake GitHub")?;
+    if release["target_commitish"] != sha
+        || !release["body"]
+            .as_str()
+            .is_some_and(|body| body.contains("# [1.1.0]"))
+    {
+        return Err(
+            "protected release tag or technical changelog differs from landed commit".into(),
+        );
+    }
+    Ok(json!({
+        "prepared": planned,
+        "published": published,
+        "target_sha": sha,
+        "release": release,
+        "requests": state.requests,
+    }))
+}
+
 pub(crate) fn assert_file_contains(path: &Path, needle: &str) -> Result<()> {
     let text = fs::read_to_string(path)?;
     if text.contains(needle) {

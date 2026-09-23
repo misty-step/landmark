@@ -356,6 +356,39 @@ This skips semantic-release entirely. Ready-to-use synthesis-only examples:
 | Changesets monorepo | [`examples/changesets-monorepo.yml`](examples/changesets-monorepo.yml) | Push to main; matrix per published package |
 | Manual GitHub Releases | [`examples/manual-tag.yml`](examples/manual-tag.yml) | `release.published` event |
 
+### Protected-Branch Release Mode
+
+For a repository whose required CI check prevents release bots from writing
+directly to the default branch, use `mode: prepare-protected` on a complete
+checkout (`fetch-depth: 0`) after fetching tags. It writes **only**
+`CHANGELOG.md`, emits `released`, `release-tag`, `release-branch`,
+`pull-request-title`, and `commit-message`, and never pushes or opens a PR.
+The caller commits the changelog on a release branch and opens a normal PR;
+required checks and branch protection remain in force. No release-worthy
+conventional commits since the latest semver tag yield `released: false`.
+
+After that PR lands, run `mode: publish-protected` on the landed commit with
+`github-token` and `target-sha` (defaults to `github.sha`). It validates the
+committed changelog against the classified source commits and binds the tag to
+the landed SHA, then creates a GitHub Release with technical notes. An existing
+matching release is a no-op; moved tags, edited changelogs, and changed source
+commits fail closed. It never pushes to the protected branch. Publication skips
+synthesis by default, even though full mode's `synthesis` default is `true`;
+set both `synthesis: "true"` and `protected-synthesis: "true"` to opt in.
+The action's checksum-verified binary must be a published Landmark version
+containing these modes; a not-yet-published source revision can instead be
+installed with `cargo install --locked --git ... --rev <sha> --root <dir> landmark`.
+
+The same operations are available without an Action wrapper:
+
+```bash
+landmark prepare-protected-release --repo-root . --repository owner/repo \
+  --release-branch landmark/release --github-output "$GITHUB_OUTPUT"
+landmark publish-protected-release --repo-root . --repository owner/repo \
+  --github-token "$GITHUB_TOKEN" --target-sha "$GITHUB_SHA" \
+  --github-output "$GITHUB_OUTPUT"
+```
+
 ## Agent-Native Contracts
 
 Agents should start with the self-description document instead of scraping this
@@ -632,8 +665,10 @@ release-mutating workflow.
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | No | `full` | Pipeline mode: `full` (semantic-release + synthesis) or `synthesis-only` (synthesize for existing tag). |
+| `mode` | No | `full` | Pipeline mode: `full`, `synthesis-only`, `prepare-protected`, or `publish-protected`. |
 | `release-tag` | No* | `""` | Release tag to synthesize notes for (required when `mode: synthesis-only`). |
+| `release-branch` | No | `landmark/release` | Branch name emitted by `prepare-protected`; caller creates the branch/PR. |
+| `target-sha` | No | `github.sha` | Landed commit SHA bound by `publish-protected`. |
 | `github-token` | Yes | - | GitHub App installation token or PAT with repo write access. Used by `semantic-release` and GitHub API update calls. See [Why a GitHub App, not a PAT](#why-a-github-app-not-a-pat). |
 | `llm-api-key` | No* | - | API key for synthesis (OpenRouter, OpenAI, or compatible providers). |
 | `llm-model` | No | manifest policy default | Primary model ID for note synthesis. |
@@ -642,6 +677,7 @@ release-mutating workflow.
 | `node-version` | No | `24` | Node.js version used to run `semantic-release`. |
 | `stability` | No | `auto` | Versioning stability policy: `auto` (detect from the latest tag — below 1.0.0 or untagged is pre-stable), `pre-stable` (Cargo-style 0.x rules), or `stable` (standard SemVer). Ignored when the repo ships its own semantic-release config. See [Versioning Philosophy](#versioning-philosophy). |
 | `synthesis` | No | `true` | If `true`, generate and prepend user-facing notes. |
+| `protected-synthesis` | No | `false` | Opt in to synthesis after `publish-protected`, together with `synthesis: true`. |
 | `synthesis-required` | No | `false` | If `true`, fail the action when synthesis/update fails (after failure reporting). |
 | `synthesis-strict` | No | `false` | Deprecated alias for `synthesis-required`. |
 | `synthesis-failure-issue` | No | `false` | If `true`, create a GitHub issue in the consuming repository when synthesis/update fails. |
@@ -669,8 +705,12 @@ not skip the LLM call.
 
 | Output | Description |
 | --- | --- |
-| `released` | `true` if a new release/tag was created, otherwise `false`. |
-| `release-tag` | Tag created by `semantic-release` (empty if no release). |
+| `released` | `true` if full mode created a tag, prepare-protected wrote a candidate, or publish-protected published. |
+| `release-tag` | Tag created, prepared, published, or targeted (empty if no candidate). |
+| `published` | `true` if publish-protected created a GitHub Release; `false` on a matching retry. |
+| `release-branch` | Branch for the release PR emitted by prepare-protected. |
+| `pull-request-title` | Title for the release PR emitted by prepare-protected. |
+| `commit-message` | Commit subject for the release PR emitted by prepare-protected. |
 | `synthesis-succeeded` | `true` when synthesis/update succeeds or when policy intentionally skips LLM synthesis for the released tag. |
 | `synthesis-quality` | `valid`, `degraded`, `ungrounded`, `skipped`, or `failed`. |
 | `synthesis-status` | Compact JSON status with quality, failure stage/message, model attempts, context sources, cost estimate, release classification, and publication destination outcomes. |

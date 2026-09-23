@@ -73,6 +73,10 @@ pub(crate) enum Commands {
     PrepareSelfRelease(PrepareSelfReleaseArgs),
     /// Publish Landmark's own GitHub Release once the release PR has landed
     PublishSelfRelease(PublishSelfReleaseArgs),
+    /// Prepare a changelog-only release PR for a protected branch
+    PrepareProtectedRelease(PrepareProtectedReleaseArgs),
+    /// Publish a landed protected-branch changelog release
+    PublishProtectedRelease(PublishProtectedReleaseArgs),
 }
 
 #[derive(Args)]
@@ -836,6 +840,34 @@ pub(crate) struct PublishSelfReleaseArgs {
     pub(crate) dry_run: bool,
 }
 
+#[derive(Args)]
+pub(crate) struct PrepareProtectedReleaseArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    pub(crate) repo_root: PathBuf,
+    #[arg(long)]
+    pub(crate) repository: String,
+    #[arg(long = "release-branch", default_value = "landmark/release")]
+    pub(crate) release_branch: String,
+    #[arg(long = "github-output", default_value = "")]
+    pub(crate) github_output: String,
+}
+
+#[derive(Args)]
+pub(crate) struct PublishProtectedReleaseArgs {
+    #[arg(long = "repo-root", default_value = ".")]
+    pub(crate) repo_root: PathBuf,
+    #[arg(long)]
+    pub(crate) repository: String,
+    #[arg(long = "github-token")]
+    pub(crate) github_token: String,
+    #[arg(long = "target-sha")]
+    pub(crate) target_sha: String,
+    #[arg(long = "github-output", default_value = "")]
+    pub(crate) github_output: String,
+    #[arg(long = "api-base-url", default_value = "https://api.github.com")]
+    pub(crate) api_base_url: String,
+}
+
 #[derive(Serialize)]
 pub(crate) struct SelfReleasePlan {
     pub(crate) released: bool,
@@ -920,5 +952,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Commands::Fleet(args) => fleet(args),
         Commands::PrepareSelfRelease(args) => prepare_self_release(args),
         Commands::PublishSelfRelease(args) => publish_self_release(args),
+        Commands::PrepareProtectedRelease(args) => prepare_protected_release(args),
+        Commands::PublishProtectedRelease(args) => publish_protected_release(args),
     }
 }
