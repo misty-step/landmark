@@ -9,7 +9,7 @@ generic CI, and agents can use the same runtime for version decisions,
 technical changelogs, public notes, release-kit plans, feeds, and evidence.
 Deterministic local previews work without model credentials.
 
-This README is the current human entrypoint. Accepted [ADRs](docs/adr/),
+This README is the current human entrypoint. Accepted [decisions](docs/decisions/index.md),
 versioned [schemas](schemas/), and portable procedures belong in the repo;
 [VISION.md](VISION.md) is optional rationale, not a roadmap or approval gate.
 
@@ -114,7 +114,7 @@ Sigstore transparency-log verification enabled.
 #### Commit the Transaction and Emit the Receipt
 
 `release-transaction commit` applies the public mutations and completes the
-release transaction (ADR 0004). It inspects before it writes: the tag ref and
+release transaction (decision 0004). It inspects before it writes: the tag ref and
 release record are resolved from the GitHub API, tag identity is authoritative
 (a moved tag fails closed), drafts block adoption, and a release already
 consistent with the immutable candidate is adopted without mutation. On
