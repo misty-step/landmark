@@ -1,7 +1,7 @@
 # Landmark context
 
 Optional product rationale, not a roadmap or required reading step.
-The [README](README.md), accepted [ADRs](docs/adr/), and versioned
+The [README](README.md), accepted [decisions](docs/decisions/index.md), and versioned
 [schemas](schemas/) define current behavior and technical contracts.
 
 ## Product aim
@@ -40,7 +40,7 @@ visible consumer, not a separate definition of release completion.
   and the completed receipt are one responsibility: inspect before writing,
   make retries idempotent, resume compatible partial state, and fail closed
   on contradictions. Tags and events alone are not completion authority.
-  See [ADR 0004](docs/adr/0004-release-transaction-authority.md).
+  See [Decision 0004](docs/decisions/0004-release-transaction-authority.md).
 - **Explain before mutating.** Dry-run, evidence, and replay surfaces let a
   cold caller reproduce the decision locally. Versioned schemas, typed
   failures with `user_action`, and `describe --json` are public contracts.
@@ -59,7 +59,7 @@ their native authority; work trackers may link them, not replace them.
 Release-kit schemas coordinate explicit local, browser, service, harness, or
 human producers. Bespoke media production, brand design, CMS publication, and
 long-lived creative pipelines stay outside the runtime. See
-[ADR 0002](docs/adr/0002-release-kit-boundary.md).
+[Decision 0002](docs/decisions/0002-release-kit-boundary.md).
 
 Use the README's
 [receipt command and scope note](README.md#commit-the-transaction-and-emit-the-receipt)

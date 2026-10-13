@@ -6,6 +6,8 @@ Explain what changed and why users should care. The portable Rust CLI owns
 this behavior; the GitHub Action is an integration layer. Deterministic local
 previews complement, rather than replace, the model-assisted product.
 
+Open docs/decisions/index.md before proposing a new primitive, surface, or storage home.
+
 ## Product Boundary
 Landmark is a portable release-intelligence runtime. The GitHub Action is one
 packaging layer, not the product boundary. Keep release analysis, synthesis,
@@ -37,9 +39,9 @@ publishing, or long-running creative pipelines. Demo videos, GIFs, images, blog
 posts, essays, and docs updates should be represented as typed
 planned/produced artifacts and delegated to explicit local, browser, service,
 harness, or human producer adapters. See
-`docs/adr/0004-release-transaction-authority.md` for the boundary decision.
+`docs/decisions/0004-release-transaction-authority.md` for the boundary decision.
 
-Use the README, accepted ADRs, and versioned schemas when changing release
+Use the README, accepted decisions, and versioned schemas when changing release
 boundaries, adoption modes, agent-native contracts, or producer responsibilities.
 `VISION.md` is optional rationale, not a mandatory workflow or higher authority.
 
