@@ -2,8 +2,8 @@
 
 - **Status:** accepted <!-- accepted | superseded by NNNN, linked to that record -->
 - **Date:** YYYY-MM-DD
-- **Primitives:** <ids from docs/architecture/primitives.yaml (once it exists)>
-- **Powder:** <item id, optional>
+- **Primitives:** `<ids from docs/architecture/primitives.yaml (once it exists)>`
+- **Powder:** `<item id, optional>`
 
 ## Context
 What proposal or situation forced this. A few sentences on system state and constraints,
