@@ -29,5 +29,10 @@ require planned artifacts to be produced, verified, waived, or explicitly
 blocked. Extend typed artifacts and run evidence before adding a media-specific
 renderer.
 
-Revisit if: a proposed output can stay close to release truth as a simple text
-or data artifact rather than requiring a bespoke production workflow.
+Rejected: keeping Landmark limited to notes and versioning would miss the
+final-mile release job and leave agents without a richer artifact contract.
+One plugin per artifact type in core would still make the runtime own producer
+lifecycle and domain-specific quality bars. Making Landmark a production studio
+would import fragile media, design, CMS, and approval concerns into the core.
+
+Revisit if: not stated in the original decision.

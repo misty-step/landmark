@@ -30,5 +30,10 @@ exists. Evidence distinguishes candidates, incomplete transactions, and complete
 releases; forge events are wake-up signals, not authority. Environment topology,
 credentials, promotion policy, and product build logic stay outside the core.
 
+Rejected: a separate release publisher would split judgment and mutation into
+shallow modules with competing completion semantics and a larger failure surface.
+Letting each product workflow publish directly would duplicate transaction,
+reconciliation, and receipt behavior across repositories.
+
 Revisit if: an adapter needs an independent definition of completion or deployment
 requirements would bring environment-specific responsibilities into the core.

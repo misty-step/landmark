@@ -25,5 +25,8 @@ notifications, policy, failure issues, metadata checks, and replay rather than
 many scripts. The public Action contract and external release engine stay stable;
 [gate](../../bin/gate) and [replay](../../bin/replay-action) verify that boundary.
 
-Revisit if: preserving the public Action contract requires reverting the Rust
-migration; the wrapper invocation points define that rollback boundary.
+Rollback: a normal Git revert of the Rust migration PR at the Action wrapper
+and its binary invocation points. The original checked-in `dist/landmark`
+invocation is superseded by [0003](0003-published-release-binaries.md).
+
+Revisit if: not stated in the original decision.

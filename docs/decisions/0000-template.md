@@ -2,7 +2,7 @@
 
 - **Status:** accepted <!-- accepted | superseded by NNNN, linked to that record -->
 - **Date:** YYYY-MM-DD
-- **Primitives:** <ids from [primitives.yaml](../architecture/primitives.yaml)>
+- **Primitives:** <ids from docs/architecture/primitives.yaml (once it exists)>
 - **Powder:** <item id, optional>
 
 ## Context
