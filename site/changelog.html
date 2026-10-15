@@ -6,7 +6,7 @@
     <title>Landmark release notes</title>
     <meta
       name="description"
-      content="User-facing release notes for Landmark, sourced from the same docs/releases/releases.json export Landmark writes for itself."
+      content="Landmark release notes, generated from the deployed revision's canonical CHANGELOG.md."
     />
     <script>
       try {
@@ -80,65 +80,14 @@
         <article class="ae-doc msk-page" aria-labelledby="release-notes-title">
           <h1 id="release-notes-title">Release notes</h1>
           <p class="ae-lede">
-            Every entry below is sourced from a real
-            <code>landmark run --provider local --repo-root .</code>
-            execution against this repo's own git history — not
-            hand-written marketing copy. Landmark's grounding gate refuses
-            to write a section it can't tie to a real commit, so what you
-            read here is what it actually decided.
+            Generated from this site's deployed revision of
+            <a href="CHANGELOG.md">CHANGELOG.md</a> — the same notes published
+            with Landmark's <a href="https://github.com/misty-step/landmark/releases">GitHub Releases</a>.
           </p>
 
-          <section class="msk-release">
-            <p class="ae-chrome">2026-07-04 - v1.28.0 (minor)</p>
-            <h2>Improvements in v1.28.0</h2>
-            <ul>
-              <li>Post release kit feed events (#192)</li>
-              <li>Unify synthesis grounding (#196)</li>
-              <li>Ground semver decisions in API evidence (#197)</li>
-              <li>Export static public release entries</li>
-              <li>Add gated social draft kit artifact</li>
-              <li>
-                Ground release-note sections in real commits, refuse
-                fabrication (#200)
-              </li>
-            </ul>
-            <p class="ae-status">
-              <svg class="ae-icon ae-ok" data-lucide="circle-check">
-                <use href="#i-circle-check" />
-              </svg>
-              <span class="ae-status-label"
-                >Evidence: computed from
-                <code>v1.27.0..HEAD</code> (8 conventional commits, decisive
-                commit <code>eb0eb1d</code>), written to
-                <code>docs/releases/v1.28.0.md</code> by a real
-                <code>landmark run</code>.</span
-              >
-            </p>
-          </section>
-
-          <section class="msk-release">
-            <p class="ae-chrome">2026-07-04 - site launch</p>
-            <h2>Public site launched</h2>
-            <ul>
-              <li>
-                Added a Misty Step branded public site with a release
-                evidence gallery built from real terminal output, not
-                mockups.
-              </li>
-              <li>
-                Published this release-notes page directly from Landmark's
-                own <code>docs/releases/releases.json</code> export seam.
-              </li>
-            </ul>
-            <p class="ae-status">
-              <svg class="ae-icon ae-ok" data-lucide="circle-check">
-                <use href="#i-circle-check" />
-              </svg>
-              <span class="ae-status-label"
-                >Evidence: GitHub Pages Actions deploy of <code>site/</code>.</span
-              >
-            </p>
-          </section>
+          <div class="msk-changelog">
+            <!-- LANDMARK_CHANGELOG -->
+          </div>
         </article>
       </main>
 
