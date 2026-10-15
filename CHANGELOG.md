@@ -1,3 +1,8 @@
+# [0.28.11](https://github.com/misty-step/landmark/compare/v0.28.10...v0.28.11) (2026-10-15)
+
+### Bug Fixes
+
+* **ci:** reject skipped checks before merging releases (#270) ([c069a85](https://github.com/misty-step/landmark/commit/c069a85645c4c81ec3ecf7fb8c22f30e3cd89944))
 # [0.28.10](https://github.com/misty-step/landmark/compare/v0.28.9...v0.28.10) (2026-10-15)
 
 ### Bug Fixes
