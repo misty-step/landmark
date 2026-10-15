@@ -1,0 +1,9 @@
+{
+  "name": "landmark-site-preview",
+  "account_id": "b069014f6a46558ea9146fb6c4ff8f6c",
+  "compatibility_date": "2026-10-15",
+  "workers_dev": true,
+  "assets": {
+    "directory": ".landmark/site"
+  }
+}
