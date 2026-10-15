@@ -1,3 +1,8 @@
+# [0.28.12](https://github.com/misty-step/landmark/compare/v0.28.11...v0.28.12) (2026-10-15)
+
+### Bug Fixes
+
+* **site:** render canonical release notes at build time (#273) ([907cc73](https://github.com/misty-step/landmark/commit/907cc73f26c4d13273291908ea32f16c888d1379))
 # [0.28.11](https://github.com/misty-step/landmark/compare/v0.28.10...v0.28.11) (2026-10-15)
 
 ### Bug Fixes
