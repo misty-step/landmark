@@ -1,3 +1,8 @@
+# [0.28.10](https://github.com/misty-step/landmark/compare/v0.28.9...v0.28.10) (2026-10-15)
+
+### Bug Fixes
+
+* **release:** publish Landmark without a paid notes provider (#268) ([2090588](https://github.com/misty-step/landmark/commit/20905881424b1e0c6a0a7195800a5bf59b417e4a))
 # [0.28.9](https://github.com/misty-step/landmark/compare/v0.28.8...v0.28.9) (2026-09-23)
 
 ### Features
