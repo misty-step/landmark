@@ -1020,6 +1020,13 @@ protected `master`. The repository workflow has two phases:
 The [self-release decision](docs/decisions/0005-deterministic-self-release.md)
 records the native generator and existing pre-1.0 version policy.
 
+The marketing site's `/changelog` and `changelog.html` are built from that
+revision's `CHANGELOG.md`, using the CLI's existing `write-artifacts` renderer.
+Run `node bin/build-site.mjs` to stage the site in `.landmark/site`; serve that
+directory to preview it (do not serve the unbuilt `site/` template). The staged
+`CHANGELOG.md` preserves the exact source bytes, and `release.json` identifies
+the source version and commit. No runtime API call or second notes feed is used.
+
 The local replay oracle for this path is:
 
 ```bash

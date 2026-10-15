@@ -11,6 +11,7 @@ bin/check-model-pin-freshness
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
+node --test bin/build-site.test.mjs
 ci_event="${LANDMARK_CI_EVENT:-${GITHUB_EVENT_NAME:-}}"
 pr_base_sha="${LANDMARK_PR_BASE_SHA:-}"
 pr_head_ref="${LANDMARK_PR_HEAD_REF:-${GITHUB_HEAD_REF:-}}"

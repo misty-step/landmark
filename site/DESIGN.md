@@ -73,8 +73,8 @@ site build; see the campaign receipt for the raw transcripts.
 
 ## Release Notes Rule
 
-`site/changelog.html` is user-facing. Write entries as product outcomes, not
-commit logs. Each entry needs a date, a version or release label, and one or
-two plain-language bullets. The current entry is sourced directly from a real
-`landmark run --provider local` execution against this repo (v1.27.0 →
-v1.28.0), not invented.
+`site/changelog.html` is a template. `node bin/build-site.mjs` inserts the
+deployed revision's canonical `CHANGELOG.md` through Landmark's existing HTML
+artifact renderer. Keep the generated dates, version links and note text;
+do not add hand-authored entries or another release feed. Preserve the existing
+site shell, navigation, ember tokens and light/dark behavior.

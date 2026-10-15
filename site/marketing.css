@@ -190,16 +190,8 @@
   background: var(--ae-wash);
 }
 
-.msk-release {
-  border-top: 1px solid var(--ae-line);
-  padding-top: var(--ae-space-5);
-  display: grid;
-  gap: var(--ae-space-3);
-}
-
-.msk-release:first-of-type {
-  border-top: 0;
-  padding-top: 0;
+.msk-changelog {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 780px) {
