@@ -67,7 +67,7 @@ jobs:
           ROLLBACK_VERSION: ${{ inputs.rollback_version }}
         run: |
           if [ -n "$ROLLBACK_VERSION" ]; then
-            npx --yes wrangler@4.128.0 rollback "$ROLLBACK_VERSION" --yes
+            npx --yes wrangler@4.128.0 rollback "$ROLLBACK_VERSION" --message 'CI preview rollback'
           else
             npx --yes wrangler@4.128.0 deploy
           fi
