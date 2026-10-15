@@ -61,8 +61,6 @@ jobs:
     if: always()
     steps:
       - name: All checks passed
-        run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
-             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            exit 1
-          fi
+        env:
+          LOCAL_GATE_RESULT: ${{ needs.local-gate.result }}
+        run: test "${LOCAL_GATE_RESULT}" = success
