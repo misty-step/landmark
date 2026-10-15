@@ -1004,18 +1004,21 @@ protected `master`. The repository workflow has two phases:
   `Cargo.lock` on `landmark/self-release`. It then opens or updates a release
   PR, which must pass the normal `merge-gate` before it can land.
 - `publish-landed-release` runs on `master` pushes. It publishes a GitHub
-  Release only when landed metadata is ahead of the latest semver tag.
+  Release only when landed metadata is ahead of the latest semver tag, using
+  the generated `CHANGELOG.md` section unchanged. Publication needs no LLM
+  credential or paid request. The CLI's optional `--release-notes-file` still
+  supports explicit enrichment and rejects a missing or empty supplied file.
 - `build-release-assets` then builds the release binary for each supported
   target (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
   `aarch64-apple-darwin`, `x86_64-apple-darwin`) and `publish-release-assets`
-  uploads them plus a `checksums.txt` to the GitHub Release, then runs
-  Landmark in `synthesis-only` mode to update the release body and floating
-  major tag. That synthesis pass is non-blocking because the release has
-  already been published; failed or degraded synthesis is surfaced through
-  Landmark outputs without turning a published release into a failed
-  deployment. The floating major tag (and any `@v1`-pinned consumer) only
-  moves once release assets are live, so consumers never resolve a tag whose
-  binary is not yet downloadable.
+  uploads them plus a `checksums.txt` to the GitHub Release. Only then does
+  the native `floating-tag` command select the major tag to advance. Release
+  publication never synthesizes or rewrites the generated notes. The floating
+  major tag (currently `@v0`) only moves once release assets are live, so
+  consumers never resolve a tag whose binary is not yet downloadable.
+
+The [self-release decision](docs/decisions/0005-deterministic-self-release.md)
+records the native generator and existing pre-1.0 version policy.
 
 The local replay oracle for this path is:
 

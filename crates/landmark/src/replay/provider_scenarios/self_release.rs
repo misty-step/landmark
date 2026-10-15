@@ -138,6 +138,78 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
     if publish_outputs.get("published").map(String::as_str) != Some("true") {
         return Err("publish-self-release did not publish the landed release".into());
     }
+    // Exercise the same real CLI with no enrichment and no paid credential.
+    // A fresh forge makes this publication, not an existing-release no-op.
+    let deterministic_server = start_fake_server(FakeState::default())?;
+    let publish_canonical = || {
+        let mut command = Command::new(current_exe());
+        command
+            .args([
+                "publish-self-release",
+                "--repo-root",
+                repo.to_str().unwrap(),
+                "--github-token",
+                "token",
+                "--repository",
+                "owner/repo",
+                "--target-sha",
+                &target_sha,
+                "--api-base-url",
+                &deterministic_server.url,
+            ])
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("LLM_API_KEY");
+        command
+    };
+    // Explicitly requested enrichment remains strict: neither an absent nor
+    // an empty file may cause a public release to be created.
+    let empty_notes = repo.join("empty-notes.md");
+    fs::write(&empty_notes, "")?;
+    for invalid_notes in [repo.join("missing-notes.md"), empty_notes] {
+        let invalid = publish_canonical()
+            .arg("--release-notes-file")
+            .arg(invalid_notes)
+            .output()?;
+        if invalid.status.success()
+            || !deterministic_server
+                .state
+                .lock()
+                .unwrap()
+                .releases
+                .is_empty()
+        {
+            return Err("invalid explicit enrichment must refuse before creating a release".into());
+        }
+    }
+    let canonical = publish_canonical().output()?;
+    if !canonical.status.success() {
+        return Err(String::from_utf8_lossy(&canonical.stderr)
+            .to_string()
+            .into());
+    }
+    let canonical_result: Value = serde_json::from_slice(&canonical.stdout)?;
+    if canonical_result["published"] != true {
+        return Err("canonical self-release must publish without synthesis".into());
+    }
+    let repeat = publish_canonical().output()?;
+    if !repeat.status.success() {
+        return Err(String::from_utf8_lossy(&repeat.stderr).to_string().into());
+    }
+    let repeated_result: Value = serde_json::from_slice(&repeat.stdout)?;
+    let deterministic_state = deterministic_server.state.lock().unwrap();
+    let canonical_body = changelog_section(&repo.join("CHANGELOG.md"), "1.1.0")?;
+    if repeated_result["published"] != false
+        || repeated_result["pending"] != false
+        || deterministic_state.releases.len() != 1
+        || deterministic_state.releases["v1.1.0"]["body"] != canonical_body
+        || deterministic_state.requests.iter().any(|request| {
+            request.to_string().contains("/chat/completions") || request["method"] == "PATCH"
+        })
+    {
+        return Err(
+            "canonical publication must preserve the exact notes on retry without synthesis".into(),
+        );
+    }
     let state = server.state.lock().unwrap();
     let created = state
         .releases
@@ -162,6 +234,10 @@ pub(crate) fn scenario_self_release_pr_path(tmp_root: &Path) -> Result<Value> {
         "requests": state.requests,
         "target_sha": target_sha,
         "changed_files": changed_files,
+        "canonical_publish": canonical_result,
+        "canonical_repeat": repeated_result,
+        "canonical_release": deterministic_state.releases["v1.1.0"],
+        "canonical_requests": deterministic_state.requests,
     }))
 }
 
