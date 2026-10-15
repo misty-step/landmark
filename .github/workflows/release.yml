@@ -101,52 +101,11 @@ jobs:
         with:
           toolchain: 1.96.0
 
-      - name: Inspect pending self-release
-        id: inspect
-        shell: bash
-        env:
-          RELEASE_BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          cargo run --locked -p landmark -- publish-self-release \
-            --dry-run \
-            --repo-root . \
-            --github-token "${RELEASE_BOT_TOKEN}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --target-sha "${GITHUB_SHA}" \
-            --github-output "${GITHUB_OUTPUT}"
-
-      - name: Synthesize pending release notes
-        if: steps.inspect.outputs.pending == 'true'
-        shell: bash
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          set -euo pipefail
-          # Cheap policy never skips low-significance self-releases: every
-          # landmark release gets at least a maintenance note, generated
-          # BEFORE the public release exists so a bad credential fails the
-          # job instead of shipping technical-only bodies.
-          cargo run --locked -q -p landmark -- synthesize \
-            --repo-root . \
-            --version "${{ steps.inspect.outputs.version }}" \
-            --changelog-file CHANGELOG.md \
-            --api-url https://openrouter.ai/api/v1/chat/completions \
-            --api-key "${OPENROUTER_API_KEY}" \
-            --product-name "Landmark" \
-            --model-policy cheap \
-            --quality-file "${RUNNER_TEMP}/landmark-quality.txt" \
-            --attempts-file "${RUNNER_TEMP}/landmark-attempts.json" \
-            --context-metadata-file "${RUNNER_TEMP}/landmark-context.json" \
-            --templates-dir templates/prompts \
-            > "${RUNNER_TEMP}/landmark-whats-new.md"
-
       - name: Publish landed release metadata
         id: publish
         shell: bash
         env:
           RELEASE_BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
-          NOTES_FILE: ${{ runner.temp }}/landmark-whats-new.md
         run: |
           set -euo pipefail
           cargo run --locked -p landmark -- publish-self-release \
@@ -154,7 +113,6 @@ jobs:
             --github-token "${RELEASE_BOT_TOKEN}" \
             --repository "${GITHUB_REPOSITORY}" \
             --target-sha "${GITHUB_SHA}" \
-            --release-notes-file "${NOTES_FILE}" \
             --github-output "${GITHUB_OUTPUT}"
 
   build-release-assets:
@@ -248,18 +206,15 @@ jobs:
             assets/landmark-* assets/checksums.txt \
             --repo "${GITHUB_REPOSITORY}" --clobber
 
-      - name: Synthesize landed release notes
-        uses: ./
+      - name: Update floating major tag after assets are live
+        shell: bash
         env:
-          RELEASE_FEED_URL: ${{ secrets.RELEASE_FEED_URL }}
-          RELEASE_FEED_SECRET: ${{ secrets.RELEASE_FEED_SECRET }}
-        with:
-          mode: synthesis-only
-          release-tag: ${{ needs.publish-landed-release.outputs.release_tag }}
-          github-token: ${{ steps.bot-token.outputs.token }}
-          llm-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          synthesis-required: "false"
-          floating-tags: "true"
-          changelog-source: release-body
-          webhook-url: ${{ secrets.LANDMARK_WEBHOOK_URL }}
-          webhook-secret: ${{ secrets.LANDMARK_WEBHOOK_SECRET }}
+          RELEASE_TAG: ${{ needs.publish-landed-release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          chmod +x assets/landmark-x86_64-unknown-linux-musl
+          major_tag="$(assets/landmark-x86_64-unknown-linux-musl floating-tag --release-tag "${RELEASE_TAG}")"
+          if [ -n "${major_tag}" ]; then
+            git tag --force "${major_tag}" "${RELEASE_TAG}"
+            git push origin "refs/tags/${major_tag}" --force
+          fi

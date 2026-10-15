@@ -566,32 +566,11 @@ pub(crate) fn validate_self_release_workflow_contract(repo_root: &Path) -> Resul
         errors.push("bin/gate must fetch tags before version sync".into());
     }
 
-    if let Some(step) = release.find("name: Synthesize landed release notes") {
-        let landed_synthesis = &release[step..];
-        if !landed_synthesis.contains("synthesis-required: \"false\"") {
-            errors.push("self-release landed synthesis must be non-blocking".into());
-        }
-    } else {
-        errors.push("release workflow missing landed synthesis step".into());
-    }
-
-    // Pre-publication synthesis invariant: notes are generated BEFORE the
-    // public release exists, gated on the dry-run pending decision.
-    if release.find("name: Inspect pending self-release").is_none() {
-        errors.push("release workflow missing pre-publication inspection step".into());
-    }
-    if release
-        .find("steps.inspect.outputs.pending == 'true'")
-        .is_none()
-    {
-        errors.push("synthesis must be gated on the dry-run pending decision".into());
-    }
-    if release
-        .find("--release-notes-file \"${NOTES_FILE}\"")
-        .is_none()
-    {
-        errors
-            .push("publish-self-release must consume the fixed pre-publication notes path".into());
+    // Self-release notes have one authority: the generated changelog.
+    if release.contains("OPENROUTER_API_KEY") || release.contains("--release-notes-file") {
+        errors.push(
+            "self-release publication must use the canonical changelog without synthesis".into(),
+        );
     }
 
     Ok(errors)

@@ -154,9 +154,8 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
     validate_nonblank(&args.target_sha, "target-sha")?;
     let mut plan = self_release_plan(&args)?;
     if args.dry_run || !plan.pending && !plan.published {
-        // Dry-run shares the live output schema so the workflow can gate
-        // synthesis on `published` before any mutation or LLM spend. The plan
-        // is local-only (no network), so dry-run works without credentials.
+        // The plan is local-only (no network), so dry-run works without
+        // contacting the forge or a synthesis provider.
         return emit_self_release_publish(&plan, &args.github_output);
     }
 
@@ -177,17 +176,13 @@ pub(crate) fn publish_self_release(args: PublishSelfReleaseArgs) -> Result<()> {
         return emit_self_release_publish(&plan, &args.github_output);
     }
 
-    if args.release_notes_file.trim().is_empty() {
-        return Err(
-            "pending self-release requires --release-notes-file (pre-publication synthesis output)"
-                .into(),
-        );
-    }
     let mut body = changelog_section(&args.repo_root.join("CHANGELOG.md"), &plan.version)?;
-    // Pre-publication synthesis must yield real notes: an empty or missing
-    // file fails here instead of silently publishing a technical-only body.
-    let notes = read_nonempty(Path::new(&args.release_notes_file))?;
-    body = compose_release_body(&notes, &body);
+    // Canonical generated notes are useful without a paid provider. Callers
+    // may explicitly supply enrichment; invalid opted-in input still fails.
+    if !args.release_notes_file.trim().is_empty() {
+        let notes = read_nonempty(Path::new(&args.release_notes_file))?;
+        body = compose_release_body(&notes, &body);
+    }
 
     provider.create_release(&args.repository, &plan.release_tag, &args.target_sha, &body)?;
     // Post-mutation re-observation closes the inspection-to-creation race on

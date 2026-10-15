@@ -11,7 +11,8 @@ agent will otherwise re-propose. Do not write one per PR. Start from
 - [0002](0002-release-kit-boundary.md): Landmark owns release kits, not bespoke production studios or CMS publishing.
 - [0003](0003-published-release-binaries.md): Publish verified release binaries as assets; do not check binaries into Git.
 - [0004](0004-release-transaction-authority.md): Release judgment and public mutation share one transaction and receipt authority; Landmark does not build or deploy.
+- [0005](0005-deterministic-self-release.md): Keep the native self-release generator; publish its canonical changelog without requiring synthesis.
 
 ## Historical
 
-None. All four former ADRs remain steering decisions; their numbers stay reserved.
+None. The former ADR numbers stay reserved.
