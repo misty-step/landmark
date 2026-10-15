@@ -1027,6 +1027,15 @@ directory to preview it (do not serve the unbuilt `site/` template). The staged
 `CHANGELOG.md` preserves the exact source bytes, and `release.json` identifies
 the source version and commit. No runtime API call or second notes feed is used.
 
+The `pages` workflow still publishes the existing GitHub Pages URLs on pushes.
+Manual dispatch deploys only to `https://landmark-site-preview.misty-step.workers.dev`,
+using the existing scoped CI credential; it never changes production DNS.
+`gh workflow run pages.yml --ref <ref>` builds and retains that ref's site artifact.
+Add `-f artifact_run=<run-id>` to preview an existing `github-pages` artifact
+without rebuilding it. Add `-f rollback_version=<worker-version-id>` instead to
+select an earlier native Cloudflare preview version without building or uploading.
+Read back `/release.json` and `/changelog` after deploying or rolling back.
+
 The local replay oracle for this path is:
 
 ```bash
