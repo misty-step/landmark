@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   local-gate:
-    if: false
+    if: true
     runs-on: ubuntu-latest
     steps:
       - name: Controlled failure, never run the product gate in this proof
