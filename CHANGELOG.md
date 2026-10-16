@@ -1,3 +1,8 @@
+# [0.28.13](https://github.com/misty-step/landmark/compare/v0.28.12...v0.28.13) (2026-10-15)
+
+### Features
+
+* **site:** preview canonical artifacts on Cloudflare (#275) ([4bea7cc](https://github.com/misty-step/landmark/commit/4bea7cc43daf8ef7f68cd239a5a800bd3dbc8265))
 # [0.28.12](https://github.com/misty-step/landmark/compare/v0.28.11...v0.28.12) (2026-10-15)
 
 ### Bug Fixes
