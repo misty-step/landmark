@@ -1027,14 +1027,21 @@ directory to preview it (do not serve the unbuilt `site/` template). The staged
 `CHANGELOG.md` preserves the exact source bytes, and `release.json` identifies
 the source version and commit. No runtime API call or second notes feed is used.
 
-The `pages` workflow still publishes the existing GitHub Pages URLs on pushes.
-Manual dispatch deploys only to `https://landmark-site-preview.misty-step.workers.dev`,
-using the existing scoped CI credential; it never changes production DNS.
-`gh workflow run pages.yml --ref <ref>` builds and retains that ref's site artifact.
-Add `-f artifact_run=<run-id>` to preview an existing `github-pages` artifact
+The `pages` workflow publishes the same canonical artifact to
+<https://landmark.mistystep.io> on default-branch pushes, using the existing
+scoped CI credential and Cloudflare-managed DNS/certificates. The proven Worker
+keeps its historical `landmark-site-preview` name and workers.dev alias; there
+is no second preview deployment. Existing GitHub Pages URLs remain available.
+Automatic promotions and manual recovery share one serial deployment lane;
+non-default refs and stale automatic promotions cannot deploy.
+
+`gh workflow run pages.yml --ref master` builds and retains the current site.
+Add `-f artifact_run=<run-id>` to restore an existing `github-pages` artifact
 without rebuilding it. Add `-f rollback_version=<worker-version-id>` instead to
-select an earlier native Cloudflare preview version without building or uploading.
-Read back `/release.json` and `/changelog` after deploying or rolling back.
+select an earlier native Cloudflare version without building or uploading.
+CI compares the promoted `/release.json` and `/changelog` with the exact artifact;
+read both back after rollback too. GitHub Pages remains the independent old-host
+fallback while Cloudflare is restored; manual recovery never overwrites it.
 
 The local replay oracle for this path is:
 
