@@ -1,5 +1,7 @@
 # Landmark Agent Contract
 
+Shared standard: [Constitution](https://foundations.mistystep.io/) and [Way of working](https://foundations.mistystep.io/way-of-working).
+
 Landmark combines automated versioning with LLM synthesis of commits, diffs,
 and product context into coherent, user-friendly changelogs and release notes.
 Explain what changed and why users should care. The portable Rust CLI owns
