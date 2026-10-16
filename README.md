@@ -1033,7 +1033,11 @@ scoped CI credential and Cloudflare-managed DNS/certificates. The proven Worker
 keeps its historical `landmark-site-preview` name and workers.dev alias; there
 is no second preview deployment. Existing GitHub Pages URLs remain available.
 Automatic promotions and manual recovery share one serial deployment lane;
-non-default refs and stale source builds cannot deploy. Explicit retained-artifact
+non-default refs and source revisions older than or divergent from the deployed
+revision cannot deploy. A verified descendant of live can deploy even if newer
+source commits arrive during its build. The existing workers.dev alias supplies
+the live `release.json` identity, including before the custom domain is bound;
+an unreadable or unknown identity refuses promotion. Explicit retained-artifact
 restores and native rollbacks are the recovery exceptions.
 
 `gh workflow run pages.yml --ref master` builds and retains the current site.
