@@ -55,8 +55,8 @@ jobs:
       - name: Validate the Cloudflare configuration without deploying
         if: inputs.rollback_version == ''
         run: npx --yes wrangler@4.128.0 deploy --dry-run
-      - name: Refuse stale automatic promotion
-        if: github.event_name == 'push'
+      - name: Refuse stale source promotion
+        if: inputs.artifact_run == '' && inputs.rollback_version == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"
