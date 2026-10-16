@@ -1,3 +1,8 @@
+# [0.28.14](https://github.com/misty-step/landmark/compare/v0.28.13...v0.28.14) (2026-10-16)
+
+### Features
+
+* **site:** promote canonical artifacts to the production domain (#278) ([efdd6ba](https://github.com/misty-step/landmark/commit/efdd6ba7fa8a23d13f1c888aec1fd0b3c39f8440))
 # [0.28.13](https://github.com/misty-step/landmark/compare/v0.28.12...v0.28.13) (2026-10-15)
 
 ### Features
