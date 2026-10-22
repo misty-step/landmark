@@ -207,3 +207,7 @@ Prefer `jj` for local status and commits when it is available; fall back to
 non-destructive `git` commands when an agent environment does not provide it.
 Preserve user changes and avoid destructive git commands.
 Run `upkeep where <task-kind>` before dispatching.
+
+## No fallbacks
+
+No fallbacks, backup paths or masking safety nets. Write the one best solution: direct, clean, simple, elegant. If it fails, it must fail loudly and visibly so we can fix it. Security checks (auth, signatures, schema validation) stay, but fail loudly, never silently.
