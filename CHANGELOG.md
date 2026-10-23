@@ -1,3 +1,8 @@
+# [0.28.15](https://github.com/misty-step/landmark/compare/v0.28.14...v0.28.15) (2026-10-23)
+
+### Bug Fixes
+
+* **webhook:** report rejection and bound notification delivery (#286) ([eb1dcaf](https://github.com/misty-step/landmark/commit/eb1dcaf292ffe0b5357f92808ee8856ab8565593))
 # [0.28.14](https://github.com/misty-step/landmark/compare/v0.28.13...v0.28.14) (2026-10-16)
 
 ### Features
