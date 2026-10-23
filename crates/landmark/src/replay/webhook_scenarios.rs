@@ -76,7 +76,9 @@ pub(crate) fn scenario_webhook_delivery_outcomes(tmp_root: &Path) -> Result<Valu
         if (!succeeds && !stderr.contains(&format!("HTTP {final_status}")))
             || stderr.contains("private receiver detail")
         {
-            return Err(format!("webhook {name}: missing status or exposed receiver content").into());
+            return Err(
+                format!("webhook {name}: missing status or exposed receiver content").into(),
+            );
         }
         for (method, body, signature) in &received {
             let expected_signature = if signed {
@@ -91,7 +93,9 @@ pub(crate) fn scenario_webhook_delivery_outcomes(tmp_root: &Path) -> Result<Valu
                 || payload["repository"] != "fixture/product"
                 || payload["notes"] != VALID_NOTES.trim()
             {
-                return Err(format!("webhook {name}: method, payload or signature mismatch").into());
+                return Err(
+                    format!("webhook {name}: method, payload or signature mismatch").into(),
+                );
             }
         }
         if received.windows(2).any(|pair| pair[0].1 != pair[1].1) {
