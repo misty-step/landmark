@@ -1,6 +1,5 @@
 use crate::*;
 
-const SIGNATURE_HEADER: &str = "X-Signature-256";
 const FEED_RECEIVER_CONTRACT_ID: &str = "release-feed-receiver";
 
 pub(crate) fn notify_release_feed(args: NotifyReleaseFeedArgs) -> Result<()> {
@@ -44,7 +43,7 @@ pub(crate) fn notify_release_feed_receipt(args: NotifyReleaseFeedArgs) -> Result
     )?;
     let body = serde_json::to_string_pretty(&release_kit)? + "\n";
     let signature = compute_signature(&receiver_secret, body.as_bytes())?;
-    let response = post_release_feed_event(&receiver_url, &signature, &body)?;
+    let response = post_webhook_json(&receiver_url, Some(&signature), &body)?;
     let receipt = json!({
         "sent": (200..300).contains(&response.status),
         "skipped": false,
@@ -299,73 +298,4 @@ fn upsert_object_by_key(
         items.push(replacement);
     }
     Ok(())
-}
-
-fn post_release_feed_event(url: &str, signature: &str, body: &str) -> Result<HttpResponse> {
-    let mut last_error = String::new();
-    for attempt in 1..=3 {
-        match post_release_feed_event_once(url, signature, body) {
-            Ok(response) if !http_status_retryable(response.status) || attempt == 3 => {
-                return Ok(response);
-            }
-            Ok(response) => {
-                last_error = format!("HTTP {}", response.status);
-            }
-            Err(error) if attempt == 3 => return Err(error),
-            Err(error) => {
-                last_error = error.to_string();
-            }
-        }
-        thread::sleep(Duration::from_millis(250));
-    }
-    Err(last_error.into())
-}
-
-fn post_release_feed_event_once(url: &str, signature: &str, body: &str) -> Result<HttpResponse> {
-    let mut config = String::new();
-    push_curl_config(&mut config, "request", "POST");
-    push_curl_config(&mut config, "header", "Accept: application/json");
-    push_curl_config(&mut config, "header", "Content-Type: application/json");
-    push_curl_config(&mut config, "header", "User-Agent: landmark");
-    push_curl_config(
-        &mut config,
-        "header",
-        &format!("{SIGNATURE_HEADER}: {signature}"),
-    );
-    push_curl_config(&mut config, "write-out", "\n%{http_code}");
-    push_curl_config(&mut config, "url", url);
-    push_curl_config(&mut config, "data-binary", body);
-    let mut child = Command::new("curl")
-        .args([
-            "-sS",
-            "-L",
-            "--connect-timeout",
-            "5",
-            "--max-time",
-            "30",
-            "-K",
-            "-",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    child
-        .stdin
-        .take()
-        .ok_or("failed to open curl stdin")?
-        .write_all(config.as_bytes())?;
-    let output = child.wait_with_output()?;
-    if !output.status.success() {
-        return Err(redact_known_secrets(&String::from_utf8_lossy(&output.stderr)).into());
-    }
-    let raw = String::from_utf8(output.stdout)?;
-    let (body, status) = raw
-        .trim_end()
-        .rsplit_once('\n')
-        .ok_or("curl status marker missing")?;
-    Ok(HttpResponse {
-        status: status.parse()?,
-        body: body.to_string(),
-    })
 }

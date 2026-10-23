@@ -6,6 +6,7 @@ mod provider_scenarios;
 mod release_feed_scenarios;
 mod release_transaction_scenarios;
 mod support;
+mod webhook_scenarios;
 
 pub(crate) use contract_scenarios::*;
 pub(crate) use fake_server::*;
@@ -14,6 +15,7 @@ pub(crate) use provider_scenarios::*;
 pub(crate) use release_feed_scenarios::*;
 pub(crate) use release_transaction_scenarios::*;
 pub(crate) use support::*;
+pub(crate) use webhook_scenarios::*;
 
 pub(crate) fn replay_action(args: ReplayArgs) -> Result<()> {
     if !matches!(args.format.as_str(), "text" | "json") {
@@ -236,6 +238,10 @@ pub(crate) fn scenario_map() -> BTreeMap<String, Scenario> {
         scenario_agent_native_contracts,
     );
     map.insert(
+        "webhook_delivery_outcomes".to_string(),
+        scenario_webhook_delivery_outcomes,
+    );
+    map.insert(
         "http_resilience_policy".to_string(),
         scenario_http_resilience_policy,
     );
@@ -329,6 +335,7 @@ pub(crate) fn canonical_scenarios() -> Vec<&'static str> {
         "summary_rss_failed",
         "agent_native_contracts",
         "http_resilience_policy",
+        "webhook_delivery_outcomes",
         "action_side_effect_coverage",
         "release_feed_adapter",
         "release_transaction_prepare_and_bind",

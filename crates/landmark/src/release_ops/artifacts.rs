@@ -234,39 +234,16 @@ pub(crate) fn notify_webhook(args: NotifyWebhookArgs) -> Result<()> {
     let artifact = ReleaseNoteArtifact::from_markdown(&args.version, &notes);
     let payload = artifact.webhook_payload(&args.repository, &args.release_url);
     let body = payload.to_string();
-    let mut command = Command::new("curl");
-    command
-        .args([
-            "-sS",
-            "-L",
-            "-X",
-            "POST",
-            "-H",
-            "Content-Type: application/json",
-        ])
-        .arg("-H")
-        .arg("User-Agent: landmark")
-        .arg("--data-binary")
-        .arg("@-");
-    if !args.webhook_secret.is_empty() {
-        let sig = compute_signature(&args.webhook_secret, body.as_bytes())?;
-        command.arg("-H").arg(format!("X-Signature-256: {sig}"));
-    }
-    command
-        .arg(&args.webhook_url)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    {
-        let mut stdin = child.stdin.take().ok_or("failed to open curl stdin")?;
-        stdin.write_all(body.as_bytes())?;
-    }
-    let output = child.wait_with_output()?;
-    if output.status.success() {
+    let signature = if args.webhook_secret.is_empty() {
+        None
+    } else {
+        Some(compute_signature(&args.webhook_secret, body.as_bytes())?)
+    };
+    let response = post_webhook_json(&args.webhook_url, signature.as_deref(), &body)?;
+    if (200..300).contains(&response.status) {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string().into())
+        Err(format!("webhook receiver returned HTTP {}", response.status).into())
     }
 }
 

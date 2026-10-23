@@ -139,7 +139,7 @@ landmark/
 ├── configs/
 │   └── .releaserc.json    # Default semantic-release config
 ├── README.md
-├── AGENTS.md               # Canonical agent contract (CLAUDE.md is a symlink to this file)
+├── AGENTS.md               # Canonical agent contract
 └── package.json            # For semantic-release deps
 ```
 

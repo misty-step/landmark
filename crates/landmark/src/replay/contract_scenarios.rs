@@ -200,7 +200,7 @@ pub(crate) fn action_subcommand_replay_coverage() -> BTreeMap<&'static str, Vec<
                 "provider_run_parity",
             ],
         ),
-        ("notify-webhook", vec!["http_resilience_policy"]),
+        ("notify-webhook", vec!["webhook_delivery_outcomes"]),
         (
             "notify-release-feed",
             vec!["release_feed_adapter", "http_resilience_policy"],
