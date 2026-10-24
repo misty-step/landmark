@@ -206,7 +206,6 @@ jobs:
 Prefer `jj` for local status and commits when it is available; fall back to
 non-destructive `git` commands when an agent environment does not provide it.
 Preserve user changes and avoid destructive git commands.
-Run `sitrep where <task-kind>` before dispatching.
 
 ## No fallbacks
 
