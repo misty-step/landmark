@@ -8,7 +8,7 @@ on:
 
 jobs:
   local-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, hetzner-ci, landmark-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
           if-no-files-found: ignore
 
   merge-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, hetzner-ci, landmark-ci]
     needs: [local-gate]
     if: always()
     steps:

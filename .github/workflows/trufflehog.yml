@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   trufflehog:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, hetzner-ci, landmark-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
