@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   conventional-title:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, hetzner-ci, landmark-ci]
     steps:
       - name: Check Conventional Commit title
         env:
