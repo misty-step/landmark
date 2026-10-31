@@ -4,7 +4,8 @@
     "checkpoint_remote": {
       "provider": "github",
       "repo": "misty-step/entire-checkpoints"
-    }
+    },
+    "push_sessions": false
   },
   "telemetry": false,
   "checkpoints": {
