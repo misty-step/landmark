@@ -10,6 +10,8 @@ previews complement, rather than replace, the model-assisted product.
 
 Open docs/decisions/index.md before proposing a new primitive, surface, or storage home.
 
+Design principles (UX/DX/AX; no layout captions) live in [mistystack design](https://github.com/misty-step/mistystack/blob/master/skills/design/SKILL.md#principles); point there, don't copy them.
+
 ## Product Boundary
 Landmark is a portable release-intelligence runtime. The GitHub Action is one
 packaging layer, not the product boundary. Keep release analysis, synthesis,
